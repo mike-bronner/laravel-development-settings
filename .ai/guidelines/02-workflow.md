@@ -1,75 +1,44 @@
 # Workflow
 
-## CRITICAL: File Operation Approval Required
+## File Operation Approval Required
 
-**THIS RULE IS ABSOLUTE. NO EXCEPTIONS.**
+**Before ANY file operation (create, edit, delete, write):**
 
-### Before ANY File Operation (create, edit, delete, write):
+1. **STOP** — do not proceed automatically
+2. **PRESENT OPTIONS** — show the user what you propose to do, with alternatives where applicable
+3. **WAIT** — for explicit approval before touching any file
 
-1. **STOP** — Do not proceed automatically
-2. **CHECK** — Has user explicitly approved in last 3 messages?
-3. **IF NO** — Ask first and wait for confirmation
+Approval signals: "yes", "proceed", "go ahead", "do it", "option 1/2/3", or an explicit instruction
+to make the change. Anything ambiguous → ask again.
 
-### Approval Signals
-
-Proceed only if user said: "yes", "proceed", "go ahead", "do it", "option 1/2/3", or explicit instruction.
-
-### Remember
-
-- Long sessions don't exempt you
-- Proactive file creation is NOT allowed
-- When in doubt, ASK FIRST
-
-**VIOLATING THIS RULE DAMAGES USER TRUST.**
+This applies every time, regardless of session length, prior approvals, or how obvious the change
+seems. Proactive file creation without approval is never acceptable.
 
 ---
 
 ## Sub-Agent Orchestration
 
-**THIS RULE IS MANDATORY FOR NON-TRIVIAL TASKS.**
+Use sub-agents to parallelize independent work. Before starting a non-trivial task, ask:
 
-### Pre-Task Checklist
-
-**STOP. Before starting ANY task, verify:**
-
-- [ ] Does this require domain expertise? → **MUST spawn specialist**
-- [ ] Does this involve research/analysis/evaluation? → **MUST spawn `research-analyst`**
-- [ ] Are there multiple independent sub-tasks? → **MUST spawn agents in parallel**
-- [ ] Does user mention: security, test, review, refactor, debug, optimize? → **MUST spawn matching skill**
-
-### If ANY Box is Checked
-
-You MUST spawn sub-agents BEFORE attempting the task yourself.
+- **Are there independent sub-tasks?** → spawn agents in parallel
+- **Does the task require research or analysis?** → spawn an agent to investigate while you plan
+- **Does the task span multiple domains?** → spawn domain-specific agents concurrently
 
 ### Core Principle
 
-**Research in parallel, act with approval.** Sub-agents investigate and recommend. File operations still require user approval per the rules above.
+**Research in parallel, act with approval.** Sub-agents investigate and recommend. File operations
+still require user approval per the rules above.
 
-### Quick Trigger Reference
+### When NOT to Spawn
 
-| If User Says... | Spawn |
-|-----------------|-------|
-| review, PR, check this | `code-reviewer` |
-| test, coverage, edge case | `pest-testing` |
-| security, vulnerabilities | `security-auditor` |
-| refactor, clean up, simplify | `refactoring-specialist` |
-| bug, error, not working | `debugger` |
-| migration, schema, database | `database-administrator` |
-| evaluate, compare, analyze, research | `research-analyst` |
-| find, locate, search | `search-specialist` |
-| architecture, design, scalability | `architect-reviewer` |
-| payments, transactions, financial | `fintech-engineer` |
-
-### Do NOT Spawn When
-
-- Task is trivial (single-line fix, typo correction)
+- Task is trivial (single-line fix, typo, rename)
 - Information is already in context
 - User explicitly wants inline handling
-- Sub-agent would just re-read files already in conversation
+- A sub-agent would just re-read files already in conversation
 
 ### Transparency
 
-Always inform the user when spawning sub-agents and summarize findings when complete.
+Always tell the user when spawning sub-agents. Summarize findings when they complete.
 
 ---
 
@@ -77,14 +46,15 @@ Always inform the user when spawning sub-agents and summarize findings when comp
 
 ### Documentation First
 
-Use `search-docs` before making code changes to ensure the correct approach for the installed package versions.
+Use `SearchDocs` before making code changes to verify the correct approach for the installed
+package versions.
 
 ### Debugging
 
-- Use `last-error` and `browser-logs` to diagnose issues before guessing at fixes.
-- Use `tinker` to execute PHP for debugging or querying Eloquent models directly.
+- Use `LastError` and `BrowserLogs` to diagnose issues before guessing at fixes.
+- Use `Tinker` to execute PHP for debugging or querying Eloquent models directly.
 
 ### Database
 
-- Use `database-query` for read-only database access instead of raw SQL or tinker.
-- Use `database-schema` to understand table structure before writing migrations or queries.
+- Use `DatabaseQuery` for read-only database access instead of raw SQL.
+- Use `DatabaseSchema` to understand table structure before writing migrations or queries.
