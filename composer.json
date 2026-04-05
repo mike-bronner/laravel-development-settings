@@ -13,7 +13,7 @@
         }
     ],
     "require": {
-        "php": "^8.4",
+        "php": "^8.2",
         "composer-plugin-api": "^2.0",
         "laravel/prompts": "^0.3"
     },
