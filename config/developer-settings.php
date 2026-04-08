@@ -5,8 +5,6 @@ declare(strict_types=1);
 return [
     'composer' => [
         'install' => [
-            'barryvdh/laravel-debugbar' => '^3.15',
-            'barryvdh/laravel-ide-helper' => '^3.5',
             'larastan/larastan' => '^3.5',
             'laravel/boost' => '^2.0',
             'laravel/pint' => '^1.24',
