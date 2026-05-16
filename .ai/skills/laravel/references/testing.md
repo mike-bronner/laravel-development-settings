@@ -2,6 +2,7 @@
 
 ## Guidelines
 
+- Always run tests in parallel. Don't use the `--compact` option.
 - When starting an app, start where you would start with writing code. The first test does not have to be elegant, or even correct. The most important thing is just to get started.
 - Goal of tests is to get as quickly as possible to "Shameless Green", which means that no matter how ugly your code is, it satisfies all tests, thus is "green".
 - One of the principles of Shameless Green is that code is written for understanding, rather than extreme adherence to any and all patterns. The human is the focus.
