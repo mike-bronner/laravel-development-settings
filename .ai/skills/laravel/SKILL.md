@@ -160,17 +160,14 @@ This project uses a custom indentation scheme that differs from PSR-12. Count fr
 - **Models**: no eager loading in `$with`. Use `with()` at query site. Extract attributes and queries to
   traits (`Concerns/Attributes/ModelName`, `Concerns/Queries/ModelName`). Descriptive persistence methods
   on the model (`$agent->addListingInfo($info)`), not generic CRUD. No separate repository classes.
-  New application models should extend `App\Bases\Model` rather than `Illuminate\Database\Eloquent\Model`
-  directly — `App\Bases\Model` provides `HasCamelCasing` (required for the project's camelCase attribute
-  access convention) and `HasFactory`. For models that also need full-text search and soft deletes, extend
-  `App\Bases\SearchableModel`. Exception: auth-related models such as `User` legitimately extend
-  `Illuminate\Foundation\Auth\User` (`Authenticatable`) instead.
 - **Routes**: resource routes with RESTful controllers. No closures. Single model per route.
 - **Livewire**: single root element, no Livewire/Blade/Alpine attributes on root. Unique `wire:key`.
 
 ## Database Conventions
 
-- **Foreign key cascades are the project default.** Most FK constraints use `->constrained()->cascadeOnDelete()->cascadeOnUpdate()`. Apply both modifiers when deleting a parent record should also remove the child. Use `->nullOnDelete()` instead of `->cascadeOnDelete()` when deleting a parent should orphan the child rather than remove it (e.g., `blog_posts.author_user_id`). Do not use bare `->constrained()` without explicit cascade or null-on-delete modifiers — the intent must always be stated.
+- **No cascading deletes or updates.** Do NOT add `->cascadeOnDelete()` or `->cascadeOnUpdate()` to foreign
+  key constraints. Use `->constrained()` or explicit `->references()->on()` without cascade modifiers. Data
+  integrity requires explicit control over deletions.
 
 ## Testing Conventions
 
