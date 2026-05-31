@@ -128,7 +128,10 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $packageDir = $this->getPackageDir();
 
         if (! $packageDir) {
-            $io->writeError('<error>Could not locate developer-settings package directory</error>');
+            // Running inside development-settings itself: nothing to publish.
+            if (! $this->isRunningInOwnRepository()) {
+                $io->writeError('<error>Could not locate developer-settings package directory</error>');
+            }
 
             return;
         }
@@ -577,6 +580,19 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         }
 
         return null;
+    }
+
+    private function isRunningInOwnRepository(): bool
+    {
+        $composerFile = getcwd() . '/composer.json';
+
+        if (! file_exists($composerFile)) {
+            return false;
+        }
+
+        $data = json_decode((string) file_get_contents($composerFile), associative: true);
+
+        return is_array($data) && ($data['name'] ?? null) === self::PACKAGE_NAME;
     }
 
     private function copyFile(string $source, string $destination): void
