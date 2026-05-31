@@ -35,8 +35,12 @@
             "MikeBronner\\DevelopmentSettings\\Tests\\": "tests/"
         }
     },
+    "bin": [
+        "bin/generate-manifest"
+    ],
     "scripts": {
-        "test": "pest"
+        "test": "pest",
+        "dev-settings:manifest": "@php bin/generate-manifest"
     },
     "extra": {
         "class": "MikeBronner\\DevelopmentSettings\\ComposerPlugin"

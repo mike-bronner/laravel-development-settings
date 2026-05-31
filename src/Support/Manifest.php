@@ -49,15 +49,17 @@ final class Manifest
     }
 
     /**
-     * Write the manifest to disk, matching the established formatting contract:
-     * keys sorted, pretty-printed, slashes unescaped, trailing newline.
+     * Serialize to the established formatting contract: keys sorted,
+     * pretty-printed, slashes unescaped, trailing newline.
      */
+    public function toJson(): string
+    {
+        return json_encode($this->toArray(), flags: JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+    }
+
     public function dump(string $path): void
     {
-        file_put_contents(
-            $path,
-            json_encode($this->toArray(), flags: JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n",
-        );
+        file_put_contents($path, $this->toJson());
     }
 
     /**
