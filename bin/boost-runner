@@ -1,0 +1,132 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/*
+ * Runs Laravel Boost (`boost:update`) inside a Composer PACKAGE that has no
+ * `artisan` of its own, so the shared `.ai` guidelines/skills get composed into
+ * agent files (CLAUDE.md, .claude/, AGENTS.md, ...) at the package root.
+ *
+ * It boots a Laravel application rooted at the package via Orchestra Testbench,
+ * which a package is expected to already have for its test suite. Full Laravel
+ * apps use their own `php artisan boost:update` instead and never invoke this.
+ *
+ * Exit codes: 0 success/skip, 1 unrecoverable error.
+ */
+
+use Illuminate\Contracts\Console\Kernel as ConsoleKernel;
+use Symfony\Component\Console\Input\ArgvInput;
+use Symfony\Component\Console\Output\ConsoleOutput;
+
+$projectDir = getcwd();
+$autoload = $projectDir . '/vendor/autoload.php';
+
+if (! is_file($autoload)) {
+    fwrite(STDERR, "boost-runner: vendor/autoload.php not found.\n");
+
+    exit(1);
+}
+
+require $autoload;
+
+// Testbench provides the bootable app + console kernel + Blade that Boost needs.
+if (! class_exists(\Orchestra\Testbench\Foundation\Application::class)) {
+    fwrite(STDOUT, "boost-runner: orchestra/testbench not installed — skipping Boost composition.\n");
+
+    exit(0);
+}
+
+if (! class_exists(\Laravel\Boost\BoostServiceProvider::class)) {
+    fwrite(STDOUT, "boost-runner: laravel/boost not installed — skipping.\n");
+
+    exit(0);
+}
+
+// Minimal Laravel skeleton dirs Testbench needs to boot against the package.
+foreach ([
+    'bootstrap/cache',
+    'storage/framework/cache/data',
+    'storage/framework/views',
+    'storage/framework/sessions',
+    'storage/logs',
+] as $dir) {
+    $full = $projectDir . '/' . $dir;
+
+    if (! is_dir($full)) {
+        mkdir($full, 0755, true);
+    }
+}
+
+try {
+    $app = \Orchestra\Testbench\Foundation\Application::create(basePath: $projectDir);
+} catch (\Throwable $e) {
+    fwrite(STDERR, 'boost-runner: failed to boot application: ' . $e->getMessage() . "\n");
+
+    exit(1);
+}
+
+// Boost's boost:update requires a valid boost.json with at least one agent.
+// Generate a sensible one if missing so the run is zero-touch; an explicit
+// `boost:install` by the developer is always respected.
+$boostJson = $projectDir . '/boost.json';
+
+if (! is_file($boostJson)) {
+    $agents = [];
+
+    try {
+        $detector = $app->make(\Laravel\Boost\Install\AgentsDetector::class);
+        $detected = $detector->getAgents()
+            ->filter(fn ($agent) => method_exists($agent, 'detectInProject') ? $agent->detectInProject($projectDir) : false)
+            ->map(fn ($agent) => $agent->name())
+            ->values()
+            ->all();
+        $agents = is_array($detected) ? $detected : iterator_to_array($detected);
+    } catch (\Throwable) {
+        // fall through to default
+    }
+
+    if ($agents === []) {
+        $agents = ['claude_code'];
+    }
+
+    file_put_contents($boostJson, json_encode([
+        'agents' => array_values($agents),
+        'guidelines' => true,
+        'skills' => [],
+        'mcp' => false,
+    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+}
+
+// Boost only registers its commands under runningInConsole(), which the
+// programmatic Testbench boot doesn't satisfy — register them explicitly so
+// boost:update resolves.
+\Illuminate\Console\Application::starting(function ($artisan): void {
+    $artisan->resolveCommands([
+        \Laravel\Boost\Console\UpdateCommand::class,
+        \Laravel\Boost\Console\InstallCommand::class,
+    ]);
+});
+
+try {
+    /** @var ConsoleKernel $kernel */
+    $kernel = $app->make(ConsoleKernel::class);
+
+    // Compose guidelines (-> CLAUDE.md) and skills (-> the agent skills path).
+    // NOTE: in one fixture run, boost:update also wrote a skill into
+    // base_path('.ai/skills') — the symlink into vendor. If that recurs it can
+    // pollute vendor and show up in the contribute-detector as a local edit.
+    // Left enabled pending real-world evaluation; watch .ai/skills after updates.
+    $status = $kernel->handle(
+        new ArgvInput(['boost-runner', 'boost:update', '--no-interaction']),
+        new ConsoleOutput,
+    );
+
+    $kernel->terminate(new ArgvInput(['boost-runner']), $status);
+
+    exit($status === 0 ? 0 : $status);
+} catch (\Throwable $e) {
+    fwrite(STDERR, 'boost-runner: boost:update failed: ' . get_class($e) . ': ' . $e->getMessage() . "\n");
+
+    exit(1);
+}

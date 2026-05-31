@@ -1,0 +1,38 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use MikeBronner\DevelopmentSettings\Support\ManifestGenerator;
+
+$packageDir = dirname(__DIR__);
+
+require $packageDir . '/vendor/autoload.php';
+
+$config = require $packageDir . '/config/developer-settings.php';
+$manifestPath = $packageDir . '/manifest.json';
+
+$check = in_array('--check', $argv, true);
+
+$manifest = (new ManifestGenerator)->generate($packageDir, $config, $manifestPath);
+$expected = $manifest->toJson();
+
+if ($check) {
+    $current = file_exists($manifestPath) ? (string) file_get_contents($manifestPath) : '';
+
+    if ($current === $expected) {
+        fwrite(STDOUT, "manifest.json is up to date.\n");
+
+        exit(0);
+    }
+
+    fwrite(STDERR, "manifest.json is out of date. Run: composer dev-settings:manifest\n");
+
+    exit(1);
+}
+
+$manifest->dump($manifestPath);
+
+fwrite(STDOUT, sprintf("manifest.json regenerated (%d paths).\n", count($manifest->paths())));
+
+exit(0);

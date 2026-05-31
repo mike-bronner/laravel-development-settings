@@ -10,11 +10,19 @@ use Composer\IO\IOInterface;
 use Composer\Plugin\PluginInterface;
 use Composer\Script\Event;
 use Composer\Script\ScriptEvents;
-use Laravel\Prompts\Prompt;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
 
+use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\multiselect;
+
+use Laravel\Prompts\Prompt;
+use MikeBronner\DevelopmentSettings\Support\ContributionDetector;
+use MikeBronner\DevelopmentSettings\Support\Contributor;
+use MikeBronner\DevelopmentSettings\Support\FileDiscovery;
+use MikeBronner\DevelopmentSettings\Support\FileSync;
+use MikeBronner\DevelopmentSettings\Support\Manifest;
+use MikeBronner\DevelopmentSettings\Support\SourceFingerprint;
+use MikeBronner\DevelopmentSettings\Support\SymlinkManager;
+use MikeBronner\DevelopmentSettings\Support\SystemProcess;
 
 final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 {
@@ -37,6 +45,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     public static function getSubscribedEvents(): array
     {
         return [
+            ScriptEvents::PRE_UPDATE_CMD => 'captureBeforeUpdate',
             ScriptEvents::POST_INSTALL_CMD => 'publish',
             ScriptEvents::POST_UPDATE_CMD => 'publish',
         ];
@@ -47,24 +56,116 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $this->doPublish($event->getIO());
     }
 
+    public function captureBeforeUpdate(Event $event): void
+    {
+        $this->doCapture($event->getIO());
+    }
+
+    /**
+     * Before an update overwrites vendor, detect local edits to symlinked
+     * sources (which live in vendor and would otherwise be lost) and offer to
+     * contribute them upstream — so in-flow guideline fixes are never silently
+     * discarded.
+     */
+    private function doCapture(IOInterface $io): void
+    {
+        $packageDir = $this->getPackageDir();
+
+        if (! $packageDir) {
+            return;
+        }
+
+        $projectDir = getcwd();
+        $config = require $packageDir . '/config/developer-settings.php';
+        $manifest = Manifest::load($packageDir . '/' . self::MANIFEST_FILE);
+        $modified = (new ContributionDetector)->modified($packageDir, $config, $manifest);
+
+        if ($modified === []) {
+            return;
+        }
+
+        $io->write('');
+        $io->write(sprintf('<comment>You have %d local edit(s) to shared development-settings files:</comment>', count($modified)));
+
+        foreach (array_keys($modified) as $path) {
+            $io->write('  <comment>· ' . $path . '</comment>');
+        }
+
+        if (! $io->isInteractive()) {
+            $io->writeError('<comment>  These live in vendor and will be lost on update. Run "vendor/bin/dev-settings-contribute" to PR them upstream.</comment>');
+
+            return;
+        }
+
+        Prompt::interactive(true);
+
+        if (! confirm(label: 'Contribute these to development-settings before updating?', default: false)) {
+            $io->write('<comment>  Skipped — run "vendor/bin/dev-settings-contribute" later to contribute.</comment>');
+
+            return;
+        }
+
+        $result = (new Contributor(new SystemProcess))->open(
+            modified: $modified,
+            branch: $this->contributionBranch($projectDir),
+            cloneDir: sys_get_temp_dir() . '/devset-contribute-' . bin2hex(random_bytes(5)),
+            token: getenv('DEVELOPER_SETTINGS_TOKEN') ?: null,
+        );
+
+        $io->write($result['status'] === 0
+            ? '<info>  ' . $result['message'] . '</info>'
+            : '<error>  ' . $result['message'] . '</error>');
+    }
+
+    private function contributionBranch(string $projectDir): string
+    {
+        $slug = preg_replace('/[^a-z0-9._-]+/i', '-', basename($projectDir)) ?? 'project';
+
+        return 'contribute/' . $slug . '-' . date('YmdHis');
+    }
+
     private function doPublish(IOInterface $io): void
     {
         $packageDir = $this->getPackageDir();
 
         if (! $packageDir) {
-            $io->writeError('<error>Could not locate developer-settings package directory</error>');
+            // Running inside development-settings itself: nothing to publish.
+            if (! $this->isRunningInOwnRepository()) {
+                $io->writeError('<error>Could not locate developer-settings package directory</error>');
+            }
 
             return;
         }
 
         $projectDir = getcwd();
-        $manifest = $this->loadManifest($packageDir . '/' . self::MANIFEST_FILE);
         $config = require $packageDir . '/config/developer-settings.php';
+        $manifest = Manifest::load($packageDir . '/' . self::MANIFEST_FILE);
 
-        $filesToPublish = $this->discoverFiles($packageDir, $config['paths']);
+        $filesToPublish = (new FileDiscovery)->discover(
+            packageDir: $packageDir,
+            paths: $config['paths'],
+            ignore: $config['paths']['ignore'] ?? FileDiscovery::DEFAULT_IGNORE,
+        );
 
-        $scan = $this->scanFiles($projectDir, $filesToPublish, $manifest);
-        $orphans = $this->findOrphanedFiles($projectDir, $manifest, $filesToPublish);
+        $symlinkConfig = $config['paths']['symlinks'] ?? [];
+        $symlinkRoots = array_keys($symlinkConfig);
+
+        $fileSync = new FileSync($manifest);
+        $scan = $fileSync->classify($projectDir, $filesToPublish);
+        $safeOrphans = $fileSync->safeOrphans($projectDir, $filesToPublish, $symlinkRoots);
+        $protectedOrphans = $fileSync->protectedOrphans($projectDir, $filesToPublish, $symlinkRoots);
+
+        $symlinkManager = new SymlinkManager;
+        $symlinkResults = [];
+
+        foreach ($symlinkConfig as $linkPath => $sourcePath) {
+            $symlinkResults[$linkPath] = $symlinkManager->ensure(
+                projectDir: $projectDir,
+                packageDir: $packageDir,
+                linkPath: $linkPath,
+                sourcePath: $sourcePath,
+            );
+        }
 
         $composerConfig = $config['composer'] ?? [];
         $dependencyResult = $this->prepareComposerDependencies(
@@ -86,8 +187,12 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             $io->write($this->formatOutputLine(type: 'modified', path: $path));
         }
 
-        foreach ($orphans as $path) {
+        foreach ($safeOrphans as $path) {
             $io->write($this->formatOutputLine(type: 'removed', path: $path));
+        }
+
+        foreach ($protectedOrphans as $path) {
+            $io->write($this->formatOutputLine(type: 'orphan_protected', path: $path));
         }
 
         foreach (array_keys($dependencyResult['toInstall']) as $package) {
@@ -96,6 +201,17 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 
         foreach ($dependencyResult['toRemove'] as $package) {
             $io->write($this->formatOutputLine(type: 'dep_removed', path: $package));
+        }
+
+        foreach ($symlinkResults as $linkPath => $action) {
+            if ($action === SymlinkManager::UNCHANGED) {
+                continue;
+            }
+
+            $io->write($this->formatOutputLine(
+                type: $action === SymlinkManager::COPIED ? 'copied' : 'linked',
+                path: $linkPath,
+            ));
         }
 
         $filesToOverwrite = [];
@@ -113,6 +229,27 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
                 required: false,
                 hint: 'Space to toggle, Enter to confirm.',
             );
+        }
+
+        $orphansToDelete = [];
+
+        if ($protectedOrphans !== []) {
+            if ($io->isInteractive()) {
+                Prompt::interactive(true);
+
+                $orphansToDelete = multiselect(
+                    label: 'Delete files removed upstream that you have modified locally?',
+                    options: array_combine($protectedOrphans, $protectedOrphans),
+                    default: [],
+                    required: false,
+                    hint: 'Unselected files are kept. Space to toggle, Enter to confirm.',
+                );
+            } else {
+                $io->writeError(sprintf(
+                    '<comment>  %d locally-modified file(s) removed upstream were kept. Delete manually if no longer needed.</comment>',
+                    count($protectedOrphans),
+                ));
+            }
         }
 
         $changedFiles = [];
@@ -148,12 +285,31 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             $stats['skipped']++;
         }
 
-        foreach ($orphans as $orphanPath) {
-            $filePath = $projectDir . '/' . $orphanPath;
-            unlink($filePath);
-            $this->removeEmptyDirectories(dirname($filePath), $projectDir);
+        foreach ($safeOrphans as $orphanPath) {
+            $this->deleteOrphan($projectDir, $orphanPath);
             $changedFiles[] = $orphanPath;
             $stats['removed']++;
+        }
+
+        foreach ($protectedOrphans as $orphanPath) {
+            if (! in_array($orphanPath, $orphansToDelete, true)) {
+                $stats['skipped']++;
+
+                continue;
+            }
+
+            $this->deleteOrphan($projectDir, $orphanPath);
+            $changedFiles[] = $orphanPath;
+            $stats['removed']++;
+        }
+
+        foreach ($symlinkResults as $linkPath => $action) {
+            if ($action === SymlinkManager::UNCHANGED) {
+                continue;
+            }
+
+            $changedFiles[] = $linkPath;
+            $stats['new']++;
         }
 
         foreach (array_keys($dependencyResult['toInstall']) as $package) {
@@ -167,7 +323,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         }
 
         $this->writeBoxFooter($io, $stats);
-        $this->runHooks($io, $config['hooks'], $changedFiles);
+        $this->runBoost($io, $projectDir, $packageDir, $config);
         $this->installDevDependencies($io, $dependencyResult['toInstall']);
         $this->removeDevDependencies($io, $dependencyResult['toRemove']);
     }
@@ -222,6 +378,9 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             'created' => ['icon' => '+', 'style' => 'info'],
             'updated' => ['icon' => '↻', 'style' => 'comment'],
             'modified' => ['icon' => '⚠', 'style' => 'fg=yellow'],
+            'orphan_protected' => ['icon' => '⚠', 'style' => 'fg=yellow'],
+            'linked' => ['icon' => '⇄', 'style' => 'info', 'suffix' => ' (symlink)'],
+            'copied' => ['icon' => '⇄', 'style' => 'comment', 'suffix' => ' (copied — symlinks unavailable)'],
             'removed' => ['icon' => '-', 'style' => 'fg=magenta'],
             'dep_added' => ['icon' => '+', 'style' => 'info', 'suffix' => ' (composer)'],
             'dep_removed' => ['icon' => '-', 'style' => 'fg=magenta', 'suffix' => ' (composer)'],
@@ -236,6 +395,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 
         $displayPath = match ($type) {
             'modified' => "{$path} (locally modified)",
+            'orphan_protected' => "{$path} (removed upstream, kept — locally modified)",
             default => $path . $suffix,
         };
 
@@ -250,72 +410,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $padding = max(1, self::BOX_WIDTH - 6 - $visibleLength);
 
         return '<fg=gray>│</>  ' . $prefix . '  ' . $displayPath . str_repeat(' ', $padding) . '  <fg=gray>│</>';
-    }
-
-    /**
-     * @param array<string, string> $filesToPublish
-     * @param array<string, array<int, string>> $manifest
-     * @return array{new: array<string, string>, unchanged: array<string, string>, modified: array<string, string>, updatable: array<string, string>}
-     */
-    private function scanFiles(string $projectDir, array $filesToPublish, array $manifest): array
-    {
-        $scan = [
-            'new' => [],
-            'unchanged' => [],
-            'modified' => [],
-            'updatable' => [],
-        ];
-
-        foreach ($filesToPublish as $relativePath => $sourceFile) {
-            $destinationPath = $this->getDestinationPath($relativePath);
-            $destinationFile = $projectDir . '/' . $destinationPath;
-            $knownChecksums = $manifest[$destinationPath] ?? [];
-
-            if (! file_exists($destinationFile)) {
-                $scan['new'][$destinationPath] = $sourceFile;
-
-                continue;
-            }
-
-            $localChecksum = md5_file($destinationFile);
-            $sourceChecksum = md5_file($sourceFile);
-
-            if ($localChecksum === $sourceChecksum) {
-                $scan['unchanged'][$destinationPath] = $sourceFile;
-
-                continue;
-            }
-
-            if (! in_array($localChecksum, $knownChecksums, true)) {
-                $scan['modified'][$destinationPath] = $sourceFile;
-
-                continue;
-            }
-
-            $scan['updatable'][$destinationPath] = $sourceFile;
-        }
-
-        return $scan;
-    }
-
-    private function findOrphanedFiles(string $projectDir, array $manifest, array $discoveredFiles): array
-    {
-        $orphaned = [];
-        $discoveredPaths = array_keys($discoveredFiles);
-
-        foreach (array_keys($manifest) as $manifestPath) {
-            if (in_array($manifestPath, $discoveredPaths, true)) {
-                continue;
-            }
-
-            if (! file_exists($projectDir . '/' . $manifestPath)) {
-                continue;
-            }
-
-            $orphaned[] = $manifestPath;
-        }
-
-        return $orphaned;
     }
 
     private function prepareComposerDependencies(array $install, array $remove): array
@@ -402,6 +496,17 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $io->write('');
     }
 
+    private function deleteOrphan(string $projectDir, string $orphanPath): void
+    {
+        $filePath = $projectDir . '/' . $orphanPath;
+
+        if (file_exists($filePath)) {
+            unlink($filePath);
+        }
+
+        $this->removeEmptyDirectories(dirname($filePath), $projectDir);
+    }
+
     private function removeEmptyDirectories(string $directory, string $stopAt): void
     {
         while ($directory !== $stopAt && is_dir($directory)) {
@@ -416,86 +521,66 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         }
     }
 
-    private function runHooks(IOInterface $io, array $hook, array $changedFiles): void
+    /**
+     * Compose the shared AI guidelines (Laravel Boost) into agent files.
+     *
+     * Full Laravel apps have `artisan`, so Boost runs natively. Packages have
+     * no `artisan`, so the bundled Testbench-hosted runner is used instead —
+     * but only when orchestra/testbench is available (packages are expected to
+     * have it for testing); otherwise the step is skipped with a note.
+     */
+    private function runBoost(IOInterface $io, string $projectDir, string $packageDir, array $config): void
     {
-        if ($changedFiles === []) {
+        if (($config['paths']['symlinks'] ?? []) === []) {
             return;
         }
 
-        $patterns = $hook['patterns'] ?? [];
-        $command = $hook['command'] ?? null;
-        $description = $hook['description'] ?? $command;
+        // Skip the (Testbench-booting) compose when the symlinked sources are
+        // unchanged since the last successful run.
+        $fingerprint = (new SourceFingerprint)->forSymlinks($packageDir, $config);
+        $cacheFile = $projectDir . '/.dev-settings-boost';
 
-        if ($command === null) {
+        if (is_file($cacheFile) && trim((string) file_get_contents($cacheFile)) === $fingerprint) {
             return;
         }
 
-        foreach ($changedFiles as $file) {
-            if (! $this->matchesPattern($file, $patterns)) {
-                continue;
-            }
+        if (file_exists($projectDir . '/artisan')) {
+            $status = $this->runBoostCommand(
+                io: $io,
+                description: $config['hooks']['description'] ?? 'Updating Laravel Boost...',
+                command: $config['hooks']['command'] ?? 'php artisan boost:update',
+            );
+        } elseif (! is_dir($projectDir . '/vendor/orchestra/testbench')) {
+            $io->write('<comment>  Skipping Boost: install orchestra/testbench (dev) to compose AI guidelines in this package.</comment>');
 
-            $io->write("  <info>{$description}</info> ", false);
+            return;
+        } else {
+            $status = $this->runBoostCommand(
+                io: $io,
+                description: 'Composing Laravel Boost guidelines...',
+                command: 'php ' . escapeshellarg($packageDir . '/bin/boost-runner'),
+            );
+        }
 
-            $result = $this->executeCommand($command);
-
-            if ($result === 0) {
-                $io->write('<info>done</info>');
-            } else {
-                $io->write('<error>failed</error>');
-            }
-
-            break;
+        if ($status === 0) {
+            @file_put_contents($cacheFile, $fingerprint . "\n");
         }
     }
 
-    private function matchesPattern(string $file, array $patterns): bool
+    private function runBoostCommand(IOInterface $io, string $description, string $command): int
     {
-        foreach ($patterns as $pattern) {
-            $regex = $this->globToRegex($pattern);
+        $io->write("  <info>{$description}</info> ", false);
 
-            if (preg_match($regex, $file)) {
-                return true;
-            }
-        }
+        $result = $this->executeCommand($command);
 
-        return false;
-    }
+        $io->write($result === 0 ? '<info>done</info>' : '<error>failed</error>');
 
-    private function globToRegex(string $pattern): string
-    {
-        $regex = preg_quote($pattern, '/');
-        $regex = str_replace('\*\*', '.*', $regex);
-        $regex = str_replace('\*', '[^\/]*', $regex);
-        $regex = str_replace('\?', '.', $regex);
-
-        return '/^' . $regex . '$/';
+        return $result;
     }
 
     private function executeCommand(string $command): int
     {
-        $process = proc_open(
-            $command,
-            [
-                0 => ['pipe', 'r'],
-                1 => ['pipe', 'w'],
-                2 => ['pipe', 'w'],
-            ],
-            $pipes,
-            getcwd(),
-        );
-
-        if (! is_resource($process)) {
-            return 1;
-        }
-
-        fclose($pipes[0]);
-        stream_get_contents($pipes[1]);
-        stream_get_contents($pipes[2]);
-        fclose($pipes[1]);
-        fclose($pipes[2]);
-
-        return proc_close($process);
+        return (new SystemProcess)->run($command);
     }
 
     private function getPackageDir(): ?string
@@ -509,57 +594,17 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         return null;
     }
 
-    private function loadManifest(string $path): array
+    private function isRunningInOwnRepository(): bool
     {
-        if (! file_exists($path)) {
-            return [];
+        $composerFile = getcwd() . '/composer.json';
+
+        if (! file_exists($composerFile)) {
+            return false;
         }
 
-        $content = file_get_contents($path);
+        $data = json_decode((string) file_get_contents($composerFile), associative: true);
 
-        return json_decode($content, true) ?? [];
-    }
-
-    private function discoverFiles(string $packageDir, array $paths): array
-    {
-        $files = [];
-
-        foreach ($paths['directories'] as $directory) {
-            $sourceDir = $packageDir . '/' . $directory;
-
-            if (! is_dir($sourceDir)) {
-                continue;
-            }
-
-            $iterator = new RecursiveIteratorIterator(
-                new RecursiveDirectoryIterator($sourceDir, RecursiveDirectoryIterator::SKIP_DOTS),
-                RecursiveIteratorIterator::LEAVES_ONLY,
-            );
-
-            foreach ($iterator as $file) {
-                $relativePath = $directory
-                    . '/'
-                    . substr($file->getPathname(), strlen($sourceDir) + 1);
-                $files[$relativePath] = $file->getPathname();
-            }
-        }
-
-        foreach ($paths['files'] as $filePath) {
-            $sourceFile = "{$packageDir}/{$filePath}";
-
-            if (! file_exists($sourceFile)) {
-                continue;
-            }
-
-            $files[$filePath] = $sourceFile;
-        }
-
-        return $files;
-    }
-
-    private function getDestinationPath(string $relativePath): string
-    {
-        return $relativePath;
+        return is_array($data) && ($data['name'] ?? null) === self::PACKAGE_NAME;
     }
 
     private function copyFile(string $source, string $destination): void

@@ -1,4 +1,16 @@
 {
+    ".ai/guidelines/01-identity.md": [
+        "b84767e8b3846bff498d7ced5ceecdd3"
+    ],
+    ".ai/guidelines/02-workflow.md": [
+        "ea7a744b93fbc1c8768e6c6bfc89182d"
+    ],
+    ".ai/guidelines/03-laravel-code-generation.md": [
+        "1ffc44da447c7748550b3839f900dc67"
+    ],
+    ".ai/guidelines/04-commit-conventions.md": [
+        "f563888ee9aaecc8ca32a7c789296bbc"
+    ],
     ".ai/guidelines/agent-behavior.md": [
         "b4b7bbe28e5c6114f966a3806a7b973f"
     ],
@@ -20,25 +32,110 @@
     ".ai/guidelines/testing-conventions.md": [
         "705707de57f24c24164bf826c4858cfa"
     ],
+    ".ai/skills/a11y/SKILL.md": [
+        "005e25c9878d395a7838e36e26351d45"
+    ],
+    ".ai/skills/architecture/SKILL.md": [
+        "9fa2d80141086be751cbac372d0e3c45"
+    ],
+    ".ai/skills/deploying-laravel-cloud/SKILL.md": [
+        "598a29cac91a7659a12ebe38878b4417"
+    ],
+    ".ai/skills/deploying-laravel-cloud/reference/checklists.md": [
+        "cdc8532da7dc5ed118049158c4c8b734"
+    ],
+    ".ai/skills/frontend-developer/SKILL.md": [
+        "5012bec131a3c3bb9517ae445beb4926"
+    ],
+    ".ai/skills/git-commit/SKILL.md": [
+        "ac7aa80cdad8c8a02185b6e2a7265c34"
+    ],
+    ".ai/skills/git-commit/references/conventional-commits.md": [
+        "670b10586454e8443be79e5020c876b5"
+    ],
+    ".ai/skills/git-commit/references/gitmoji.md": [
+        "11512e3c1e306b9ce828c303fea5304f"
+    ],
+    ".ai/skills/laravel/SKILL.md": [
+        "65b8d28a66ae37968952ffef05fdfcb7"
+    ],
+    ".ai/skills/laravel/references/classes.md": [
+        "81a1d9ff0e5642708bbeef1ecc5d54ed"
+    ],
+    ".ai/skills/laravel/references/code-cleanliness.md": [
+        "3ceac12f6841d894f04b23d24b740c3b"
+    ],
+    ".ai/skills/laravel/references/code-style.md": [
+        "596bb23c10f2da4699d298006410b25b"
+    ],
+    ".ai/skills/laravel/references/controllers.md": [
+        "a0fc7ae8132e78d77b3409ece700a460"
+    ],
+    ".ai/skills/laravel/references/debugging.md": [
+        "974edf37a6736366f91fefaebcb032bc"
+    ],
+    ".ai/skills/laravel/references/exceptions.md": [
+        "f64c8493e0d99abf70f674bf353e0f32"
+    ],
+    ".ai/skills/laravel/references/governing-principles.md": [
+        "d2d335903d0784765d8917a3f36c9711"
+    ],
+    ".ai/skills/laravel/references/livewire.md": [
+        "178c685b77b4ca151c17524056729e3f"
+    ],
+    ".ai/skills/laravel/references/models.md": [
+        "719a4c7cd5d286357176d07a12b2b070"
+    ],
+    ".ai/skills/laravel/references/pest-patterns.md": [
+        "a4dd3b692d2d6757e6b2495ab394507a"
+    ],
+    ".ai/skills/laravel/references/policies.md": [
+        "b66f6200b3437c0d5ce1b03e56a12015"
+    ],
+    ".ai/skills/laravel/references/routes.md": [
+        "d270c31d5d1c1b42abe666caf09c1e68"
+    ],
+    ".ai/skills/laravel/references/testing.md": [
+        "e50cc74ee64c97df75ffacee53d66eed"
+    ],
     ".ai/skills/php-code-style/SKILL.md": [
         "7a24101bb4c9add88fa75ed11aaeb557"
     ],
+    ".ai/skills/postgres/SKILL.md": [
+        "43a7ff1d423115274a65398154ba0061"
+    ],
+    ".ai/skills/refactor/SKILL.md": [
+        "de5f47f1f210c02d91e3f92fff5125ce"
+    ],
+    ".ai/skills/security/SKILL.md": [
+        "9830885ec000979bd0d05f01444064ca"
+    ],
     ".github/workflows/sync-developer-settings.yml": [
-        "3ed155007d03bc3370ac7471f527e794"
+        "3ed155007d03bc3370ac7471f527e794",
+        "3baa60b472b6a57f744bf306b4319b6c"
+    ],
+    ".gitignore": [
+        "427bb566b7c2a25c556f9105ea2dbc01",
+        "bac3419c27a4a9703ad2f9f792ce5f06",
+        "833c4b43a727d4981c1a46c8aa30109e"
     ],
     ".php-codesniffer/MikeBronner/ruleset.xml": [
-        "197d2a3197508ea8e581f9c36cd21bda"
+        "197d2a3197508ea8e581f9c36cd21bda",
+        "4133aeedefd410bdadeea4e11d6778fb"
     ],
     ".pre-commit-config.yaml": [
         "00d6328ed40ec33f9a49c4ccc38407ad"
     ],
     "phpcs.xml": [
-        "992e3c5d1d7863fcf21d73374254a46a"
+        "992e3c5d1d7863fcf21d73374254a46a",
+        "9bf0a70ded72dd725a68407c309cb349"
     ],
     "phpmd.xml": [
-        "a2d80f6b94db829aa45205ea0f42ce5e"
+        "a2d80f6b94db829aa45205ea0f42ce5e",
+        "c90e2534f68dcbc16fd306e162aa3005"
     ],
     "pint.json": [
-        "9ab087085e2953193527c3466e4cda47"
+        "9ab087085e2953193527c3466e4cda47",
+        "18525377b95d2d2c0c0809f5c0e3b88a"
     ]
 }

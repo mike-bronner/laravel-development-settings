@@ -15,15 +15,15 @@ return [
         ],
     ],
 
+    // Boost composition command used in full Laravel apps (which have artisan).
+    // Packages without artisan use the bundled bin/boost-runner instead.
     'hooks' => [
-        'patterns' => ['.ai/**'],
         'command' => 'php artisan boost:update',
         'description' => 'Updating Laravel Boost...',
     ],
 
     'paths' => [
         'directories' => [
-            '.ai',
             '.php-codesniffer',
         ],
 
@@ -33,6 +33,20 @@ return [
             'phpmd.xml',
             'pint.json',
             '.github/workflows/sync-developer-settings.yml',
+        ],
+
+        // Symlinked (not copied) into the consuming project: link path => source
+        // path within this package. Kept out of the project's git/distribution
+        // while staying in sync with vendor and feeding Laravel Boost directly.
+        'symlinks' => [
+            '.ai' => '.ai',
+        ],
+
+        // File/directory names excluded from discovery anywhere in the tree.
+        'ignore' => [
+            '.DS_Store',
+            '.git',
+            'Thumbs.db',
         ],
     ],
 ];
