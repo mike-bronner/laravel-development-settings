@@ -34,5 +34,12 @@ return [
             'pint.json',
             '.github/workflows/sync-developer-settings.yml',
         ],
+
+        // File/directory names excluded from discovery anywhere in the tree.
+        'ignore' => [
+            '.DS_Store',
+            '.git',
+            'Thumbs.db',
+        ],
     ],
 ];
