@@ -10,11 +10,14 @@ use Composer\IO\IOInterface;
 use Composer\Plugin\PluginInterface;
 use Composer\Script\Event;
 use Composer\Script\ScriptEvents;
-use Laravel\Prompts\Prompt;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
 
 use function Laravel\Prompts\multiselect;
+
+use Laravel\Prompts\Prompt;
+use MikeBronner\DevelopmentSettings\Support\FileDiscovery;
+use MikeBronner\DevelopmentSettings\Support\FileSync;
+use MikeBronner\DevelopmentSettings\Support\Manifest;
+use MikeBronner\DevelopmentSettings\Support\SystemProcess;
 
 final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 {
@@ -58,13 +61,18 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         }
 
         $projectDir = getcwd();
-        $manifest = $this->loadManifest($packageDir . '/' . self::MANIFEST_FILE);
         $config = require $packageDir . '/config/developer-settings.php';
+        $manifest = Manifest::load($packageDir . '/' . self::MANIFEST_FILE);
 
-        $filesToPublish = $this->discoverFiles($packageDir, $config['paths']);
+        $filesToPublish = (new FileDiscovery)->discover(
+            packageDir: $packageDir,
+            paths: $config['paths'],
+            ignore: $config['paths']['ignore'] ?? FileDiscovery::DEFAULT_IGNORE,
+        );
 
-        $scan = $this->scanFiles($projectDir, $filesToPublish, $manifest);
-        $orphans = $this->findOrphanedFiles($projectDir, $manifest, $filesToPublish);
+        $fileSync = new FileSync($manifest);
+        $scan = $fileSync->classify($projectDir, $filesToPublish);
+        $orphans = $fileSync->orphans($projectDir, $filesToPublish);
 
         $composerConfig = $config['composer'] ?? [];
         $dependencyResult = $this->prepareComposerDependencies(
@@ -252,72 +260,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         return '<fg=gray>│</>  ' . $prefix . '  ' . $displayPath . str_repeat(' ', $padding) . '  <fg=gray>│</>';
     }
 
-    /**
-     * @param array<string, string> $filesToPublish
-     * @param array<string, array<int, string>> $manifest
-     * @return array{new: array<string, string>, unchanged: array<string, string>, modified: array<string, string>, updatable: array<string, string>}
-     */
-    private function scanFiles(string $projectDir, array $filesToPublish, array $manifest): array
-    {
-        $scan = [
-            'new' => [],
-            'unchanged' => [],
-            'modified' => [],
-            'updatable' => [],
-        ];
-
-        foreach ($filesToPublish as $relativePath => $sourceFile) {
-            $destinationPath = $this->getDestinationPath($relativePath);
-            $destinationFile = $projectDir . '/' . $destinationPath;
-            $knownChecksums = $manifest[$destinationPath] ?? [];
-
-            if (! file_exists($destinationFile)) {
-                $scan['new'][$destinationPath] = $sourceFile;
-
-                continue;
-            }
-
-            $localChecksum = md5_file($destinationFile);
-            $sourceChecksum = md5_file($sourceFile);
-
-            if ($localChecksum === $sourceChecksum) {
-                $scan['unchanged'][$destinationPath] = $sourceFile;
-
-                continue;
-            }
-
-            if (! in_array($localChecksum, $knownChecksums, true)) {
-                $scan['modified'][$destinationPath] = $sourceFile;
-
-                continue;
-            }
-
-            $scan['updatable'][$destinationPath] = $sourceFile;
-        }
-
-        return $scan;
-    }
-
-    private function findOrphanedFiles(string $projectDir, array $manifest, array $discoveredFiles): array
-    {
-        $orphaned = [];
-        $discoveredPaths = array_keys($discoveredFiles);
-
-        foreach (array_keys($manifest) as $manifestPath) {
-            if (in_array($manifestPath, $discoveredPaths, true)) {
-                continue;
-            }
-
-            if (! file_exists($projectDir . '/' . $manifestPath)) {
-                continue;
-            }
-
-            $orphaned[] = $manifestPath;
-        }
-
-        return $orphaned;
-    }
-
     private function prepareComposerDependencies(array $install, array $remove): array
     {
         if (self::$dependenciesInjected) {
@@ -474,28 +416,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 
     private function executeCommand(string $command): int
     {
-        $process = proc_open(
-            $command,
-            [
-                0 => ['pipe', 'r'],
-                1 => ['pipe', 'w'],
-                2 => ['pipe', 'w'],
-            ],
-            $pipes,
-            getcwd(),
-        );
-
-        if (! is_resource($process)) {
-            return 1;
-        }
-
-        fclose($pipes[0]);
-        stream_get_contents($pipes[1]);
-        stream_get_contents($pipes[2]);
-        fclose($pipes[1]);
-        fclose($pipes[2]);
-
-        return proc_close($process);
+        return (new SystemProcess)->run($command);
     }
 
     private function getPackageDir(): ?string
@@ -507,59 +428,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         }
 
         return null;
-    }
-
-    private function loadManifest(string $path): array
-    {
-        if (! file_exists($path)) {
-            return [];
-        }
-
-        $content = file_get_contents($path);
-
-        return json_decode($content, true) ?? [];
-    }
-
-    private function discoverFiles(string $packageDir, array $paths): array
-    {
-        $files = [];
-
-        foreach ($paths['directories'] as $directory) {
-            $sourceDir = $packageDir . '/' . $directory;
-
-            if (! is_dir($sourceDir)) {
-                continue;
-            }
-
-            $iterator = new RecursiveIteratorIterator(
-                new RecursiveDirectoryIterator($sourceDir, RecursiveDirectoryIterator::SKIP_DOTS),
-                RecursiveIteratorIterator::LEAVES_ONLY,
-            );
-
-            foreach ($iterator as $file) {
-                $relativePath = $directory
-                    . '/'
-                    . substr($file->getPathname(), strlen($sourceDir) + 1);
-                $files[$relativePath] = $file->getPathname();
-            }
-        }
-
-        foreach ($paths['files'] as $filePath) {
-            $sourceFile = "{$packageDir}/{$filePath}";
-
-            if (! file_exists($sourceFile)) {
-                continue;
-            }
-
-            $files[$filePath] = $sourceFile;
-        }
-
-        return $files;
-    }
-
-    private function getDestinationPath(string $relativePath): string
-    {
-        return $relativePath;
     }
 
     private function copyFile(string $source, string $destination): void
