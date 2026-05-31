@@ -12,12 +12,18 @@ That's it. The package automatically syncs files and manages dependencies on eve
 
 ## 🔧 How It Works
 
-This package is a Composer plugin that hooks into Composer's post-install and post-update events. On each run, it:
+This package is a Composer plugin that hooks into Composer's pre-update, post-install, and post-update events. On each run, it:
 
-1. **Syncs tracked files and directories** from the package into your project
-2. **Installs or removes dev dependencies** as defined in the package config
-3. **Preserves local modifications** — files you've changed locally won't be overwritten
-4. **Runs hooks** — triggers commands when specific file patterns change (e.g., refreshing tooling caches)
+1. **Syncs tracked config files** (`pint.json`, `phpcs.xml`, …) from the package into your project
+2. **Symlinks shared sources** (`.ai` guidelines/skills) at your project root, pointing into vendor — kept in sync without being committed or distributed
+3. **Installs or removes dev dependencies** as defined in the package config
+4. **Preserves local modifications** — changed files aren't overwritten, and removed-upstream files you customized aren't deleted without asking
+5. **Composes Laravel Boost** — apps run `php artisan boost:update`; packages (no `artisan`) compose via a bundled Testbench-hosted runner when `orchestra/testbench` is present
+6. **Offers upstream contribution** — before an update overwrites vendor, edits you made to the symlinked `.ai` are detected and offered as a PR back to this repo (or run `vendor/bin/dev-settings-contribute` any time)
+
+### AI guidelines (`.ai`) in apps vs packages
+
+`.ai` is the source Laravel Boost composes into your agent files (`CLAUDE.md`, `.claude/`, …). Because it's a gitignored symlink into vendor, it never bloats your package's git history or its distributed tarball — yet stays current with this package. Edit a guideline in-flow and `dev-settings-contribute` PRs it upstream.
 
 ### Output
 
@@ -77,13 +83,15 @@ The upstream workflow reads tracked paths directly from the package config — n
 
 ## 📋 Manifest Management
 
-The `manifest.json` tracks checksums of all managed files. This is how the plugin knows whether a local file was modified by you or matches a known version.
+The `manifest.json` tracks every known checksum of all managed files. It is how the plugin knows whether a local file was modified by you or matches a known version, and which removed-upstream files are safe to clean up. It is **append-only** (it retains entries for deleted files so downstream cleanup keeps working) and **generated** — never hand-edited.
 
 When releasing a new version:
 
-1. Update the source files
-2. Regenerate the manifest to capture new checksums
+1. Update the source files (`config/developer-settings.php` paths if adding/removing)
+2. Run `composer dev-settings:manifest` to regenerate `manifest.json`
 3. Commit and tag a new release
+
+CI can guard against a stale manifest with `php bin/generate-manifest --check` (exits non-zero if regeneration would change anything).
 
 ## 🧪 Local Development
 
