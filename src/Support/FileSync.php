@@ -66,16 +66,25 @@ final class FileSync
     /**
      * Manifest paths no longer shipped that still exist downstream.
      *
+     * Paths under a symlinked root are excluded: they are no longer copied, so
+     * they would otherwise look orphaned — but deleting them would reach
+     * through the symlink into vendor.
+     *
      * @param  array<string, string>  $discoveredFiles
+     * @param  list<string>  $symlinkedRoots
      * @return list<string>
      */
-    public function orphans(string $projectDir, array $discoveredFiles): array
+    public function orphans(string $projectDir, array $discoveredFiles, array $symlinkedRoots = []): array
     {
         $discoveredPaths = array_keys($discoveredFiles);
         $orphaned = [];
 
         foreach ($this->manifest->paths() as $manifestPath) {
             if (in_array($manifestPath, $discoveredPaths, strict: true)) {
+                continue;
+            }
+
+            if ($this->isUnderRoot($manifestPath, $symlinkedRoots)) {
                 continue;
             }
 
@@ -93,12 +102,13 @@ final class FileSync
      * Orphans whose local copy is an unmodified known version — safe to delete.
      *
      * @param  array<string, string>  $discoveredFiles
+     * @param  list<string>  $symlinkedRoots
      * @return list<string>
      */
-    public function safeOrphans(string $projectDir, array $discoveredFiles): array
+    public function safeOrphans(string $projectDir, array $discoveredFiles, array $symlinkedRoots = []): array
     {
         return array_values(array_filter(
-            $this->orphans($projectDir, $discoveredFiles),
+            $this->orphans($projectDir, $discoveredFiles, $symlinkedRoots),
             fn (string $path): bool => $this->isLocalCopyKnown($projectDir, $path),
         ));
     }
@@ -107,14 +117,31 @@ final class FileSync
      * Orphans whose local copy was customized — must not be silently deleted.
      *
      * @param  array<string, string>  $discoveredFiles
+     * @param  list<string>  $symlinkedRoots
      * @return list<string>
      */
-    public function protectedOrphans(string $projectDir, array $discoveredFiles): array
+    public function protectedOrphans(string $projectDir, array $discoveredFiles, array $symlinkedRoots = []): array
     {
         return array_values(array_filter(
-            $this->orphans($projectDir, $discoveredFiles),
+            $this->orphans($projectDir, $discoveredFiles, $symlinkedRoots),
             fn (string $path): bool => ! $this->isLocalCopyKnown($projectDir, $path),
         ));
+    }
+
+    /**
+     * @param  list<string>  $roots
+     */
+    private function isUnderRoot(string $path, array $roots): bool
+    {
+        foreach ($roots as $root) {
+            $root = rtrim($root, '/');
+
+            if ($path === $root || str_starts_with($path, $root . '/')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function isLocalCopyKnown(string $projectDir, string $path): bool

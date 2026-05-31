@@ -23,7 +23,6 @@ return [
 
     'paths' => [
         'directories' => [
-            '.ai',
             '.php-codesniffer',
         ],
 
@@ -35,11 +34,25 @@ return [
             '.github/workflows/sync-developer-settings.yml',
         ],
 
+        // Symlinked (not copied) into the consuming project: link path => source
+        // path within this package. Kept out of the project's git/distribution
+        // while staying in sync with vendor and feeding Laravel Boost directly.
+        'symlinks' => [
+            '.ai' => '.ai',
+        ],
+
         // File/directory names excluded from discovery anywhere in the tree.
         'ignore' => [
             '.DS_Store',
             '.git',
             'Thumbs.db',
+        ],
+    ],
+
+    // Patterns whose local edits are offered for upstream contribution.
+    'capture' => [
+        'patterns' => [
+            '.ai/**',
         ],
     ],
 ];

@@ -17,6 +17,7 @@ use Laravel\Prompts\Prompt;
 use MikeBronner\DevelopmentSettings\Support\FileDiscovery;
 use MikeBronner\DevelopmentSettings\Support\FileSync;
 use MikeBronner\DevelopmentSettings\Support\Manifest;
+use MikeBronner\DevelopmentSettings\Support\SymlinkManager;
 use MikeBronner\DevelopmentSettings\Support\SystemProcess;
 
 final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
@@ -70,10 +71,25 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             ignore: $config['paths']['ignore'] ?? FileDiscovery::DEFAULT_IGNORE,
         );
 
+        $symlinkConfig = $config['paths']['symlinks'] ?? [];
+        $symlinkRoots = array_keys($symlinkConfig);
+
         $fileSync = new FileSync($manifest);
         $scan = $fileSync->classify($projectDir, $filesToPublish);
-        $safeOrphans = $fileSync->safeOrphans($projectDir, $filesToPublish);
-        $protectedOrphans = $fileSync->protectedOrphans($projectDir, $filesToPublish);
+        $safeOrphans = $fileSync->safeOrphans($projectDir, $filesToPublish, $symlinkRoots);
+        $protectedOrphans = $fileSync->protectedOrphans($projectDir, $filesToPublish, $symlinkRoots);
+
+        $symlinkManager = new SymlinkManager;
+        $symlinkResults = [];
+
+        foreach ($symlinkConfig as $linkPath => $sourcePath) {
+            $symlinkResults[$linkPath] = $symlinkManager->ensure(
+                projectDir: $projectDir,
+                packageDir: $packageDir,
+                linkPath: $linkPath,
+                sourcePath: $sourcePath,
+            );
+        }
 
         $composerConfig = $config['composer'] ?? [];
         $dependencyResult = $this->prepareComposerDependencies(
@@ -109,6 +125,17 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 
         foreach ($dependencyResult['toRemove'] as $package) {
             $io->write($this->formatOutputLine(type: 'dep_removed', path: $package));
+        }
+
+        foreach ($symlinkResults as $linkPath => $action) {
+            if ($action === SymlinkManager::UNCHANGED) {
+                continue;
+            }
+
+            $io->write($this->formatOutputLine(
+                type: $action === SymlinkManager::COPIED ? 'copied' : 'linked',
+                path: $linkPath,
+            ));
         }
 
         $filesToOverwrite = [];
@@ -200,6 +227,15 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             $stats['removed']++;
         }
 
+        foreach ($symlinkResults as $linkPath => $action) {
+            if ($action === SymlinkManager::UNCHANGED) {
+                continue;
+            }
+
+            $changedFiles[] = $linkPath;
+            $stats['new']++;
+        }
+
         foreach (array_keys($dependencyResult['toInstall']) as $package) {
             $stats['new']++;
         }
@@ -267,6 +303,8 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             'updated' => ['icon' => '↻', 'style' => 'comment'],
             'modified' => ['icon' => '⚠', 'style' => 'fg=yellow'],
             'orphan_protected' => ['icon' => '⚠', 'style' => 'fg=yellow'],
+            'linked' => ['icon' => '⇄', 'style' => 'info', 'suffix' => ' (symlink)'],
+            'copied' => ['icon' => '⇄', 'style' => 'comment', 'suffix' => ' (copied — symlinks unavailable)'],
             'removed' => ['icon' => '-', 'style' => 'fg=magenta'],
             'dep_added' => ['icon' => '+', 'style' => 'info', 'suffix' => ' (composer)'],
             'dep_removed' => ['icon' => '-', 'style' => 'fg=magenta', 'suffix' => ' (composer)'],

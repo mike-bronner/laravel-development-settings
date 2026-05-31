@@ -81,6 +81,30 @@ it('finds orphans: manifest paths no longer shipped that still exist locally', f
     removeTempDir($project);
 });
 
+it('excludes manifest paths under a symlinked root from orphans', function (): void {
+    $project = makeTempDir();
+    // .ai is symlinked, so its files exist locally but must NOT be treated as orphans.
+    seedTree($project, [
+        '.ai/guidelines/a.md' => 'shared',
+        'old-config.xml' => 'present',
+    ]);
+
+    $manifest = new Manifest([
+        '.ai/guidelines/a.md' => [md5('shared')],
+        'old-config.xml' => [md5('present')],
+    ]);
+
+    $orphans = (new FileSync($manifest))->orphans(
+        $project,
+        discoveredFiles: [],
+        symlinkedRoots: ['.ai'],
+    );
+
+    expect($orphans)->toBe(['old-config.xml']);
+
+    removeTempDir($project);
+});
+
 it('splits orphans into safe (known md5) and protected (customized)', function (): void {
     $project = makeTempDir();
     seedTree($project, [

@@ -38,17 +38,27 @@ function makeTempDir(string $prefix = 'devset-test-'): string
 
 function removeTempDir(string $path): void
 {
-    if (! is_dir($path)) {
+    // Symlinks are unlinked, never followed (so we don't recurse into vendor).
+    if (is_link($path)) {
+        unlink($path);
+
         return;
     }
 
-    $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($path, RecursiveDirectoryIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::CHILD_FIRST,
-    );
+    if (! is_dir($path)) {
+        if (file_exists($path)) {
+            unlink($path);
+        }
 
-    foreach ($iterator as $item) {
-        $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
+        return;
+    }
+
+    foreach (scandir($path) ?: [] as $entry) {
+        if ($entry === '.' || $entry === '..') {
+            continue;
+        }
+
+        removeTempDir($path . '/' . $entry);
     }
 
     rmdir($path);

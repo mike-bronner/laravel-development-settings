@@ -75,6 +75,22 @@ it('retains entries for source files that no longer exist (orphan support)', fun
     removeTempDir($pkg);
 });
 
+it('records symlinked sources under their link path', function (): void {
+    $pkg = makeTempDir();
+    mkdir($pkg . '/.ai/guidelines', 0755, true);
+    file_put_contents($pkg . '/.ai/guidelines/g.md', 'guide');
+
+    $manifest = (new ManifestGenerator)->generate(
+        $pkg,
+        generatorConfig(['directories' => [], 'files' => [], 'symlinks' => ['.ai' => '.ai']]),
+        $pkg . '/manifest.json',
+    );
+
+    expect($manifest->knownChecksums('.ai/guidelines/g.md'))->toBe([md5('guide')]);
+
+    removeTempDir($pkg);
+});
+
 it('excludes junk files from the generated manifest', function (): void {
     $pkg = makeTempDir();
     mkdir($pkg . '/.ai', 0755, true);
