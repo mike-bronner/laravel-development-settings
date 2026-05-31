@@ -11,9 +11,12 @@ use Composer\Plugin\PluginInterface;
 use Composer\Script\Event;
 use Composer\Script\ScriptEvents;
 
+use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\multiselect;
 
 use Laravel\Prompts\Prompt;
+use MikeBronner\DevelopmentSettings\Support\ContributionDetector;
+use MikeBronner\DevelopmentSettings\Support\Contributor;
 use MikeBronner\DevelopmentSettings\Support\FileDiscovery;
 use MikeBronner\DevelopmentSettings\Support\FileSync;
 use MikeBronner\DevelopmentSettings\Support\Manifest;
@@ -41,6 +44,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     public static function getSubscribedEvents(): array
     {
         return [
+            ScriptEvents::PRE_UPDATE_CMD => 'captureBeforeUpdate',
             ScriptEvents::POST_INSTALL_CMD => 'publish',
             ScriptEvents::POST_UPDATE_CMD => 'publish',
         ];
@@ -49,6 +53,74 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     public function publish(Event $event): void
     {
         $this->doPublish($event->getIO());
+    }
+
+    public function captureBeforeUpdate(Event $event): void
+    {
+        $this->doCapture($event->getIO());
+    }
+
+    /**
+     * Before an update overwrites vendor, detect local edits to symlinked
+     * sources (which live in vendor and would otherwise be lost) and offer to
+     * contribute them upstream — so in-flow guideline fixes are never silently
+     * discarded.
+     */
+    private function doCapture(IOInterface $io): void
+    {
+        $packageDir = $this->getPackageDir();
+
+        if (! $packageDir) {
+            return;
+        }
+
+        $projectDir = getcwd();
+        $config = require $packageDir . '/config/developer-settings.php';
+        $manifest = Manifest::load($packageDir . '/' . self::MANIFEST_FILE);
+        $modified = (new ContributionDetector)->modified($packageDir, $config, $manifest);
+
+        if ($modified === []) {
+            return;
+        }
+
+        $io->write('');
+        $io->write(sprintf('<comment>You have %d local edit(s) to shared development-settings files:</comment>', count($modified)));
+
+        foreach (array_keys($modified) as $path) {
+            $io->write('  <comment>· ' . $path . '</comment>');
+        }
+
+        if (! $io->isInteractive()) {
+            $io->writeError('<comment>  These live in vendor and will be lost on update. Run "vendor/bin/dev-settings-contribute" to PR them upstream.</comment>');
+
+            return;
+        }
+
+        Prompt::interactive(true);
+
+        if (! confirm(label: 'Contribute these to development-settings before updating?', default: false)) {
+            $io->write('<comment>  Skipped — run "vendor/bin/dev-settings-contribute" later to contribute.</comment>');
+
+            return;
+        }
+
+        $result = (new Contributor(new SystemProcess))->open(
+            modified: $modified,
+            branch: $this->contributionBranch($projectDir),
+            cloneDir: sys_get_temp_dir() . '/devset-contribute-' . bin2hex(random_bytes(5)),
+            token: getenv('DEVELOPER_SETTINGS_TOKEN') ?: null,
+        );
+
+        $io->write($result['status'] === 0
+            ? '<info>  ' . $result['message'] . '</info>'
+            : '<error>  ' . $result['message'] . '</error>');
+    }
+
+    private function contributionBranch(string $projectDir): string
+    {
+        $slug = preg_replace('/[^a-z0-9._-]+/i', '-', basename($projectDir)) ?? 'project';
+
+        return 'contribute/' . $slug . '-' . date('YmdHis');
     }
 
     private function doPublish(IOInterface $io): void

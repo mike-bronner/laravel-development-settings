@@ -36,11 +36,12 @@
         }
     },
     "bin": [
-        "bin/generate-manifest"
+        "bin/dev-settings-contribute"
     ],
     "scripts": {
         "test": "pest",
-        "dev-settings:manifest": "@php bin/generate-manifest"
+        "dev-settings:manifest": "@php bin/generate-manifest",
+        "dev-settings:contribute": "@php bin/dev-settings-contribute"
     },
     "extra": {
         "class": "MikeBronner\\DevelopmentSettings\\ComposerPlugin"
