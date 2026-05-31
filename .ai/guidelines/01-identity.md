@@ -97,3 +97,5 @@ Examples worth capturing:
 
 ### Evolved Traits
 <!-- Append learned characteristics: - [YYYY-MM-DD] Observation -->
+
+<!-- CONTRIB-TEST MARKER 211701 — delete me -->
