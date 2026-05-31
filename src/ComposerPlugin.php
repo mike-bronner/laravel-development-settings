@@ -72,7 +72,8 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 
         $fileSync = new FileSync($manifest);
         $scan = $fileSync->classify($projectDir, $filesToPublish);
-        $orphans = $fileSync->orphans($projectDir, $filesToPublish);
+        $safeOrphans = $fileSync->safeOrphans($projectDir, $filesToPublish);
+        $protectedOrphans = $fileSync->protectedOrphans($projectDir, $filesToPublish);
 
         $composerConfig = $config['composer'] ?? [];
         $dependencyResult = $this->prepareComposerDependencies(
@@ -94,8 +95,12 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             $io->write($this->formatOutputLine(type: 'modified', path: $path));
         }
 
-        foreach ($orphans as $path) {
+        foreach ($safeOrphans as $path) {
             $io->write($this->formatOutputLine(type: 'removed', path: $path));
+        }
+
+        foreach ($protectedOrphans as $path) {
+            $io->write($this->formatOutputLine(type: 'orphan_protected', path: $path));
         }
 
         foreach (array_keys($dependencyResult['toInstall']) as $package) {
@@ -121,6 +126,27 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
                 required: false,
                 hint: 'Space to toggle, Enter to confirm.',
             );
+        }
+
+        $orphansToDelete = [];
+
+        if ($protectedOrphans !== []) {
+            if ($io->isInteractive()) {
+                Prompt::interactive(true);
+
+                $orphansToDelete = multiselect(
+                    label: 'Delete files removed upstream that you have modified locally?',
+                    options: array_combine($protectedOrphans, $protectedOrphans),
+                    default: [],
+                    required: false,
+                    hint: 'Unselected files are kept. Space to toggle, Enter to confirm.',
+                );
+            } else {
+                $io->writeError(sprintf(
+                    '<comment>  %d locally-modified file(s) removed upstream were kept. Delete manually if no longer needed.</comment>',
+                    count($protectedOrphans),
+                ));
+            }
         }
 
         $changedFiles = [];
@@ -156,10 +182,20 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             $stats['skipped']++;
         }
 
-        foreach ($orphans as $orphanPath) {
-            $filePath = $projectDir . '/' . $orphanPath;
-            unlink($filePath);
-            $this->removeEmptyDirectories(dirname($filePath), $projectDir);
+        foreach ($safeOrphans as $orphanPath) {
+            $this->deleteOrphan($projectDir, $orphanPath);
+            $changedFiles[] = $orphanPath;
+            $stats['removed']++;
+        }
+
+        foreach ($protectedOrphans as $orphanPath) {
+            if (! in_array($orphanPath, $orphansToDelete, true)) {
+                $stats['skipped']++;
+
+                continue;
+            }
+
+            $this->deleteOrphan($projectDir, $orphanPath);
             $changedFiles[] = $orphanPath;
             $stats['removed']++;
         }
@@ -230,6 +266,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             'created' => ['icon' => '+', 'style' => 'info'],
             'updated' => ['icon' => '↻', 'style' => 'comment'],
             'modified' => ['icon' => '⚠', 'style' => 'fg=yellow'],
+            'orphan_protected' => ['icon' => '⚠', 'style' => 'fg=yellow'],
             'removed' => ['icon' => '-', 'style' => 'fg=magenta'],
             'dep_added' => ['icon' => '+', 'style' => 'info', 'suffix' => ' (composer)'],
             'dep_removed' => ['icon' => '-', 'style' => 'fg=magenta', 'suffix' => ' (composer)'],
@@ -244,6 +281,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 
         $displayPath = match ($type) {
             'modified' => "{$path} (locally modified)",
+            'orphan_protected' => "{$path} (removed upstream, kept — locally modified)",
             default => $path . $suffix,
         };
 
@@ -342,6 +380,17 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         }
 
         $io->write('');
+    }
+
+    private function deleteOrphan(string $projectDir, string $orphanPath): void
+    {
+        $filePath = $projectDir . '/' . $orphanPath;
+
+        if (file_exists($filePath)) {
+            unlink($filePath);
+        }
+
+        $this->removeEmptyDirectories(dirname($filePath), $projectDir);
     }
 
     private function removeEmptyDirectories(string $directory, string $stopAt): void
