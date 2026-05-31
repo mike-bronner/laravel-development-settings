@@ -112,15 +112,13 @@ try {
     /** @var ConsoleKernel $kernel */
     $kernel = $app->make(ConsoleKernel::class);
 
-    // --ignore-skills: empirically, boost:update installs selected skills into
-    // base_path('.ai/skills') (its canonical skill store), not only the agent
-    // location. Here .ai is the symlink into vendor, so enabling skills writes
-    // into vendor — polluting it and making the contribute-detector flag those
-    // skills as local edits (observed: a 'debugger' skill appears). Guidelines
-    // compose to CLAUDE.md (outside .ai) and are safe. Installing the curated
-    // .ai/skills to the agent without touching the symlink is a follow-up.
+    // Compose guidelines (-> CLAUDE.md) and skills (-> the agent skills path).
+    // NOTE: in one fixture run, boost:update also wrote a skill into
+    // base_path('.ai/skills') — the symlink into vendor. If that recurs it can
+    // pollute vendor and show up in the contribute-detector as a local edit.
+    // Left enabled pending real-world evaluation; watch .ai/skills after updates.
     $status = $kernel->handle(
-        new ArgvInput(['boost-runner', 'boost:update', '--no-interaction', '--ignore-skills']),
+        new ArgvInput(['boost-runner', 'boost:update', '--no-interaction']),
         new ConsoleOutput,
     );
 
