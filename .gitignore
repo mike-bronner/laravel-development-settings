@@ -25,7 +25,6 @@
 # Test and Debugging Artifacts
 # -----------------
 .phpunit.result.cache
-/tests/Browser/Screenshots
 npm-debug.log
 yarn-error.log
 /tests/database/parallel-*/
