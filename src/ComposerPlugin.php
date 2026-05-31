@@ -247,7 +247,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         }
 
         $this->writeBoxFooter($io, $stats);
-        $this->runHooks($io, $config['hooks'], $changedFiles);
+        $this->runBoost($io, $projectDir, $packageDir, $config);
         $this->installDevDependencies($io, $dependencyResult['toInstall']);
         $this->removeDevDependencies($io, $dependencyResult['toRemove']);
     }
@@ -445,60 +445,50 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         }
     }
 
-    private function runHooks(IOInterface $io, array $hook, array $changedFiles): void
+    /**
+     * Compose the shared AI guidelines (Laravel Boost) into agent files.
+     *
+     * Full Laravel apps have `artisan`, so Boost runs natively. Packages have
+     * no `artisan`, so the bundled Testbench-hosted runner is used instead —
+     * but only when orchestra/testbench is available (packages are expected to
+     * have it for testing); otherwise the step is skipped with a note.
+     */
+    private function runBoost(IOInterface $io, string $projectDir, string $packageDir, array $config): void
     {
-        if ($changedFiles === []) {
+        if (($config['paths']['symlinks'] ?? []) === []) {
             return;
         }
 
-        $patterns = $hook['patterns'] ?? [];
-        $command = $hook['command'] ?? null;
-        $description = $hook['description'] ?? $command;
+        if (file_exists($projectDir . '/artisan')) {
+            $this->runBoostCommand(
+                io: $io,
+                description: $config['hooks']['description'] ?? 'Updating Laravel Boost...',
+                command: $config['hooks']['command'] ?? 'php artisan boost:update',
+            );
 
-        if ($command === null) {
             return;
         }
 
-        foreach ($changedFiles as $file) {
-            if (! $this->matchesPattern($file, $patterns)) {
-                continue;
-            }
+        if (! is_dir($projectDir . '/vendor/orchestra/testbench')) {
+            $io->write('<comment>  Skipping Boost: install orchestra/testbench (dev) to compose AI guidelines in this package.</comment>');
 
-            $io->write("  <info>{$description}</info> ", false);
-
-            $result = $this->executeCommand($command);
-
-            if ($result === 0) {
-                $io->write('<info>done</info>');
-            } else {
-                $io->write('<error>failed</error>');
-            }
-
-            break;
-        }
-    }
-
-    private function matchesPattern(string $file, array $patterns): bool
-    {
-        foreach ($patterns as $pattern) {
-            $regex = $this->globToRegex($pattern);
-
-            if (preg_match($regex, $file)) {
-                return true;
-            }
+            return;
         }
 
-        return false;
+        $this->runBoostCommand(
+            io: $io,
+            description: 'Composing Laravel Boost guidelines...',
+            command: 'php ' . escapeshellarg($packageDir . '/bin/boost-runner'),
+        );
     }
 
-    private function globToRegex(string $pattern): string
+    private function runBoostCommand(IOInterface $io, string $description, string $command): void
     {
-        $regex = preg_quote($pattern, '/');
-        $regex = str_replace('\*\*', '.*', $regex);
-        $regex = str_replace('\*', '[^\/]*', $regex);
-        $regex = str_replace('\?', '.', $regex);
+        $io->write("  <info>{$description}</info> ", false);
 
-        return '/^' . $regex . '$/';
+        $result = $this->executeCommand($command);
+
+        $io->write($result === 0 ? '<info>done</info>' : '<error>failed</error>');
     }
 
     private function executeCommand(string $command): int

@@ -115,7 +115,8 @@
         "3baa60b472b6a57f744bf306b4319b6c"
     ],
     ".gitignore": [
-        "427bb566b7c2a25c556f9105ea2dbc01"
+        "427bb566b7c2a25c556f9105ea2dbc01",
+        "bac3419c27a4a9703ad2f9f792ce5f06"
     ],
     ".php-codesniffer/MikeBronner/ruleset.xml": [
         "197d2a3197508ea8e581f9c36cd21bda",

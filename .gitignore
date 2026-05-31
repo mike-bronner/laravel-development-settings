@@ -100,3 +100,9 @@ CLAUDE.md
 GEMINI.md
 boost.json
 opencode.json
+
+# Laravel Boost package runner: skeleton dirs created to boot Boost in a
+# package (no artisan). Harmless, regenerated on demand, never committed.
+/bootstrap/cache
+/storage/framework
+/storage/logs
