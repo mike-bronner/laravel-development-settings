@@ -112,9 +112,13 @@ try {
     /** @var ConsoleKernel $kernel */
     $kernel = $app->make(ConsoleKernel::class);
 
+    // --ignore-skills: skills install into base_path('.ai/skills'), which here
+    // is the symlink into vendor — writing there would pollute vendor and make
+    // the contribute-detector flag Boost's own skills as local edits. We only
+    // compose guidelines (which write to CLAUDE.md etc., never into .ai).
     $status = $kernel->handle(
-        new ArgvInput(['boost-runner', 'boost:update', '--no-interaction']),
-        new ConsoleOutput(),
+        new ArgvInput(['boost-runner', 'boost:update', '--no-interaction', '--ignore-skills']),
+        new ConsoleOutput,
     );
 
     $kernel->terminate(new ArgvInput(['boost-runner']), $status);
