@@ -48,11 +48,4 @@ return [
             'Thumbs.db',
         ],
     ],
-
-    // Patterns whose local edits are offered for upstream contribution.
-    'capture' => [
-        'patterns' => [
-            '.ai/**',
-        ],
-    ],
 ];
