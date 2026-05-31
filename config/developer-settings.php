@@ -15,8 +15,9 @@ return [
         ],
     ],
 
+    // Boost composition command used in full Laravel apps (which have artisan).
+    // Packages without artisan use the bundled bin/boost-runner instead.
     'hooks' => [
-        'patterns' => ['.ai/**'],
         'command' => 'php artisan boost:update',
         'description' => 'Updating Laravel Boost...',
     ],
