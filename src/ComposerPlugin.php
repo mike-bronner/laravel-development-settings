@@ -20,6 +20,7 @@ use MikeBronner\DevelopmentSettings\Support\Contributor;
 use MikeBronner\DevelopmentSettings\Support\FileDiscovery;
 use MikeBronner\DevelopmentSettings\Support\FileSync;
 use MikeBronner\DevelopmentSettings\Support\Manifest;
+use MikeBronner\DevelopmentSettings\Support\SourceFingerprint;
 use MikeBronner\DevelopmentSettings\Support\SymlinkManager;
 use MikeBronner\DevelopmentSettings\Support\SystemProcess;
 
@@ -534,36 +535,47 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             return;
         }
 
+        // Skip the (Testbench-booting) compose when the symlinked sources are
+        // unchanged since the last successful run.
+        $fingerprint = (new SourceFingerprint)->forSymlinks($packageDir, $config);
+        $cacheFile = $projectDir . '/.dev-settings-boost';
+
+        if (is_file($cacheFile) && trim((string) file_get_contents($cacheFile)) === $fingerprint) {
+            return;
+        }
+
         if (file_exists($projectDir . '/artisan')) {
-            $this->runBoostCommand(
+            $status = $this->runBoostCommand(
                 io: $io,
                 description: $config['hooks']['description'] ?? 'Updating Laravel Boost...',
                 command: $config['hooks']['command'] ?? 'php artisan boost:update',
             );
-
-            return;
-        }
-
-        if (! is_dir($projectDir . '/vendor/orchestra/testbench')) {
+        } elseif (! is_dir($projectDir . '/vendor/orchestra/testbench')) {
             $io->write('<comment>  Skipping Boost: install orchestra/testbench (dev) to compose AI guidelines in this package.</comment>');
 
             return;
+        } else {
+            $status = $this->runBoostCommand(
+                io: $io,
+                description: 'Composing Laravel Boost guidelines...',
+                command: 'php ' . escapeshellarg($packageDir . '/bin/boost-runner'),
+            );
         }
 
-        $this->runBoostCommand(
-            io: $io,
-            description: 'Composing Laravel Boost guidelines...',
-            command: 'php ' . escapeshellarg($packageDir . '/bin/boost-runner'),
-        );
+        if ($status === 0) {
+            @file_put_contents($cacheFile, $fingerprint . "\n");
+        }
     }
 
-    private function runBoostCommand(IOInterface $io, string $description, string $command): void
+    private function runBoostCommand(IOInterface $io, string $description, string $command): int
     {
         $io->write("  <info>{$description}</info> ", false);
 
         $result = $this->executeCommand($command);
 
         $io->write($result === 0 ? '<info>done</info>' : '<error>failed</error>');
+
+        return $result;
     }
 
     private function executeCommand(string $command): int
