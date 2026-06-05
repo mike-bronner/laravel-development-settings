@@ -81,38 +81,6 @@ Key things to look for:
 CREATE INDEX idx_active_leads ON leads (agent_id) WHERE status = 'active';
 ```
 
-### Eloquent-Specific Optimization
-
-**N+1 detection**: always use `with()` at query site, never `$with` property:
-```php
-// Good — explicit eager loading
-$leads = Lead::with(relations: ["agent", "lender"])->where(column: "status", value: "active")->get();
-
-// Bad — lazy loading causes N+1
-$leads = Lead::where(column: "status", value: "active")->get();
-$leads->each(callback: fn ($lead) => $lead->agent->name); // N+1!
-```
-
-**Chunking for large datasets**:
-```php
-Lead::query()
-    ->where(column: "status", value: "pending")
-    ->chunkById(count: 1_000, callback: function ($leads) {
-        // Process batch
-    });
-```
-
-**Subquery selects** to avoid loading full models:
-```php
-$leads = Lead::query()
-    ->addSelect([
-        "agent_name" => Agent::select(columns: "name")
-            ->whereColumn(first: "agents.id", operator: "=", second: "leads.agent_id")
-            ->limit(value: 1),
-    ])
-    ->get();
-```
-
 ## Migration Patterns
 
 - Always add indexes for foreign keys and frequently-queried columns

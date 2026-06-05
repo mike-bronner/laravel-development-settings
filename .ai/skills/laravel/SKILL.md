@@ -168,6 +168,40 @@ This project uses a custom indentation scheme that differs from PSR-12. Count fr
 - **Routes**: resource routes with RESTful controllers. No closures. Single model per route.
 - **Livewire**: single root element, no Livewire/Blade/Alpine attributes on root. Unique `wire:key`.
 
+## Eloquent Query Optimization
+
+**N+1 detection**: always use `with()` at the query site, never the `$with` property:
+```php
+// Good — explicit eager loading
+$leads = Lead::with(relations: ["agent", "lender"])->where(column: "status", operator: "=", value: "active")->get();
+
+// Bad — lazy loading causes N+1
+$leads = Lead::where(column: "status", operator: "=", value: "active")->get();
+$leads->each(callback: fn ($lead) => $lead->agent->name); // N+1!
+```
+
+> ⚠️ **Named-argument footgun:** always pass `operator:` with `where()`. The two-argument shorthand `where(column: "x", value: "y")` — omitting `operator:` — silently compiles to `WHERE x IS NULL`, because Laravel's `func_num_args() === 2` heuristic treats the defaulted (null) `$operator` as the value. Always write `where(column: "x", operator: "=", value: "y")`.
+
+**Chunking for large datasets**:
+```php
+Lead::query()
+    ->where(column: "status", operator: "=", value: "pending")
+    ->chunkById(count: 1_000, callback: function ($leads) {
+        // Process batch
+    });
+```
+
+**Subquery selects** to avoid loading full models:
+```php
+$leads = Lead::query()
+    ->addSelect([
+        "agent_name" => Agent::select(columns: "name")
+            ->whereColumn(first: "agents.id", operator: "=", second: "leads.agent_id")
+            ->limit(value: 1),
+    ])
+    ->get();
+```
+
 ## Database Conventions
 
 - **Foreign key cascades are the project default.** Most FK constraints use `->constrained()->cascadeOnDelete()->cascadeOnUpdate()`. Apply both modifiers when deleting a parent record should also remove the child. Use `->nullOnDelete()` instead of `->cascadeOnDelete()` when deleting a parent should orphan the child rather than remove it (e.g., `blog_posts.author_user_id`). Do not use bare `->constrained()` without explicit cascade or null-on-delete modifiers — the intent must always be stated.
