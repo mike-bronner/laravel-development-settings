@@ -11,11 +11,13 @@ composer global require laravel/cloud-cli
 cloud auth -n
 ```
 
+`cloud auth` opens a browser. Where that isn't possible, set `LARAVEL_CLOUD_TOKEN` in the environment — it overrides any saved token and writes nothing to disk. To save a token instead: `cloud auth:token --add --token=<token> -n`, or pipe it: `echo "$TOKEN" | cloud auth:token --add -n`.
+
 ## Commands
 
 Commands follow a CRUD pattern: `resource:list`, `resource:get`, `resource:create`, `resource:update`, `resource:delete`.
 
-Available resources: `application`, `environment`, `instance`, `database-cluster`, `database`, `cache`, `bucket`, `domain`, `websocket-cluster`, `background-process`, `command`, `deployment`.
+Available resources: `application`, `environment`, `instance`, `database-cluster`, `database`, `cache`, `bucket`, `domain`, `websocket-cluster`, `background-process`, `secret`, `command`, `deployment`.
 
 Some resources have additional commands (e.g., `domain:verify`, `database:open`, `instance:sizes`, `cache:types`). Discover these via `cloud -h`.
 
@@ -42,14 +44,17 @@ First deploy? → `cloud ship -n` (discover options via `cloud ship -h`)
 
 Existing app? →
 ```sh
-cloud repo:config
 cloud deploy {app_name} {environment} -n --open
 cloud deploy:monitor -n
 ```
 
 Environment variables? → `cloud environment:variables -n --force`
 
+Secrets? → `echo "$VALUE" | cloud secret:create --name=NAME --json -n` then `cloud environment-secret:attach`
+
 Provision infrastructure? → `cloud <resource>:create --json -n`
+
+Monorepo (app in a subdirectory)? → add `--root-directory=<subdir>` to `cloud ship` or `cloud application:create`
 
 Custom domain? → `cloud domain:create --json -n` then `cloud domain:verify -n`
 
@@ -95,6 +100,25 @@ Use your judgment:
 - Which resources to provision — based on what the user describes
 - Order of provisioning — no strict sequence required
 - How to present output — summarize, show raw, or extract fields based on context
+
+## Secrets
+
+Encrypted values shared across the organization and attached to environments. The CLI encrypts the value locally, so plaintext never reaches the API.
+
+```sh
+cloud secret:list --json -n
+echo "$VALUE" | cloud secret:create --name=STRIPE_KEY --json -n
+cloud environment-secret:attach {environment} {secretId} -n
+cloud environment-secret:list {environment} --json -n
+```
+
+Pipe the value in. `--value=` works, but leaves the plaintext in shell history and the process list.
+
+`secret:update`, `secret:delete`, and `environment-secret:attach` take secret IDs, not names — names are not unique. Read IDs from `cloud secret:list --json -n`.
+
+There is no `secret:get`, and no way to detach a secret from a single environment. `secret:delete` removes it and detaches it everywhere.
+
+Secrets need the `sodium` PHP extension. No other command does.
 
 ## Remote Access
 
@@ -157,9 +181,16 @@ Delegate `--detailed --json` to a subagent — the payload includes every databa
 
 ## Config
 
-1. Global: `~/.config/cloud/config.json` — auth tokens and preferences
-2. Repo-local: `.cloud/config.json` — app and environment defaults (set by `cloud repo:config`)
-3. CLI arguments override both
+1. Environment: `LARAVEL_CLOUD_TOKEN` — an API token, taking precedence over any saved one (empty counts as unset)
+2. Global: `~/.config/cloud/config.json` — auth tokens and preferences
+3. Repo-local: `.cloud/config.json` — app and environment defaults (set by `cloud repo:config {application} -n`)
+4. CLI arguments override both config files
+
+Pass the application to `repo:config` — without it the command has to ask, and under `-n` it fails when the organization has more than one application. Deploy commands don't need these defaults; pass the application and environment to them directly.
+
+Multiple organizations means multiple stored API tokens. Every command reads `organization_id` from `.cloud/config.json` to pick one; if it isn't set, they fail. Set it with `cloud repo:config {application} --organization=<id|name|slug> -n`.
+
+`LARAVEL_CLOUD_TOKEN` holds one token, so it picks the organization on its own. Naming a different one with `--organization` fails rather than falling back to the token's organization.
 
 ## Documentation
 
