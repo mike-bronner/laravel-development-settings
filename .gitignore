@@ -85,16 +85,21 @@ composer.lock
 # ignore all the ai configuration files, have laravel boost manage them and the developer choose their setup
 .ai
 .agentic-tools-mcp
+.agents
 .claude
 .codex
 .cursor
+.factory
 .gemini
 .github/copilot-instructions.md
 .github/skills
+.grok
 .junie
+.kiro
 .mcp.json
 .opencode
 .vscode/mcp.json
+.zed
 AGENTS.md
 CLAUDE.md
 GEMINI.md
