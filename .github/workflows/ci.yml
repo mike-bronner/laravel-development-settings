@@ -8,6 +8,10 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      # Composer clones private repositories (mike-bronner/phpcs-rules) over
+      # HTTPS and needs a credential to do it. Same PAT the sync workflows use.
+      COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.DEVELOPER_SETTINGS_TOKEN }}"} }'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
