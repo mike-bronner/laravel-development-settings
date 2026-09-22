@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace MikeBronner\DevelopmentSettings\Support;
 
 /**
- * proc_open-backed Process implementation. Runs the command, drains stdout and
- * stderr (discarding them), and returns the exit code.
+ * Thin proc_open wrapper. Runs the command, drains stdout and stderr
+ * (discarding them), and returns the exit code.
  */
-final class SystemProcess implements Process
+final class SystemProcess
 {
     public function run(string $command, ?string $workingDirectory = null): int
     {

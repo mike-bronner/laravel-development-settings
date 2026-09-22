@@ -81,26 +81,42 @@ it('finds orphans: manifest paths no longer shipped that still exist locally', f
     removeTempDir($project);
 });
 
-it('excludes manifest paths under a symlinked root from orphans', function (): void {
+it('excludes orphans that resolve outside the project through a symlink', function (): void {
     $project = makeTempDir();
-    // .ai is symlinked, so its files exist locally but must NOT be treated as orphans.
-    seedTree($project, [
-        '.ai/guidelines/a.md' => 'shared',
-        'old-config.xml' => 'present',
-    ]);
+    $vendorSources = makeTempDir();
+
+    seedTree($vendorSources, ['guidelines/a.md' => 'shared']);
+    seedTree($project, ['old-config.xml' => 'present']);
+
+    // How older releases delivered `.ai`: a link into this package in vendor.
+    // Deleting through it would destroy the package's own shipped sources.
+    symlink($vendorSources, $project . '/.ai');
 
     $manifest = new Manifest([
         '.ai/guidelines/a.md' => [md5('shared')],
         'old-config.xml' => [md5('present')],
     ]);
 
-    $orphans = (new FileSync($manifest))->orphans(
-        $project,
-        discoveredFiles: [],
-        symlinkedRoots: ['.ai'],
-    );
+    $orphans = (new FileSync($manifest))->safeOrphans($project, discoveredFiles: []);
 
-    expect($orphans)->toBe(['old-config.xml']);
+    expect($orphans)->toBe(['old-config.xml'])
+        ->and(file_get_contents($vendorSources . '/guidelines/a.md'))->toBe('shared');
+
+    removeTempDir($project);
+    removeTempDir($vendorSources);
+});
+
+it('keeps orphans reached through a symlink that stays inside the project', function (): void {
+    $project = makeTempDir();
+
+    seedTree($project, ['real/a.md' => 'shipped']);
+    symlink($project . '/real', $project . '/linked');
+
+    $manifest = new Manifest(['linked/a.md' => [md5('shipped')]]);
+
+    // The guard is containment, not a blanket refusal to follow symlinks.
+    expect((new FileSync($manifest))->safeOrphans($project, discoveredFiles: []))
+        ->toBe(['linked/a.md']);
 
     removeTempDir($project);
 });

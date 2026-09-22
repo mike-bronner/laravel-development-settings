@@ -41,7 +41,7 @@ it("captures current lead processing behavior", function () {
 3. **Plan**: choose the refactoring technique, verify it addresses the smell
 4. **Execute**: small incremental changes, run tests after each change
 5. **Verify**: all existing tests pass, new structure is cleaner
-6. **Lint**: run pint and phpcs on changed files, fix only your lines
+6. **Lint**: run pint on changed files, fix only your lines
 
 ## Common Laravel Refactorings
 

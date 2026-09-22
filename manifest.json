@@ -6,7 +6,8 @@
         "ea7a744b93fbc1c8768e6c6bfc89182d"
     ],
     ".ai/guidelines/03-laravel-code-generation.md": [
-        "1ffc44da447c7748550b3839f900dc67"
+        "1ffc44da447c7748550b3839f900dc67",
+        "6e51bca478beefdb3c3b5b8ebfbacc9b"
     ],
     ".ai/guidelines/04-commit-conventions.md": [
         "f563888ee9aaecc8ca32a7c789296bbc"
@@ -58,7 +59,8 @@
     ],
     ".ai/skills/laravel/SKILL.md": [
         "65b8d28a66ae37968952ffef05fdfcb7",
-        "5a0d4672043c40e75839ebd88140e5c5"
+        "5a0d4672043c40e75839ebd88140e5c5",
+        "d49f79c2ab9ddf7bfdd1f1a48d339259"
     ],
     ".ai/skills/laravel/references/classes.md": [
         "81a1d9ff0e5642708bbeef1ecc5d54ed"
@@ -67,7 +69,8 @@
         "3ceac12f6841d894f04b23d24b740c3b"
     ],
     ".ai/skills/laravel/references/code-style.md": [
-        "596bb23c10f2da4699d298006410b25b"
+        "596bb23c10f2da4699d298006410b25b",
+        "b6d9cc8f1f6e923b1a4184d2462c65e0"
     ],
     ".ai/skills/laravel/references/controllers.md": [
         "a0fc7ae8132e78d77b3409ece700a460"
@@ -107,7 +110,8 @@
         "6f1a0613cee70d337ffec16731256999"
     ],
     ".ai/skills/refactor/SKILL.md": [
-        "de5f47f1f210c02d91e3f92fff5125ce"
+        "de5f47f1f210c02d91e3f92fff5125ce",
+        "f96b54012776e84288af76c05e02fafe"
     ],
     ".ai/skills/security/SKILL.md": [
         "9830885ec000979bd0d05f01444064ca"
@@ -120,7 +124,10 @@
         "427bb566b7c2a25c556f9105ea2dbc01",
         "bac3419c27a4a9703ad2f9f792ce5f06",
         "833c4b43a727d4981c1a46c8aa30109e",
-        "f4e411a2293b4fdcf9512eee0a20c6b5"
+        "f4e411a2293b4fdcf9512eee0a20c6b5",
+        "b0ffae38ea5bb39ad3361015ef7c3b69",
+        "a1c87121b63790d4aea429bedcc6d14c",
+        "8103f0ef0eee07d5d7b78bb84497ce60"
     ],
     ".php-codesniffer/MikeBronner/ruleset.xml": [
         "197d2a3197508ea8e581f9c36cd21bda",

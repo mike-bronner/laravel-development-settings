@@ -11,17 +11,15 @@ use Composer\Plugin\PluginInterface;
 use Composer\Script\Event;
 use Composer\Script\ScriptEvents;
 
-use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\multiselect;
 
 use Laravel\Prompts\Prompt;
-use MikeBronner\DevelopmentSettings\Support\ContributionDetector;
-use MikeBronner\DevelopmentSettings\Support\Contributor;
+use MikeBronner\DevelopmentSettings\Support\BoostRegistrar;
 use MikeBronner\DevelopmentSettings\Support\FileDiscovery;
 use MikeBronner\DevelopmentSettings\Support\FileSync;
+use MikeBronner\DevelopmentSettings\Support\GuidelineGuard;
+use MikeBronner\DevelopmentSettings\Support\LegacySymlink;
 use MikeBronner\DevelopmentSettings\Support\Manifest;
-use MikeBronner\DevelopmentSettings\Support\SourceFingerprint;
-use MikeBronner\DevelopmentSettings\Support\SymlinkManager;
 use MikeBronner\DevelopmentSettings\Support\SystemProcess;
 
 final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
@@ -45,7 +43,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     public static function getSubscribedEvents(): array
     {
         return [
-            ScriptEvents::PRE_UPDATE_CMD => 'captureBeforeUpdate',
             ScriptEvents::POST_INSTALL_CMD => 'publish',
             ScriptEvents::POST_UPDATE_CMD => 'publish',
         ];
@@ -54,74 +51,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     public function publish(Event $event): void
     {
         $this->doPublish($event->getIO());
-    }
-
-    public function captureBeforeUpdate(Event $event): void
-    {
-        $this->doCapture($event->getIO());
-    }
-
-    /**
-     * Before an update overwrites vendor, detect local edits to symlinked
-     * sources (which live in vendor and would otherwise be lost) and offer to
-     * contribute them upstream — so in-flow guideline fixes are never silently
-     * discarded.
-     */
-    private function doCapture(IOInterface $io): void
-    {
-        $packageDir = $this->getPackageDir();
-
-        if (! $packageDir) {
-            return;
-        }
-
-        $projectDir = getcwd();
-        $config = require $packageDir . '/config/developer-settings.php';
-        $manifest = Manifest::load($packageDir . '/' . self::MANIFEST_FILE);
-        $modified = (new ContributionDetector)->modified($packageDir, $config, $manifest);
-
-        if ($modified === []) {
-            return;
-        }
-
-        $io->write('');
-        $io->write(sprintf('<comment>You have %d local edit(s) to shared development-settings files:</comment>', count($modified)));
-
-        foreach (array_keys($modified) as $path) {
-            $io->write('  <comment>· ' . $path . '</comment>');
-        }
-
-        if (! $io->isInteractive()) {
-            $io->writeError('<comment>  These live in vendor and will be lost on update. Run "vendor/bin/dev-settings-contribute" to PR them upstream.</comment>');
-
-            return;
-        }
-
-        Prompt::interactive(true);
-
-        if (! confirm(label: 'Contribute these to development-settings before updating?', default: false)) {
-            $io->write('<comment>  Skipped — run "vendor/bin/dev-settings-contribute" later to contribute.</comment>');
-
-            return;
-        }
-
-        $result = (new Contributor(new SystemProcess))->open(
-            modified: $modified,
-            branch: $this->contributionBranch($projectDir),
-            cloneDir: sys_get_temp_dir() . '/devset-contribute-' . bin2hex(random_bytes(5)),
-            token: getenv('DEVELOPER_SETTINGS_TOKEN') ?: null,
-        );
-
-        $io->write($result['status'] === 0
-            ? '<info>  ' . $result['message'] . '</info>'
-            : '<error>  ' . $result['message'] . '</error>');
-    }
-
-    private function contributionBranch(string $projectDir): string
-    {
-        $slug = preg_replace('/[^a-z0-9._-]+/i', '-', basename($projectDir)) ?? 'project';
-
-        return 'contribute/' . $slug . '-' . date('YmdHis');
     }
 
     private function doPublish(IOInterface $io): void
@@ -147,25 +76,25 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             ignore: $config['paths']['ignore'] ?? FileDiscovery::DEFAULT_IGNORE,
         );
 
-        $symlinkConfig = $config['paths']['symlinks'] ?? [];
-        $symlinkRoots = array_keys($symlinkConfig);
+        // Remove the legacy `.ai` link before anything inspects the project
+        // tree: while it stands, every `.ai/…` manifest path resolves into
+        // vendor and orphan cleanup would delete this package's own sources.
+        $removedLinks = (new LegacySymlink)->remove(
+            projectDir: $projectDir,
+            packageDir: $packageDir,
+            linkPaths: $config['paths']['legacy_symlinks'] ?? [],
+        );
 
         $fileSync = new FileSync($manifest);
         $scan = $fileSync->classify($projectDir, $filesToPublish);
-        $safeOrphans = $fileSync->safeOrphans($projectDir, $filesToPublish, $symlinkRoots);
-        $protectedOrphans = $fileSync->protectedOrphans($projectDir, $filesToPublish, $symlinkRoots);
+        $safeOrphans = $fileSync->safeOrphans($projectDir, $filesToPublish);
+        $protectedOrphans = $fileSync->protectedOrphans($projectDir, $filesToPublish);
 
-        $symlinkManager = new SymlinkManager;
-        $symlinkResults = [];
-
-        foreach ($symlinkConfig as $linkPath => $sourcePath) {
-            $symlinkResults[$linkPath] = $symlinkManager->ensure(
-                projectDir: $projectDir,
-                packageDir: $packageDir,
-                linkPath: $linkPath,
-                sourcePath: $sourcePath,
-            );
-        }
+        // Only where Boost can actually compose. A package has no artisan, so
+        // registering it there would write a config file nothing ever reads.
+        $registration = $this->composesBoost($projectDir)
+            ? (new BoostRegistrar)->register($projectDir, self::PACKAGE_NAME)
+            : null;
 
         $composerConfig = $config['composer'] ?? [];
         $dependencyResult = $this->prepareComposerDependencies(
@@ -203,15 +132,12 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             $io->write($this->formatOutputLine(type: 'dep_removed', path: $package));
         }
 
-        foreach ($symlinkResults as $linkPath => $action) {
-            if ($action === SymlinkManager::UNCHANGED) {
-                continue;
-            }
+        foreach ($removedLinks as $linkPath) {
+            $io->write($this->formatOutputLine(type: 'unlinked', path: $linkPath));
+        }
 
-            $io->write($this->formatOutputLine(
-                type: $action === SymlinkManager::COPIED ? 'copied' : 'linked',
-                path: $linkPath,
-            ));
+        if ($registration === BoostRegistrar::REGISTERED) {
+            $io->write($this->formatOutputLine(type: 'registered', path: BoostRegistrar::FILE));
         }
 
         $filesToOverwrite = [];
@@ -252,7 +178,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             }
         }
 
-        $changedFiles = [];
         $stats = [
             'new' => 0,
             'updated' => 0,
@@ -263,20 +188,17 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 
         foreach ($scan['new'] as $path => $sourceFile) {
             $this->copyFile($sourceFile, $projectDir . '/' . $path);
-            $changedFiles[] = $path;
             $stats['new']++;
         }
 
         foreach ($scan['updatable'] as $path => $sourceFile) {
             $this->copyFile($sourceFile, $projectDir . '/' . $path);
-            $changedFiles[] = $path;
             $stats['updated']++;
         }
 
         foreach ($scan['modified'] as $path => $sourceFile) {
             if (in_array($path, $filesToOverwrite, true)) {
                 $this->copyFile($sourceFile, $projectDir . '/' . $path);
-                $changedFiles[] = $path;
                 $stats['updated']++;
 
                 continue;
@@ -287,7 +209,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 
         foreach ($safeOrphans as $orphanPath) {
             $this->deleteOrphan($projectDir, $orphanPath);
-            $changedFiles[] = $orphanPath;
             $stats['removed']++;
         }
 
@@ -299,31 +220,31 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             }
 
             $this->deleteOrphan($projectDir, $orphanPath);
-            $changedFiles[] = $orphanPath;
             $stats['removed']++;
         }
 
-        foreach ($symlinkResults as $linkPath => $action) {
-            if ($action === SymlinkManager::UNCHANGED) {
-                continue;
-            }
-
-            $changedFiles[] = $linkPath;
-            $stats['new']++;
-        }
-
-        foreach (array_keys($dependencyResult['toInstall']) as $package) {
-            $stats['new']++;
-        }
-
+        $stats['removed'] += count($removedLinks);
+        $stats['new'] += count($dependencyResult['toInstall']);
+        $stats['removed'] += count($dependencyResult['toRemove']);
         $stats['unchanged'] += count($dependencyResult['unchanged']);
 
-        foreach ($dependencyResult['toRemove'] as $package) {
-            $stats['removed']++;
-        }
+        match ($registration) {
+            BoostRegistrar::REGISTERED => $stats['new']++,
+            BoostRegistrar::UNCHANGED => $stats['unchanged']++,
+            BoostRegistrar::UNREADABLE => $stats['skipped']++,
+            default => null,
+        };
 
         $this->writeBoxFooter($io, $stats);
-        $this->runBoost($io, $projectDir, $packageDir, $config);
+
+        if ($registration === BoostRegistrar::UNREADABLE) {
+            $io->writeError(sprintf(
+                '<comment>  %s is not valid JSON, so this package could not be registered with Boost. Its guidelines and skills will not compose until you fix or delete it.</comment>',
+                BoostRegistrar::FILE,
+            ));
+        }
+
+        $this->runBoost($io, $projectDir, $config);
         $this->installDevDependencies($io, $dependencyResult['toInstall']);
         $this->removeDevDependencies($io, $dependencyResult['toRemove']);
     }
@@ -379,8 +300,8 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             'updated' => ['icon' => '↻', 'style' => 'comment'],
             'modified' => ['icon' => '⚠', 'style' => 'fg=yellow'],
             'orphan_protected' => ['icon' => '⚠', 'style' => 'fg=yellow'],
-            'linked' => ['icon' => '⇄', 'style' => 'info', 'suffix' => ' (symlink)'],
-            'copied' => ['icon' => '⇄', 'style' => 'comment', 'suffix' => ' (copied — symlinks unavailable)'],
+            'unlinked' => ['icon' => '-', 'style' => 'fg=magenta', 'suffix' => ' (stale symlink into vendor)'],
+            'registered' => ['icon' => '+', 'style' => 'info', 'suffix' => ' (registered with Boost)'],
             'removed' => ['icon' => '-', 'style' => 'fg=magenta'],
             'dep_added' => ['icon' => '+', 'style' => 'info', 'suffix' => ' (composer)'],
             'dep_removed' => ['icon' => '-', 'style' => 'fg=magenta', 'suffix' => ' (composer)'],
@@ -522,60 +443,74 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     }
 
     /**
-     * Compose the shared AI guidelines (Laravel Boost) into agent files.
+     * Compose the AI guidelines and skills (Laravel Boost) into agent files.
      *
-     * Full Laravel apps have `artisan`, so Boost runs natively. Packages have
-     * no `artisan`, so the bundled Testbench-hosted runner is used instead —
-     * but only when orchestra/testbench is available (packages are expected to
-     * have it for testing); otherwise the step is skipped with a note.
+     * Only full Laravel apps are composed, through their own `artisan`. A
+     * package has no console entry point to run Boost with.
+     *
+     * Boost composes from this package's `resources/boost` in vendor *and* from
+     * the project's own `.ai`, so the run is unconditional: the package sources
+     * alone can no longer tell us whether the output would change.
+     *
+     * Every composition passes through here, so this is where the agent files
+     * are checked first. Boost overwrites hand-written content whenever a file
+     * names its opening marker tag more than once, or leaves one unclosed, and
+     * this package composes unattended at a moment the project's author did not
+     * pick. `GuidelineGuard` carries the rule and the reasoning.
      */
-    private function runBoost(IOInterface $io, string $projectDir, string $packageDir, array $config): void
+    private function runBoost(IOInterface $io, string $projectDir, array $config): void
     {
-        if (($config['paths']['symlinks'] ?? []) === []) {
+        // On a first install Boost is still queued in `composer.install` below,
+        // so there is no `boost:update` to call yet. Staying quiet beats a red
+        // "failed": installing the dev dependencies runs this plugin again, and
+        // that run composes.
+        if (! $this->composesBoost($projectDir) || ! is_dir($projectDir . '/vendor/laravel/boost')) {
             return;
         }
 
-        // Skip the (Testbench-booting) compose when the symlinked sources are
-        // unchanged since the last successful run.
-        $fingerprint = (new SourceFingerprint)->forSymlinks($packageDir, $config);
-        $cacheFile = $projectDir . '/.dev-settings-boost';
+        $hazards = (new GuidelineGuard)->hazards($projectDir);
 
-        if (is_file($cacheFile) && trim((string) file_get_contents($cacheFile)) === $fingerprint) {
-            return;
-        }
-
-        if (file_exists($projectDir . '/artisan')) {
-            $status = $this->runBoostCommand(
-                io: $io,
-                description: $config['hooks']['description'] ?? 'Updating Laravel Boost...',
-                command: $config['hooks']['command'] ?? 'php artisan boost:update',
-            );
-        } elseif (! is_dir($projectDir . '/vendor/orchestra/testbench')) {
-            $io->write('<comment>  Skipping Boost: install orchestra/testbench (dev) to compose AI guidelines in this package.</comment>');
+        if ($hazards !== []) {
+            $this->refuseBoost($io, $hazards);
 
             return;
-        } else {
-            $status = $this->runBoostCommand(
-                io: $io,
-                description: 'Composing Laravel Boost guidelines...',
-                command: 'php ' . escapeshellarg($packageDir . '/bin/boost-runner'),
-            );
         }
 
-        if ($status === 0) {
-            @file_put_contents($cacheFile, $fingerprint . "\n");
-        }
-    }
-
-    private function runBoostCommand(IOInterface $io, string $description, string $command): int
-    {
+        $description = $config['hooks']['description'] ?? 'Updating Laravel Boost...';
         $io->write("  <info>{$description}</info> ", false);
 
-        $result = $this->executeCommand($command);
+        $result = $this->executeCommand($config['hooks']['command'] ?? 'php artisan boost:update');
 
         $io->write($result === 0 ? '<info>done</info>' : '<error>failed</error>');
+    }
 
-        return $result;
+    /**
+     * Report the agent files composing would damage, and say what to do.
+     *
+     * The files are left exactly as they are. Repairing one means guessing
+     * where its hand-written section ends, and a wrong guess destroys the
+     * content this check exists to save.
+     *
+     * @param  array<string, string>  $hazards  relativePath => reason
+     */
+    private function refuseBoost(IOInterface $io, array $hazards): void
+    {
+        $io->writeError('<error>  Laravel Boost was not run: composing would overwrite hand-written content.</error>');
+
+        foreach ($hazards as $path => $reason) {
+            $io->writeError(sprintf('<comment>  %s %s</comment>', $path, $reason));
+        }
+
+        $io->writeError('<comment>  Edit the file yourself, then run the Composer command again. This package will not repair it: where your own text ends cannot be read from the file.</comment>');
+    }
+
+    /**
+     * Whether Boost can compose here. Full Laravel apps have `artisan`;
+     * packages have no console entry point of their own.
+     */
+    private function composesBoost(string $projectDir): bool
+    {
+        return file_exists($projectDir . '/artisan');
     }
 
     private function executeCommand(string $command): int

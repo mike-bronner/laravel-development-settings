@@ -4,7 +4,7 @@ description: >
   Solve Laravel development problems with enforced clean code patterns, PHP code style, and linter compliance.
   Use when writing or modifying ANY PHP or Blade file: fix N+1 Eloquent queries, create middleware, build Livewire
   components, refactor controllers, design models with relationships and scopes, write Pest tests, create migrations,
-  write artisan commands, fix phpcs/pint linter errors, or implement any Laravel-specific pattern. This skill applies
+  write artisan commands, fix Pint linter errors, or implement any Laravel-specific pattern. This skill applies
   to ALL PHP and Blade changes in Laravel projects — even small edits. Also trigger when discussing Laravel
   architecture, Eloquent design, or PHP conventions used in this project.
 ---
@@ -269,11 +269,11 @@ fall on lines you actually changed** — never fix pre-existing issues in untouc
 
 ### Workflow
 
-1. Run `./vendor/bin/pint --test` and `./vendor/bin/phpcs` on the PHP files you modified.
+1. Run `./vendor/bin/pint --test` on the PHP files you modified.
 2. Review the linter output — each error includes a file path and line number.
 3. Run `git diff` on the same files to see which lines you added or modified.
 4. For each linter error, check whether its line number falls within a diff hunk.
-5. **Error on a line you changed → fix it.** Read the sniff name, understand the rule, fix manually.
+5. **Error on a line you changed → fix it.** Read the rule name, understand the rule, fix manually.
 6. **Error on a line outside the diff → leave it.** It's a pre-existing issue outside this PR's scope.
 7. **Never run `./vendor/bin/pint` without `--test`** — auto-fix reformats entire files and creates
    noise unrelated to your changes.
@@ -281,11 +281,9 @@ fall on lines you actually changed** — never fix pre-existing issues in untouc
 ### When Linter Rules Are Unclear
 
 The linter configurations are the source of truth — not this skill file. If you encounter an unfamiliar
-sniff or rule, read the actual config:
+rule, read the actual config:
 
 - **Pint rules**: read `pint.json` in the project root
-- **PHPCS rules**: read `phpcs.xml` in the project root, then follow the `ref` to the custom ruleset
-  (typically `.php-codesniffer/MikeBronner/ruleset.xml`)
 - **PHPMD rules**: read `phpmd.xml` in the project root
 
 These configs may change over time. Always defer to what the config files say over any memorized rules.

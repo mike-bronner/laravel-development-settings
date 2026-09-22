@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MikeBronner\DevelopmentSettings\Providers;
 
 use Illuminate\Support\ServiceProvider as BaseServiceProvider;
+use MikeBronner\DevelopmentSettings\Support\FileDiscovery;
 
 final class ServiceProvider extends BaseServiceProvider
 {
@@ -12,12 +13,11 @@ final class ServiceProvider extends BaseServiceProvider
     {
         $publishPaths = [];
 
-        foreach (config('developer-settings.paths.directories') as $directory) {
-            $publishPaths[__DIR__ . '/../../' . $directory] = base_path($directory);
-        }
+        $tracked = FileDiscovery::trackedPaths(config('developer-settings.paths.directories'))
+            + FileDiscovery::trackedPaths(config('developer-settings.paths.files'));
 
-        foreach (config('developer-settings.paths.files') as $file) {
-            $publishPaths[__DIR__ . '/../../' . $file] = base_path($file);
+        foreach ($tracked as $target => $source) {
+            $publishPaths[__DIR__ . '/../../' . $source] = base_path($target);
         }
 
         $this->publishes(paths: $publishPaths, groups: 'developer-settings');

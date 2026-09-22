@@ -12,23 +12,15 @@
             "role": "Developer"
         }
     ],
-    "repositories": [
-        {
-            "type": "vcs",
-            "url": "https://github.com/mike-bronner/phpcs-rules"
-        }
-    ],
     "require": {
         "php": "^8.4",
         "composer-plugin-api": "^2.0",
-        "laravel/prompts": "^0.3",
-        "orchestra/testbench": "^9.15|^10.6|^11.0"
+        "laravel/prompts": "^0.3"
     },
     "require-dev": {
-        "laravel/boost": "^2.0",
+        "laravel/boost": "^2.9",
         "laravel/pint": "^1.24",
         "nunomaduro/collision": "^8.6",
-        "slevomat/coding-standard": "^8.24",
         "pestphp/pest": "^3.0",
         "composer/composer": "^2.0"
     },
@@ -42,20 +34,15 @@
             "MikeBronner\\DevelopmentSettings\\Tests\\": "tests/"
         }
     },
-    "bin": [
-        "bin/dev-settings-contribute"
-    ],
     "scripts": {
         "test": "pest",
-        "dev-settings:manifest": "@php bin/generate-manifest",
-        "dev-settings:contribute": "@php bin/dev-settings-contribute"
+        "dev-settings:manifest": "@php bin/generate-manifest"
     },
     "extra": {
         "class": "MikeBronner\\DevelopmentSettings\\ComposerPlugin"
     },
     "config": {
         "allow-plugins": {
-            "dealerdirect/phpcodesniffer-composer-installer": true,
             "pestphp/pest-plugin": true
         }
     }
