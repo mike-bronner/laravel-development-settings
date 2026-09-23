@@ -11,6 +11,13 @@ use RecursiveIteratorIterator;
  * Discovers the source files the package ships, from configured directories
  * (walked recursively) and explicit file paths, filtering out junk such as
  * `.DS_Store` and anything inside a `.git` directory.
+ *
+ * Every tracked entry names a source inside the package and a target in the
+ * consuming project. The two are the same path by default, and a keyed entry
+ * separates them — which is how a file ships under a name this package does not
+ * have to use for its own copy. Results are keyed by the **target**, so the
+ * manifest, the classifier and the orphan cleanup all keep speaking in
+ * project-relative paths no matter where a source moves.
  */
 final class FileDiscovery
 {
@@ -20,51 +27,71 @@ final class FileDiscovery
     public const DEFAULT_IGNORE = ['.DS_Store', '.git', 'Thumbs.db'];
 
     /**
-     * @param  array{directories?: list<string>, files?: list<string>}  $paths
+     * Resolve one configured group of entries to targetPath => sourcePath.
+     *
+     * A list entry (`'pint.json'`) means the package path and the project path
+     * are the same. A keyed entry (`'resources/project/gitignore' => '.gitignore'`)
+     * reads source-to-target, matching how Laravel itself spells a publish map.
+     *
+     * @param  array<array-key, string>  $entries
+     * @return array<string, string> targetPath => sourcePath
+     */
+    public static function trackedPaths(array $entries): array
+    {
+        $tracked = [];
+
+        foreach ($entries as $source => $target) {
+            $tracked[$target] = is_string($source) ? $source : $target;
+        }
+
+        return $tracked;
+    }
+
+    /**
+     * @param  array{directories?: array<array-key, string>, files?: array<array-key, string>}  $paths
      * @param  list<string>  $ignore
-     * @return array<string, string> relativePath => absoluteSourcePath
+     * @return array<string, string> targetPath => absoluteSourcePath
      */
     public function discover(string $packageDir, array $paths, array $ignore = self::DEFAULT_IGNORE): array
     {
         $files = [];
 
-        foreach ($paths['directories'] ?? [] as $directory) {
-            $sourceDir = $packageDir . '/' . $directory;
+        foreach (self::trackedPaths($paths['directories'] ?? []) as $targetDir => $sourceDir) {
+            $sourcePath = $packageDir . '/' . $sourceDir;
 
-            if (! is_dir($sourceDir)) {
+            if (! is_dir($sourcePath)) {
                 continue;
             }
 
             $iterator = new RecursiveIteratorIterator(
-                new RecursiveDirectoryIterator($sourceDir, RecursiveDirectoryIterator::SKIP_DOTS),
+                new RecursiveDirectoryIterator($sourcePath, RecursiveDirectoryIterator::SKIP_DOTS),
                 RecursiveIteratorIterator::LEAVES_ONLY,
             );
 
             foreach ($iterator as $file) {
-                $relativePath = $directory
-                    . '/'
-                    . substr($file->getPathname(), strlen($sourceDir) + 1);
+                $descendant = substr($file->getPathname(), strlen($sourcePath) + 1);
 
-                if ($this->isIgnored($relativePath, $ignore)) {
+                if ($this->isIgnored($sourceDir . '/' . $descendant, $ignore)
+                    || $this->isIgnored($targetDir . '/' . $descendant, $ignore)) {
                     continue;
                 }
 
-                $files[$relativePath] = $file->getPathname();
+                $files[$targetDir . '/' . $descendant] = $file->getPathname();
             }
         }
 
-        foreach ($paths['files'] ?? [] as $filePath) {
-            if ($this->isIgnored($filePath, $ignore)) {
+        foreach (self::trackedPaths($paths['files'] ?? []) as $targetFile => $sourceFile) {
+            if ($this->isIgnored($sourceFile, $ignore) || $this->isIgnored($targetFile, $ignore)) {
                 continue;
             }
 
-            $sourceFile = $packageDir . '/' . $filePath;
+            $sourcePath = $packageDir . '/' . $sourceFile;
 
-            if (! file_exists($sourceFile)) {
+            if (! file_exists($sourcePath)) {
                 continue;
             }
 
-            $files[$filePath] = $sourceFile;
+            $files[$targetFile] = $sourcePath;
         }
 
         return $files;

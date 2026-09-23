@@ -12,39 +12,29 @@ namespace MikeBronner\DevelopmentSettings\Support;
  * never iterated, their existing entries are retained — which is precisely
  * what lets downstream orphan-cleanup keep firing after a file is removed
  * upstream.
+ *
+ * Keys are the project-relative target paths discovery returns, never the
+ * package-relative source paths. Moving or renaming a source inside the package
+ * therefore leaves the manifest key alone, and downstream orphan cleanup with
+ * it.
  */
 final class ManifestGenerator
 {
     /**
-     * @param  array{paths: array{directories?: list<string>, files?: list<string>, symlinks?: array<string, string>, ignore?: list<string>}}  $config
+     * @param  array{paths: array{directories?: array<array-key, string>, files?: array<array-key, string>, ignore?: list<string>}}  $config
      */
     public function generate(string $packageDir, array $config, string $manifestPath): Manifest
     {
         $manifest = Manifest::load($manifestPath);
-        $ignore = $config['paths']['ignore'] ?? FileDiscovery::DEFAULT_IGNORE;
-        $discovery = new FileDiscovery;
 
-        // Copied paths.
-        $files = $discovery->discover(packageDir: $packageDir, paths: $config['paths'], ignore: $ignore);
+        $files = (new FileDiscovery)->discover(
+            packageDir: $packageDir,
+            paths: $config['paths'],
+            ignore: $config['paths']['ignore'] ?? FileDiscovery::DEFAULT_IGNORE,
+        );
 
-        // Symlinked sources are not copied, but they still ship in this package
-        // and their checksums are needed for downstream edit-detection. Record
-        // them under their link path.
-        foreach ($config['paths']['symlinks'] ?? [] as $linkPath => $sourcePath) {
-            $sourceFiles = $discovery->discover(
-                packageDir: $packageDir,
-                paths: ['directories' => [$sourcePath], 'files' => []],
-                ignore: $ignore,
-            );
-
-            foreach ($sourceFiles as $relativePath => $absolutePath) {
-                $key = $linkPath . substr($relativePath, strlen($sourcePath));
-                $files[$key] = $absolutePath;
-            }
-        }
-
-        foreach ($files as $relativePath => $absolutePath) {
-            $manifest->record($relativePath, (string) md5_file($absolutePath));
+        foreach ($files as $targetPath => $absoluteSourcePath) {
+            $manifest->record($targetPath, (string) md5_file($absoluteSourcePath));
         }
 
         return $manifest;

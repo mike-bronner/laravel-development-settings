@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MikeBronner\DevelopmentSettings\Providers;
 
 use Illuminate\Support\ServiceProvider as BaseServiceProvider;
+use MikeBronner\DevelopmentSettings\Support\FileDiscovery;
 
 final class ServiceProvider extends BaseServiceProvider
 {
@@ -12,22 +13,21 @@ final class ServiceProvider extends BaseServiceProvider
     {
         $publishPaths = [];
 
-        foreach (config('developer-settings.paths.directories') as $directory) {
-            $publishPaths[__DIR__ . '/../../' . $directory] = base_path($directory);
+        $tracked = FileDiscovery::trackedPaths(config('development-settings.paths.directories'))
+            + FileDiscovery::trackedPaths(config('development-settings.paths.files'));
+
+        foreach ($tracked as $target => $source) {
+            $publishPaths[__DIR__ . '/../../' . $source] = base_path($target);
         }
 
-        foreach (config('developer-settings.paths.files') as $file) {
-            $publishPaths[__DIR__ . '/../../' . $file] = base_path($file);
-        }
-
-        $this->publishes(paths: $publishPaths, groups: 'developer-settings');
+        $this->publishes(paths: $publishPaths, groups: 'development-settings');
     }
 
     public function register(): void
     {
         $this->mergeConfigFrom(
-            path: __DIR__ . '/../../config/developer-settings.php',
-            key: 'developer-settings',
+            path: __DIR__ . '/../../config/development-settings.php',
+            key: 'development-settings',
         );
     }
 }

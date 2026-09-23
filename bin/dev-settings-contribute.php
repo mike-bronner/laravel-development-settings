@@ -4,16 +4,18 @@
 declare(strict_types=1);
 
 /*
- * Contributes local edits to symlinked development-settings sources (e.g. `.ai`
- * guidelines edited in-flow, which live in vendor and are invisible to the CI
- * upstream-sync) back to the development-settings repository as a pull request.
+ * Contributes local edits to this package's installed guideline and skill
+ * sources (`resources/boost/…` inside vendor, which no commit in the consuming
+ * project carries) back to the development-settings repository as a pull
+ * request.
  *
- * Run from a consuming project: `vendor/bin/dev-settings-contribute`.
+ * Run from a consuming project: `vendor/bin/dev-settings-contribute.php`.
  * Auth: GITHUB token via DEVELOPER_SETTINGS_TOKEN, or a `gh`-authenticated git.
  */
 
 use MikeBronner\DevelopmentSettings\Support\ContributionDetector;
 use MikeBronner\DevelopmentSettings\Support\Contributor;
+use MikeBronner\DevelopmentSettings\Support\FileDiscovery;
 use MikeBronner\DevelopmentSettings\Support\Manifest;
 use MikeBronner\DevelopmentSettings\Support\SystemProcess;
 
@@ -22,17 +24,20 @@ $packageDir = dirname(__DIR__);
 $autoload = $projectDir . '/vendor/autoload.php';
 
 if (! is_file($autoload)) {
-    fwrite(STDERR, "dev-settings-contribute: vendor/autoload.php not found.\n");
+    fwrite(STDERR, "dev-settings-contribute.php: vendor/autoload.php not found.\n");
 
     exit(1);
 }
 
 require $autoload;
 
-$config = require $packageDir . '/config/developer-settings.php';
-$manifest = Manifest::load($packageDir . '/manifest.json');
-
-$modified = (new ContributionDetector)->modified($packageDir, $config, $manifest);
+$config = require $packageDir . '/config/development-settings.php';
+$modified = (new ContributionDetector)->modified(
+    packageDir: $packageDir,
+    directories: $config['capture'] ?? [],
+    sources: Manifest::load($packageDir . '/' . ContributionDetector::MANIFEST_FILE),
+    ignore: $config['paths']['ignore'] ?? FileDiscovery::DEFAULT_IGNORE,
+);
 
 if ($modified === []) {
     fwrite(STDOUT, "No local development-settings edits to contribute.\n");

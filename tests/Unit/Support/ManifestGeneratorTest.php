@@ -75,18 +75,46 @@ it('retains entries for source files that no longer exist (orphan support)', fun
     removeTempDir($pkg);
 });
 
-it('records symlinked sources under their link path', function (): void {
+it('ignores sources the package ships but never copies, such as resources/boost', function (): void {
     $pkg = makeTempDir();
-    mkdir($pkg . '/.ai/guidelines', 0755, true);
-    file_put_contents($pkg . '/.ai/guidelines/g.md', 'guide');
+    mkdir($pkg . '/resources/boost/guidelines', 0755, true);
+    file_put_contents($pkg . '/resources/boost/guidelines/g.md', 'guide');
+    file_put_contents($pkg . '/pint.json', '{}');
 
+    // Boost reads resources/boost out of vendor, so nothing is ever written to
+    // the project from it and the manifest has no file there to protect.
     $manifest = (new ManifestGenerator)->generate(
         $pkg,
-        generatorConfig(['directories' => [], 'files' => [], 'symlinks' => ['.ai' => '.ai']]),
+        generatorConfig(['directories' => [], 'files' => ['pint.json']]),
         $pkg . '/manifest.json',
     );
 
-    expect($manifest->knownChecksums('.ai/guidelines/g.md'))->toBe([md5('guide')]);
+    expect($manifest->paths())->toBe(['pint.json']);
+
+    removeTempDir($pkg);
+});
+
+it('records a keyed entry under its project target, so moving a source keeps the key', function (): void {
+    $pkg = makeTempDir();
+    mkdir($pkg . '/resources/project', 0755, true);
+    file_put_contents($pkg . '/resources/project/gitignore', 'shipped rules');
+
+    // The key this path had before the source moved out of the package root.
+    $manifestPath = $pkg . '/manifest.json';
+    (new Manifest(['.gitignore' => [md5('earlier shipped rules')]]))->dump($manifestPath);
+
+    $manifest = (new ManifestGenerator)->generate(
+        $pkg,
+        generatorConfig(['directories' => [], 'files' => ['resources/project/gitignore' => '.gitignore']]),
+        $manifestPath,
+    );
+
+    // The key stays project-relative, which is what downstream orphan cleanup
+    // resolves against — and the earlier checksum survives, so a project still
+    // holding it is recognized rather than flagged as locally modified.
+    expect($manifest->paths())->toBe(['.gitignore'])
+        ->and($manifest->knownChecksums('.gitignore'))
+        ->toBe([md5('earlier shipped rules'), md5('shipped rules')]);
 
     removeTempDir($pkg);
 });

@@ -7,11 +7,18 @@ use MikeBronner\DevelopmentSettings\Support\Process;
 
 /**
  * Records commands and returns exit codes by substring match (default 0).
+ *
+ * When `git add` runs, it also records every file in the working directory
+ * with its contents. The clone is deleted before `open()` returns, so this
+ * snapshot is the only evidence of where each edited file landed.
  */
 final class RecordingProcess implements Process
 {
     /** @var list<string> */
     public array $commands = [];
+
+    /** @var array<string, string>|null relative path => contents, taken at `git add` */
+    public ?array $stagedTree = null;
 
     /**
      * @param  array<string, int>  $exitCodes  command substring => exit code
@@ -22,6 +29,10 @@ final class RecordingProcess implements Process
     {
         $this->commands[] = $command;
 
+        if (str_starts_with($command, 'git add') && $workingDirectory !== null) {
+            $this->stagedTree = $this->treeOf($workingDirectory);
+        }
+
         foreach ($this->exitCodes as $needle => $code) {
             if (str_contains($command, $needle)) {
                 return $code;
@@ -29,6 +40,25 @@ final class RecordingProcess implements Process
         }
 
         return $this->default;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function treeOf(string $directory): array
+    {
+        $tree = [];
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($directory, RecursiveDirectoryIterator::SKIP_DOTS),
+        );
+
+        foreach ($iterator as $file) {
+            $tree[substr($file->getPathname(), strlen($directory) + 1)] = (string) file_get_contents($file->getPathname());
+        }
+
+        ksort($tree);
+
+        return $tree;
     }
 }
 
@@ -56,7 +86,7 @@ it('runs clone → branch → add → commit → push → pr in order', function
     $cloneDir = makeTempDir() . '/clone';
 
     $result = (new Contributor($process))->open(
-        ['.ai/guidelines/edited.md' => $source . '/edited.md'],
+        ['resources/boost/guidelines/edited.md' => $source . '/edited.md'],
         'contribute/test',
         $cloneDir,
         token: 'secrettoken',
@@ -79,20 +109,52 @@ it('runs clone → branch → add → commit → push → pr in order', function
     removeTempDir($source);
 });
 
-it('does not embed the token in the gh/commit commands but uses it for clone', function (): void {
+it('lands each edited source at its resources/boost path in the clone, and nowhere else', function (): void {
+    $source = makeTempDir();
+    file_put_contents($source . '/edited.md', 'guideline fixed in a project');
+    file_put_contents($source . '/SKILL.md', 'skill fixed in a project');
+    $process = new RecordingProcess(exitCodes: ['diff --cached --quiet' => 1]);
+    $cloneDir = makeTempDir() . '/clone';
+
+    (new Contributor($process))->open(
+        [
+            'resources/boost/guidelines/01-identity.md' => $source . '/edited.md',
+            'resources/boost/skills/laravel/SKILL.md' => $source . '/SKILL.md',
+        ],
+        'contribute/test',
+        $cloneDir,
+    );
+
+    // The fake clone starts empty, so the staged tree holds exactly what the
+    // contribution copied in. A file at any other path fails the comparison.
+    expect($process->stagedTree)->toBe([
+        'resources/boost/guidelines/01-identity.md' => 'guideline fixed in a project',
+        'resources/boost/skills/laravel/SKILL.md' => 'skill fixed in a project',
+    ]);
+
+    removeTempDir($source);
+});
+
+it('uses the token for the clone and keeps it out of every later command', function (): void {
     $source = makeTempDir();
     file_put_contents($source . '/x.md', 'c');
     $process = new RecordingProcess(exitCodes: ['diff --cached --quiet' => 1]);
 
-    (new Contributor($process))->open(
-        ['.ai/x.md' => $source . '/x.md'],
+    $result = (new Contributor($process))->open(
+        ['resources/boost/x.md' => $source . '/x.md'],
         'contribute/test',
         makeTempDir() . '/clone',
         token: 'SECRET',
     );
 
-    $cloneCmd = $process->commands[0];
-    expect($cloneCmd)->toContain('x-access-token:SECRET@github.com');
+    [$clone, $later] = [$process->commands[0], array_slice($process->commands, 1)];
+
+    // Every step ran, so the check below covers checkout, add, diff, commit,
+    // push and the PR, not an early exit.
+    expect($result['status'])->toBe(0)
+        ->and($clone)->toContain('x-access-token:SECRET@github.com')
+        ->and($later)->toHaveCount(6)
+        ->and(array_filter($later, fn (string $command): bool => str_contains($command, 'SECRET')))->toBe([]);
 
     removeTempDir($source);
 });
@@ -105,7 +167,7 @@ it('aborts when nothing differs from upstream', function (): void {
     $process = new RecordingProcess(exitCodes: ['diff --cached --quiet' => 0]);
 
     $result = (new Contributor($process))->open(
-        ['.ai/x.md' => $source . '/x.md'],
+        ['resources/boost/x.md' => $source . '/x.md'],
         'contribute/test',
         makeTempDir() . '/clone',
     );
@@ -121,7 +183,7 @@ it('reports a clear error when the clone fails', function (): void {
     $process = new RecordingProcess(exitCodes: ['git clone' => 1]);
 
     $result = (new Contributor($process))->open(
-        ['.ai/x.md' => '/tmp/whatever.md'],
+        ['resources/boost/x.md' => '/tmp/whatever.md'],
         'contribute/test',
         '/tmp/clone-fail',
     );

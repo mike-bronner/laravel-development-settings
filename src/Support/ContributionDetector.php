@@ -5,37 +5,42 @@ declare(strict_types=1);
 namespace MikeBronner\DevelopmentSettings\Support;
 
 /**
- * Finds symlinked-source files (e.g. under `.ai`) whose current content is not
- * a known manifest checksum — i.e. files the developer edited in-flow through
- * the symlink into vendor. These are the candidates for upstream contribution.
+ * Finds installed guideline and skill sources (`resources/boost/…` inside this
+ * package in vendor) whose content matches no version the package ever
+ * shipped: files the developer edited in place. These are the candidates for
+ * upstream contribution, and a Composer update would overwrite them silently.
+ *
+ * The known versions come from the capture manifest, never from
+ * `manifest.json`. That file drives copy-sync and orphan cleanup, keyed on
+ * project paths, so a `resources/boost/…` key there would make cleanup treat a
+ * consuming package's own `resources/boost` files as this package's orphans.
  */
 final class ContributionDetector
 {
+    public const MANIFEST_FILE = 'capture-manifest.json';
+
     /**
-     * @param  array{paths: array{symlinks?: array<string, string>, ignore?: list<string>}}  $config
-     * @return array<string, string> relativePath (link-keyed) => absolute source path
+     * @param  list<string>  $directories  package-relative source directories
+     * @param  list<string>  $ignore
+     * @return array<string, string> package-relative path => absolute path
      */
-    public function modified(string $packageDir, array $config, Manifest $manifest): array
+    public function modified(string $packageDir, array $directories, Manifest $sources, array $ignore = FileDiscovery::DEFAULT_IGNORE): array
     {
-        $ignore = $config['paths']['ignore'] ?? FileDiscovery::DEFAULT_IGNORE;
-        $discovery = new FileDiscovery;
+        $files = (new FileDiscovery)->discover(
+            packageDir: $packageDir,
+            paths: ['directories' => $directories, 'files' => []],
+            ignore: $ignore,
+        );
+
         $modified = [];
 
-        foreach ($config['paths']['symlinks'] ?? [] as $linkPath => $sourcePath) {
-            $files = $discovery->discover(
-                packageDir: $packageDir,
-                paths: ['directories' => [$sourcePath], 'files' => []],
-                ignore: $ignore,
-            );
-
-            foreach ($files as $relativePath => $absolutePath) {
-                $key = $linkPath . substr($relativePath, strlen($sourcePath));
-
-                if (! $manifest->isKnown($key, (string) md5_file($absolutePath))) {
-                    $modified[$key] = $absolutePath;
-                }
+        foreach ($files as $relativePath => $absolutePath) {
+            if (! $sources->isKnown($relativePath, (string) md5_file($absolutePath))) {
+                $modified[$relativePath] = $absolutePath;
             }
         }
+
+        ksort($modified);
 
         return $modified;
     }

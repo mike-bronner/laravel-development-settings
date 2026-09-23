@@ -66,15 +66,16 @@ final class FileSync
     /**
      * Manifest paths no longer shipped that still exist downstream.
      *
-     * Paths under a symlinked root are excluded: they are no longer copied, so
-     * they would otherwise look orphaned — but deleting them would reach
-     * through the symlink into vendor.
+     * A path that resolves outside the project directory is skipped. Cleanup
+     * must never delete a file it does not own, and a symlinked ancestor is how
+     * that happens: earlier versions of this package linked `.ai` into vendor,
+     * so every `.ai/…` manifest entry pointed straight at the package's own
+     * shipped sources.
      *
      * @param  array<string, string>  $discoveredFiles
-     * @param  list<string>  $symlinkedRoots
      * @return list<string>
      */
-    public function orphans(string $projectDir, array $discoveredFiles, array $symlinkedRoots = []): array
+    public function orphans(string $projectDir, array $discoveredFiles): array
     {
         $discoveredPaths = array_keys($discoveredFiles);
         $orphaned = [];
@@ -84,11 +85,11 @@ final class FileSync
                 continue;
             }
 
-            if ($this->isUnderRoot($manifestPath, $symlinkedRoots)) {
+            if (! file_exists($projectDir . '/' . $manifestPath)) {
                 continue;
             }
 
-            if (! file_exists($projectDir . '/' . $manifestPath)) {
+            if (! $this->isInsideProject($projectDir, $manifestPath)) {
                 continue;
             }
 
@@ -102,13 +103,12 @@ final class FileSync
      * Orphans whose local copy is an unmodified known version — safe to delete.
      *
      * @param  array<string, string>  $discoveredFiles
-     * @param  list<string>  $symlinkedRoots
      * @return list<string>
      */
-    public function safeOrphans(string $projectDir, array $discoveredFiles, array $symlinkedRoots = []): array
+    public function safeOrphans(string $projectDir, array $discoveredFiles): array
     {
         return array_values(array_filter(
-            $this->orphans($projectDir, $discoveredFiles, $symlinkedRoots),
+            $this->orphans($projectDir, $discoveredFiles),
             fn (string $path): bool => $this->isLocalCopyKnown($projectDir, $path),
         ));
     }
@@ -117,31 +117,31 @@ final class FileSync
      * Orphans whose local copy was customized — must not be silently deleted.
      *
      * @param  array<string, string>  $discoveredFiles
-     * @param  list<string>  $symlinkedRoots
      * @return list<string>
      */
-    public function protectedOrphans(string $projectDir, array $discoveredFiles, array $symlinkedRoots = []): array
+    public function protectedOrphans(string $projectDir, array $discoveredFiles): array
     {
         return array_values(array_filter(
-            $this->orphans($projectDir, $discoveredFiles, $symlinkedRoots),
+            $this->orphans($projectDir, $discoveredFiles),
             fn (string $path): bool => ! $this->isLocalCopyKnown($projectDir, $path),
         ));
     }
 
     /**
-     * @param  list<string>  $roots
+     * Whether the path resolves to a location beneath the project directory,
+     * following every symlink on the way. Unresolvable paths answer false, so
+     * an orphan is only ever deleted on positive proof of containment.
      */
-    private function isUnderRoot(string $path, array $roots): bool
+    private function isInsideProject(string $projectDir, string $path): bool
     {
-        foreach ($roots as $root) {
-            $root = rtrim($root, '/');
+        $resolved = realpath($projectDir . '/' . $path);
+        $root = realpath($projectDir);
 
-            if ($path === $root || str_starts_with($path, $root . '/')) {
-                return true;
-            }
+        if ($resolved === false || $root === false) {
+            return false;
         }
 
-        return false;
+        return str_starts_with($resolved, rtrim($root, '/') . '/');
     }
 
     private function isLocalCopyKnown(string $projectDir, string $path): bool

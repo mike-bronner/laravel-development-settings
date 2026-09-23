@@ -25,37 +25,48 @@ jobs:
         with:
           php-version: '8.4'
 
+      # One line per tracked entry, as "project path<TAB>package path". The two
+      # differ wherever the package ships a file under another name, so the
+      # copy below has to read the pair rather than one path used twice.
+      # FileDiscovery owns the plain-entry/keyed-entry rule; it is required
+      # directly because the package is checked out, not installed.
       - name: Extract tracked paths from config
         id: config
         run: |
-          PATHS=$(php -r "
-            \$config = require '_developer-settings/config/developer-settings.php';
-            \$paths = array_merge(
-              \$config['paths']['directories'] ?? [],
-              \$config['paths']['files'] ?? []
-            );
-            echo implode(PHP_EOL, \$paths);
-          ")
+          PAIRS=$(php -r '
+            require "_developer-settings/src/Support/FileDiscovery.php";
+
+            $paths = (require "_developer-settings/config/development-settings.php")["paths"];
+            $discovery = MikeBronner\DevelopmentSettings\Support\FileDiscovery::class;
+            $tracked = $discovery::trackedPaths($paths["directories"] ?? [])
+              + $discovery::trackedPaths($paths["files"] ?? []);
+
+            foreach ($tracked as $projectPath => $packagePath) {
+              echo $projectPath . "\t" . $packagePath . PHP_EOL;
+            }
+          ')
           echo "paths<<EOF" >> $GITHUB_OUTPUT
-          echo "$PATHS" >> $GITHUB_OUTPUT
+          echo "$PAIRS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Copy tracked files to package
         run: |
           TRACKED_PATHS="${{ steps.config.outputs.paths }}"
 
-          while IFS= read -r tracked; do
-            [ -z "$tracked" ] && continue
-            if [ -d "$tracked" ]; then
-              find "$tracked" -type f | while read -r file; do
-                target="_developer-settings/$file"
+          while IFS=$'\t' read -r project_path package_path; do
+            if [ -z "$project_path" ] || [ -z "$package_path" ]; then
+              continue
+            fi
+            if [ -d "$project_path" ]; then
+              find "$project_path" -type f | while read -r file; do
+                target="_developer-settings/$package_path${file#"$project_path"}"
                 mkdir -p "$(dirname "$target")"
                 cp "$file" "$target"
               done
-            elif [ -f "$tracked" ]; then
-              target="_developer-settings/$tracked"
+            elif [ -f "$project_path" ]; then
+              target="_developer-settings/$package_path"
               mkdir -p "$(dirname "$target")"
-              cp "$tracked" "$target"
+              cp "$project_path" "$target"
             fi
           done <<< "$TRACKED_PATHS"
 

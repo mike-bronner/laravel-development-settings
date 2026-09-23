@@ -22,7 +22,7 @@ jobs:
         run: composer install --no-interaction --no-progress
 
       - name: Manifest is up to date
-        run: php bin/generate-manifest --check
+        run: php bin/generate-manifest.php --check
 
       - name: Lint (Pint)
         run: ./vendor/bin/pint --test

@@ -1,0 +1,86 @@
+{
+    "resources/boost/guidelines/01-identity.md": [
+        "b84767e8b3846bff498d7ced5ceecdd3"
+    ],
+    "resources/boost/guidelines/02-workflow.md": [
+        "ea7a744b93fbc1c8768e6c6bfc89182d"
+    ],
+    "resources/boost/guidelines/03-laravel-code-generation.md": [
+        "6e51bca478beefdb3c3b5b8ebfbacc9b"
+    ],
+    "resources/boost/guidelines/04-commit-conventions.md": [
+        "f563888ee9aaecc8ca32a7c789296bbc"
+    ],
+    "resources/boost/skills/a11y/SKILL.md": [
+        "005e25c9878d395a7838e36e26351d45"
+    ],
+    "resources/boost/skills/architecture/SKILL.md": [
+        "9fa2d80141086be751cbac372d0e3c45"
+    ],
+    "resources/boost/skills/deploying-laravel-cloud/SKILL.md": [
+        "598a29cac91a7659a12ebe38878b4417"
+    ],
+    "resources/boost/skills/deploying-laravel-cloud/reference/checklists.md": [
+        "cdc8532da7dc5ed118049158c4c8b734"
+    ],
+    "resources/boost/skills/git-commit/SKILL.md": [
+        "ac7aa80cdad8c8a02185b6e2a7265c34"
+    ],
+    "resources/boost/skills/git-commit/references/conventional-commits.md": [
+        "670b10586454e8443be79e5020c876b5"
+    ],
+    "resources/boost/skills/git-commit/references/gitmoji.md": [
+        "11512e3c1e306b9ce828c303fea5304f"
+    ],
+    "resources/boost/skills/laravel/SKILL.md": [
+        "d49f79c2ab9ddf7bfdd1f1a48d339259"
+    ],
+    "resources/boost/skills/laravel/references/classes.md": [
+        "81a1d9ff0e5642708bbeef1ecc5d54ed"
+    ],
+    "resources/boost/skills/laravel/references/code-cleanliness.md": [
+        "3ceac12f6841d894f04b23d24b740c3b"
+    ],
+    "resources/boost/skills/laravel/references/code-style.md": [
+        "b6d9cc8f1f6e923b1a4184d2462c65e0"
+    ],
+    "resources/boost/skills/laravel/references/controllers.md": [
+        "a0fc7ae8132e78d77b3409ece700a460"
+    ],
+    "resources/boost/skills/laravel/references/debugging.md": [
+        "974edf37a6736366f91fefaebcb032bc"
+    ],
+    "resources/boost/skills/laravel/references/exceptions.md": [
+        "f64c8493e0d99abf70f674bf353e0f32"
+    ],
+    "resources/boost/skills/laravel/references/governing-principles.md": [
+        "d2d335903d0784765d8917a3f36c9711"
+    ],
+    "resources/boost/skills/laravel/references/livewire.md": [
+        "178c685b77b4ca151c17524056729e3f"
+    ],
+    "resources/boost/skills/laravel/references/models.md": [
+        "719a4c7cd5d286357176d07a12b2b070"
+    ],
+    "resources/boost/skills/laravel/references/pest-patterns.md": [
+        "a4dd3b692d2d6757e6b2495ab394507a"
+    ],
+    "resources/boost/skills/laravel/references/policies.md": [
+        "b66f6200b3437c0d5ce1b03e56a12015"
+    ],
+    "resources/boost/skills/laravel/references/routes.md": [
+        "d270c31d5d1c1b42abe666caf09c1e68"
+    ],
+    "resources/boost/skills/laravel/references/testing.md": [
+        "e50cc74ee64c97df75ffacee53d66eed"
+    ],
+    "resources/boost/skills/postgres/SKILL.md": [
+        "6f1a0613cee70d337ffec16731256999"
+    ],
+    "resources/boost/skills/refactor/SKILL.md": [
+        "f96b54012776e84288af76c05e02fafe"
+    ],
+    "resources/boost/skills/security/SKILL.md": [
+        "9830885ec000979bd0d05f01444064ca"
+    ]
+}

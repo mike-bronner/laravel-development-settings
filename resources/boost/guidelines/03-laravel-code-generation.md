@@ -1,7 +1,7 @@
 # Mandatory Skills for Laravel Development
 
 This project has specialized skills that enforce strict conventions. Invoke the relevant skills
-before starting work — the project's phpcs and pint linters will reject code that doesn't follow them.
+before starting work — the project's Pint linter will reject code that doesn't follow them.
 
 ## Always invoke before ANY PHP or Blade change:
 - **`laravel`** — 16 absolute code style rules (named arguments, no `empty()`, no `else`, custom

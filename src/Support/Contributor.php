@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace MikeBronner\DevelopmentSettings\Support;
 
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+
 /**
  * Opens a pull request on the development-settings repository containing local
- * edits made to symlinked sources (which live in vendor and are therefore
- * invisible to the CI upstream-sync that only sees committed files).
+ * edits made to this package's installed guideline and skill sources. Those
+ * live in vendor, so no commit in the consuming project ever carries them.
  *
- * Mirrors .github/workflows/reusable-sync.yml, but run locally and sourced
- * from the edited vendor files. All git/gh calls go through an injected
- * Process so the flow is testable without touching the network.
+ * Each path is package-relative (`resources/boost/…`), which is where the file
+ * lives in the upstream repository too. All git/gh calls go through an
+ * injected Process so the flow is testable without touching the network.
  */
 final class Contributor
 {
@@ -107,9 +110,9 @@ final class Contributor
             return;
         }
 
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($path, \RecursiveDirectoryIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::CHILD_FIRST,
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($path, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST,
         );
 
         foreach ($iterator as $item) {

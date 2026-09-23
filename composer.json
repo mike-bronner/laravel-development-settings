@@ -18,12 +18,14 @@
         "laravel/prompts": "^0.3"
     },
     "require-dev": {
-        "laravel/boost": "^2.0",
+        "laravel/boost": "^2.9",
         "laravel/pint": "^1.24",
         "nunomaduro/collision": "^8.6",
-        "slevomat/coding-standard": "^8.24",
         "pestphp/pest": "^3.0",
         "composer/composer": "^2.0"
+    },
+    "conflict": {
+        "laravel/boost": "<2.9"
     },
     "autoload": {
         "psr-4": {
@@ -36,19 +38,18 @@
         }
     },
     "bin": [
-        "bin/dev-settings-contribute"
+        "bin/dev-settings-contribute.php"
     ],
     "scripts": {
         "test": "pest",
-        "dev-settings:manifest": "@php bin/generate-manifest",
-        "dev-settings:contribute": "@php bin/dev-settings-contribute"
+        "dev-settings:manifest": "@php bin/generate-manifest.php",
+        "dev-settings:contribute": "@php bin/dev-settings-contribute.php"
     },
     "extra": {
         "class": "MikeBronner\\DevelopmentSettings\\ComposerPlugin"
     },
     "config": {
         "allow-plugins": {
-            "dealerdirect/phpcodesniffer-composer-installer": true,
             "pestphp/pest-plugin": true
         }
     }

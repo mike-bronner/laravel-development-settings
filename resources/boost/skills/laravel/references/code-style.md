@@ -10,7 +10,7 @@ All code style must adhere to the following PHP standards:
 
 ## Linters
 
-Your editor must support PHPCS linting, and be configured to use the `phpcs.xml` file in the root of the project. Your editor will then alert you to any style violation that we have linters for (which won't be all). Violations not covered by linters should be attempted to be caught and fixed during review.
+Your editor must support Pint linting, and be configured to use the `pint.json` file in the root of the project. Your editor will then alert you to any style violation that we have linters for (which won't be all). Violations not covered by linters should be attempted to be caught and fixed during review.
 
 We should not use any sort of auto-formatter that corrects linter issues, as this blows out the reviews and hides the actual changes made. Further, manual correction reinforces good coding habits, and after a short time you will be able to write mostly clean code with ease.
 
