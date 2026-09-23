@@ -25,49 +25,63 @@ jobs:
         with:
           php-version: '8.4'
 
-      # One line per tracked entry, as "project path<TAB>package path". The two
-      # differ wherever the package ships a file under another name, so the
-      # copy below has to read the pair rather than one path used twice.
-      # FileDiscovery owns the plain-entry/keyed-entry rule; it is required
-      # directly because the package is checked out, not installed.
-      - name: Extract tracked paths from config
+      # One line per changed tracked file, as "project path<TAB>package path".
+      # The two differ wherever the package ships a file under another name, so
+      # the copy below reads the pair rather than one path used twice.
+      # ReverseSync expands directory entries to files, skips anything reached
+      # through a symlink, and drops every file whose checksum the manifest
+      # knows: an unmodified shipped version, even an older one, is not a local
+      # edit. The job fails with ReverseSync's message when the loaded manifest
+      # records no paths (missing, unparseable or empty), because every tracked
+      # file would then look modified. It also fails on a changed path holding
+      # a tab or line break, which this line format cannot carry. The classes
+      # are required directly because the package is checked out, not installed.
+      - name: List changed tracked files
         id: config
         run: |
           PAIRS=$(php -r '
-            require "_developer-settings/src/Support/FileDiscovery.php";
+            $package = "_developer-settings";
 
-            $paths = (require "_developer-settings/config/development-settings.php")["paths"];
-            $discovery = MikeBronner\DevelopmentSettings\Support\FileDiscovery::class;
-            $tracked = $discovery::trackedPaths($paths["directories"] ?? [])
-              + $discovery::trackedPaths($paths["files"] ?? []);
+            require "$package/src/Support/FileDiscovery.php";
+            require "$package/src/Support/Manifest.php";
+            require "$package/src/Support/ReverseSync.php";
 
-            foreach ($tracked as $projectPath => $packagePath) {
+            $paths = (require "$package/config/development-settings.php")["paths"];
+            $manifest = MikeBronner\DevelopmentSettings\Support\Manifest::load("$package/manifest.json");
+
+            try {
+              $changed = (new MikeBronner\DevelopmentSettings\Support\ReverseSync($manifest))
+                ->changedFiles(getcwd(), $paths);
+            } catch (RuntimeException $exception) {
+              fwrite(STDERR, $exception->getMessage() . PHP_EOL);
+              exit(1);
+            }
+
+            foreach ($changed as $projectPath => $packagePath) {
               echo $projectPath . "\t" . $packagePath . PHP_EOL;
             }
           ')
-          echo "paths<<EOF" >> $GITHUB_OUTPUT
-          echo "$PAIRS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          # The paths come from the project, so the delimiter must not be
+          # guessable from inside it.
+          DELIMITER="EOF_$(openssl rand -hex 16)"
+          echo "paths<<$DELIMITER" >> "$GITHUB_OUTPUT"
+          echo "$PAIRS" >> "$GITHUB_OUTPUT"
+          echo "$DELIMITER" >> "$GITHUB_OUTPUT"
 
-      - name: Copy tracked files to package
+      # The pairs arrive through the environment, never through an expression
+      # inside the script: an expression is pasted into the script text before
+      # bash parses it, so a crafted filename would run as shell.
+      - name: Copy changed files to package
+        env:
+          TRACKED_PATHS: ${{ steps.config.outputs.paths }}
         run: |
-          TRACKED_PATHS="${{ steps.config.outputs.paths }}"
-
           while IFS=$'\t' read -r project_path package_path; do
             if [ -z "$project_path" ] || [ -z "$package_path" ]; then
               continue
             fi
-            if [ -d "$project_path" ]; then
-              find "$project_path" -type f | while read -r file; do
-                target="_developer-settings/$package_path${file#"$project_path"}"
-                mkdir -p "$(dirname "$target")"
-                cp "$file" "$target"
-              done
-            elif [ -f "$project_path" ]; then
-              target="_developer-settings/$package_path"
-              mkdir -p "$(dirname "$target")"
-              cp "$project_path" "$target"
-            fi
+            target="_developer-settings/$package_path"
+            mkdir -p "$(dirname "$target")"
+            cp "$project_path" "$target"
           done <<< "$TRACKED_PATHS"
 
       - name: Detect changes
@@ -79,10 +93,11 @@ jobs:
           ALL_CHANGED=$(echo -e "$MODIFIED\n$NEW" | sort -u | grep -v '^$' || true)
 
           if [ -n "$ALL_CHANGED" ]; then
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-            echo "files<<EOF" >> $GITHUB_OUTPUT
-            echo "$ALL_CHANGED" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            DELIMITER="EOF_$(openssl rand -hex 16)"
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "files<<$DELIMITER" >> "$GITHUB_OUTPUT"
+            echo "$ALL_CHANGED" >> "$GITHUB_OUTPUT"
+            echo "$DELIMITER" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create Pull Request
