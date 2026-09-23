@@ -11,13 +11,17 @@ use Composer\Plugin\PluginInterface;
 use Composer\Script\Event;
 use Composer\Script\ScriptEvents;
 
+use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\multiselect;
 
 use Laravel\Prompts\Prompt;
 use MikeBronner\DevelopmentSettings\Support\BoostRegistrar;
+use MikeBronner\DevelopmentSettings\Support\ContributionDetector;
+use MikeBronner\DevelopmentSettings\Support\Contributor;
 use MikeBronner\DevelopmentSettings\Support\FileDiscovery;
 use MikeBronner\DevelopmentSettings\Support\FileSync;
 use MikeBronner\DevelopmentSettings\Support\GuidelineGuard;
+use MikeBronner\DevelopmentSettings\Support\LegacyFingerprint;
 use MikeBronner\DevelopmentSettings\Support\LegacySymlink;
 use MikeBronner\DevelopmentSettings\Support\Manifest;
 use MikeBronner\DevelopmentSettings\Support\SystemProcess;
@@ -43,6 +47,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     public static function getSubscribedEvents(): array
     {
         return [
+            ScriptEvents::PRE_UPDATE_CMD => 'captureBeforeUpdate',
             ScriptEvents::POST_INSTALL_CMD => 'publish',
             ScriptEvents::POST_UPDATE_CMD => 'publish',
         ];
@@ -51,6 +56,72 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     public function publish(Event $event): void
     {
         $this->doPublish($event->getIO());
+    }
+
+    public function captureBeforeUpdate(Event $event): void
+    {
+        $this->doCapture($event->getIO());
+    }
+
+    private function doCapture(IOInterface $io): void
+    {
+        $packageDir = $this->getPackageDir();
+
+        if (! $packageDir) {
+            return;
+        }
+
+        $projectDir = getcwd();
+        $config = require $packageDir . '/config/development-settings.php';
+        $modified = (new ContributionDetector)->modified(
+            packageDir: $packageDir,
+            directories: $config['capture'] ?? [],
+            sources: Manifest::load($packageDir . '/' . ContributionDetector::MANIFEST_FILE),
+            ignore: $config['paths']['ignore'] ?? FileDiscovery::DEFAULT_IGNORE,
+        );
+
+        if ($modified === []) {
+            return;
+        }
+
+        $io->write('');
+        $io->write(sprintf('<comment>You have %d local edit(s) to shared development-settings files:</comment>', count($modified)));
+
+        foreach (array_keys($modified) as $path) {
+            $io->write('  <comment>· ' . $path . '</comment>');
+        }
+
+        if (! $io->isInteractive()) {
+            $io->writeError('<comment>  These live in vendor and will be lost on update. Run "vendor/bin/dev-settings-contribute.php" to PR them upstream.</comment>');
+
+            return;
+        }
+
+        Prompt::interactive(true);
+
+        if (! confirm(label: 'Contribute these to development-settings before updating?', default: false)) {
+            $io->write('<comment>  Skipped — run "vendor/bin/dev-settings-contribute.php" later to contribute.</comment>');
+
+            return;
+        }
+
+        $result = (new Contributor(new SystemProcess))->open(
+            modified: $modified,
+            branch: $this->contributionBranch($projectDir),
+            cloneDir: sys_get_temp_dir() . '/devset-contribute-' . bin2hex(random_bytes(5)),
+            token: getenv('DEVELOPER_SETTINGS_TOKEN') ?: null,
+        );
+
+        $io->write($result['status'] === 0
+            ? '<info>  ' . $result['message'] . '</info>'
+            : '<error>  ' . $result['message'] . '</error>');
+    }
+
+    private function contributionBranch(string $projectDir): string
+    {
+        $slug = preg_replace('/[^a-z0-9._-]+/i', '-', basename($projectDir)) ?? 'project';
+
+        return 'contribute/' . $slug . '-' . date('YmdHis');
     }
 
     private function doPublish(IOInterface $io): void
@@ -67,7 +138,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         }
 
         $projectDir = getcwd();
-        $config = require $packageDir . '/config/developer-settings.php';
+        $config = require $packageDir . '/config/development-settings.php';
         $manifest = Manifest::load($packageDir . '/' . self::MANIFEST_FILE);
 
         $filesToPublish = (new FileDiscovery)->discover(
@@ -84,6 +155,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             packageDir: $packageDir,
             linkPaths: $config['paths']['legacy_symlinks'] ?? [],
         );
+        $removedFingerprint = (new LegacyFingerprint)->remove($projectDir);
 
         $fileSync = new FileSync($manifest);
         $scan = $fileSync->classify($projectDir, $filesToPublish);
@@ -134,6 +206,10 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 
         foreach ($removedLinks as $linkPath) {
             $io->write($this->formatOutputLine(type: 'unlinked', path: $linkPath));
+        }
+
+        if ($removedFingerprint) {
+            $io->write($this->formatOutputLine(type: 'stale_fingerprint', path: LegacyFingerprint::FILE));
         }
 
         if ($registration === BoostRegistrar::REGISTERED) {
@@ -223,7 +299,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             $stats['removed']++;
         }
 
-        $stats['removed'] += count($removedLinks);
+        $stats['removed'] += count($removedLinks) + (int) $removedFingerprint;
         $stats['new'] += count($dependencyResult['toInstall']);
         $stats['removed'] += count($dependencyResult['toRemove']);
         $stats['unchanged'] += count($dependencyResult['unchanged']);
@@ -237,14 +313,18 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 
         $this->writeBoxFooter($io, $stats);
 
+        // Boost is not run over a file this package cannot read: `boost:install`
+        // treats it as empty and writes a fresh config over it, destroying the
+        // developer's agent, guideline and MCP settings.
         if ($registration === BoostRegistrar::UNREADABLE) {
             $io->writeError(sprintf(
-                '<comment>  %s is not valid JSON, so this package could not be registered with Boost. Its guidelines and skills will not compose until you fix or delete it.</comment>',
+                '<error>  %s is not valid JSON, so Laravel Boost was not run. Its guidelines and skills will not compose until you fix or delete the file.</error>',
                 BoostRegistrar::FILE,
             ));
+        } else {
+            $this->runBoost($io, $projectDir, $config);
         }
 
-        $this->runBoost($io, $projectDir, $config);
         $this->installDevDependencies($io, $dependencyResult['toInstall']);
         $this->removeDevDependencies($io, $dependencyResult['toRemove']);
     }
@@ -301,6 +381,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             'modified' => ['icon' => '⚠', 'style' => 'fg=yellow'],
             'orphan_protected' => ['icon' => '⚠', 'style' => 'fg=yellow'],
             'unlinked' => ['icon' => '-', 'style' => 'fg=magenta', 'suffix' => ' (stale symlink into vendor)'],
+            'stale_fingerprint' => ['icon' => '-', 'style' => 'fg=magenta', 'suffix' => ' (stale Boost fingerprint)'],
             'registered' => ['icon' => '+', 'style' => 'info', 'suffix' => ' (registered with Boost)'],
             'removed' => ['icon' => '-', 'style' => 'fg=magenta'],
             'dep_added' => ['icon' => '+', 'style' => 'info', 'suffix' => ' (composer)'],
@@ -461,14 +542,15 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     private function runBoost(IOInterface $io, string $projectDir, array $config): void
     {
         // On a first install Boost is still queued in `composer.install` below,
-        // so there is no `boost:update` to call yet. Staying quiet beats a red
+        // so there is no Boost command to call yet. Staying quiet beats a red
         // "failed": installing the dev dependencies runs this plugin again, and
         // that run composes.
         if (! $this->composesBoost($projectDir) || ! is_dir($projectDir . '/vendor/laravel/boost')) {
             return;
         }
 
-        $hazards = (new GuidelineGuard)->hazards($projectDir);
+        $guard = new GuidelineGuard;
+        $hazards = $guard->hazards($projectDir);
 
         if ($hazards !== []) {
             $this->refuseBoost($io, $hazards);
@@ -476,12 +558,40 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             return;
         }
 
-        $description = $config['hooks']['description'] ?? 'Updating Laravel Boost...';
+        // A fresh clone has no `boost.json` agents: the file is gitignored, and
+        // a non-interactive install never records the agents it picks. Boost
+        // then composes for whatever it detects on this machine, which may be
+        // nothing at all.
+        if (! (new BoostRegistrar)->hasAgents($projectDir)) {
+            $io->writeError(sprintf(
+                '<comment>  %s names no agents, so Laravel Boost composes for the agents it detects on this machine. Run "php artisan boost:install" once to choose them.</comment>',
+                BoostRegistrar::FILE,
+            ));
+        }
+
+        $description = $config['hooks']['description'] ?? 'Composing Laravel Boost guidelines and skills...';
         $io->write("  <info>{$description}</info> ", false);
 
-        $result = $this->executeCommand($config['hooks']['command'] ?? 'php artisan boost:update');
+        $startedAt = time();
+        $result = $this->executeCommand($config['hooks']['command'] ?? 'php artisan boost:install --guidelines --skills --no-interaction');
 
-        $io->write($result === 0 ? '<info>done</info>' : '<error>failed</error>');
+        if ($result !== 0) {
+            $io->write('<error>failed</error>');
+            $io->writeError('<error>  Laravel Boost exited with an error. Run "php artisan boost:install" to see why. Boost registers its commands only when APP_ENV is local or APP_DEBUG is true.</error>');
+
+            return;
+        }
+
+        // Boost exits successfully when it found no agent to compose for, so a
+        // zero exit alone would report "done" for a run that wrote nothing.
+        if (! $guard->composedSince($projectDir, $startedAt)) {
+            $io->write('<error>failed</error>');
+            $io->writeError('<error>  Laravel Boost ran but composed no agent file: it found no agent to compose for. Run "php artisan boost:install" and choose your agents.</error>');
+
+            return;
+        }
+
+        $io->write('<info>done</info>');
     }
 
     /**

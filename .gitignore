@@ -106,3 +106,10 @@ CLAUDE.md
 GEMINI.md
 boost.json
 opencode.json
+
+# Skeleton directories the Boost package runner of earlier releases created to
+# boot Boost in a package (no artisan). The upgrade does not remove them,
+# because a project may keep its own files there, so they stay ignored.
+/bootstrap/cache
+/storage/framework
+/storage/logs

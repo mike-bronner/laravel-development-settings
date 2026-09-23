@@ -24,6 +24,9 @@
         "pestphp/pest": "^3.0",
         "composer/composer": "^2.0"
     },
+    "conflict": {
+        "laravel/boost": "<2.9"
+    },
     "autoload": {
         "psr-4": {
             "MikeBronner\\DevelopmentSettings\\": "src/"
@@ -34,9 +37,13 @@
             "MikeBronner\\DevelopmentSettings\\Tests\\": "tests/"
         }
     },
+    "bin": [
+        "bin/dev-settings-contribute.php"
+    ],
     "scripts": {
         "test": "pest",
-        "dev-settings:manifest": "@php bin/generate-manifest"
+        "dev-settings:manifest": "@php bin/generate-manifest.php",
+        "dev-settings:contribute": "@php bin/dev-settings-contribute.php"
     },
     "extra": {
         "class": "MikeBronner\\DevelopmentSettings\\ComposerPlugin"

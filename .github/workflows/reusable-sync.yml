@@ -36,7 +36,7 @@ jobs:
           PAIRS=$(php -r '
             require "_developer-settings/src/Support/FileDiscovery.php";
 
-            $paths = (require "_developer-settings/config/developer-settings.php")["paths"];
+            $paths = (require "_developer-settings/config/development-settings.php")["paths"];
             $discovery = MikeBronner\DevelopmentSettings\Support\FileDiscovery::class;
             $tracked = $discovery::trackedPaths($paths["directories"] ?? [])
               + $discovery::trackedPaths($paths["files"] ?? []);

@@ -8,7 +8,7 @@ namespace MikeBronner\DevelopmentSettings\Support;
  * Thin proc_open wrapper. Runs the command, drains stdout and stderr
  * (discarding them), and returns the exit code.
  */
-final class SystemProcess
+final class SystemProcess implements Process
 {
     public function run(string $command, ?string $workingDirectory = null): int
     {

@@ -88,6 +88,38 @@ final class GuidelineGuard
     }
 
     /**
+     * Whether a project file holding a composed Boost block, an opening tag
+     * with a closing tag after it, was written at or after `$since`.
+     *
+     * Boost exits successfully when it finds no agent to compose for, so its
+     * exit code cannot tell a composition from a run that wrote nothing. The
+     * file on disk can. Boost rewrites every agent file it composes into, even
+     * when the content is unchanged, so a block written before the run began
+     * (the Laravel skeleton ships one) does not count. Every agent Boost
+     * supports writes its guidelines to a markdown file, which is the set this
+     * class already reads.
+     */
+    public function composedSince(string $projectDir, int $since): bool
+    {
+        clearstatcache();
+
+        foreach ($this->markdownFiles($projectDir) as $absolutePath) {
+            if ((int) @filemtime($absolutePath) < $since) {
+                continue;
+            }
+
+            $content = is_readable($absolutePath) ? (string) @file_get_contents($absolutePath) : '';
+            $opensAt = strpos($content, self::OPENING_TAG);
+
+            if ($opensAt !== false && strpos($content, self::CLOSING_TAG, $opensAt) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Why composing into this file would damage it, or null when it is safe.
      */
     private function hazard(string $absolutePath): ?string

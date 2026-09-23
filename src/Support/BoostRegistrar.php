@@ -70,6 +70,17 @@ final class BoostRegistrar
     }
 
     /**
+     * Whether `boost.json` names at least one agent to compose for. An absent
+     * or unreadable file names none.
+     */
+    public function hasAgents(string $projectDir): bool
+    {
+        $agents = $this->read($projectDir . '/' . self::FILE)['agents'] ?? [];
+
+        return is_array($agents) && $agents !== [];
+    }
+
+    /**
      * An absent file is an empty config to be created. Anything present that is
      * not a JSON object is left alone — a hand-edited or corrupt `boost.json`
      * belongs to the developer, and overwriting it would destroy their agent,

@@ -176,3 +176,47 @@ it('reports nothing for a directory that does not exist', function (): void {
 
     removeTempDir($project);
 });
+
+it('sees a block composed during the run', function (): void {
+    $project = makeTempDir();
+    $since = time();
+    writeProjectFile($project, 'AGENTS.md', managedAgentFile());
+
+    expect((new GuidelineGuard)->composedSince($project, $since))->toBeTrue();
+
+    removeTempDir($project);
+});
+
+it('does not count a block written before the run began', function (): void {
+    $project = makeTempDir();
+    writeProjectFile($project, 'CLAUDE.md', managedAgentFile());
+    touch($project . '/CLAUDE.md', time() - 60);
+
+    expect((new GuidelineGuard)->composedSince($project, time()))->toBeFalse();
+
+    removeTempDir($project);
+});
+
+it('does not count a fresh file without a complete block', function (string $content): void {
+    $project = makeTempDir();
+    $since = time();
+    writeProjectFile($project, 'AGENTS.md', $content);
+
+    expect((new GuidelineGuard)->composedSince($project, $since))->toBeFalse();
+
+    removeTempDir($project);
+})->with([
+    'no tags' => ["# AGENTS.md\n"],
+    'opening tag only' => [GuidelineGuard::OPENING_TAG . "\n"],
+    'closing tag before opening tag' => [GuidelineGuard::CLOSING_TAG . "\n" . GuidelineGuard::OPENING_TAG . "\n"],
+]);
+
+it('does not count a block inside vendor', function (): void {
+    $project = makeTempDir();
+    $since = time();
+    writeProjectFile($project, 'vendor/acme/pkg/AGENTS.md', managedAgentFile());
+
+    expect((new GuidelineGuard)->composedSince($project, $since))->toBeFalse();
+
+    removeTempDir($project);
+});

@@ -22,8 +22,8 @@ function makeComposableProject(string $agentFile): string
 }
 
 /**
- * `php artisan boost:update` stands in as a command that only records having
- * run, so the marker file answers whether composition happened.
+ * A command that only records having run stands in for the Boost command, so
+ * the marker file answers whether composition was attempted.
  */
 function runBoostOn(string $project): BufferIO
 {

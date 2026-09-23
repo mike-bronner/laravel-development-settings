@@ -12,8 +12,11 @@ return [
             'laravel/boost' => '^2.9',
             'laravel/pint' => '^1.24',
         ],
+        // PHP_CodeSniffer belongs to mike-bronner/phpcs-rules, not this
+        // package. A project that also requires phpcs-rules keeps slevomat as
+        // its transitive dependency.
         'remove' => [
-            //
+            'slevomat/coding-standard',
         ],
     ],
 
@@ -21,9 +24,27 @@ return [
     // Packages have no artisan and no console entry point of their own, so they
     // compose nothing — their agent files come from the application consuming
     // them, or are read straight out of resources/boost.
+    //
+    // `boost:install`, not `boost:update`: `boost.json` is gitignored, so a
+    // fresh clone has none, and `boost:update` composes nothing from a config
+    // that enables no guidelines or skills. `install` is the command that
+    // writes the config it needs. The flags make it non-interactive and pin the
+    // two features this package ships; agents come from `boost.json` when it
+    // names any, and otherwise from what Boost detects on the machine.
     'hooks' => [
-        'command' => 'php artisan boost:update',
-        'description' => 'Updating Laravel Boost...',
+        'command' => 'php artisan boost:install --guidelines --skills --no-interaction',
+        'description' => 'Composing Laravel Boost guidelines and skills...',
+    ],
+
+    // Package sources a consuming project may edit in place, inside vendor.
+    // Before a Composer update overwrites them, the plugin compares each file
+    // with every version the package ever shipped and offers to contribute the
+    // edits upstream. The known versions live in capture-manifest.json, keyed
+    // on these package paths, never in manifest.json: copy-sync and orphan
+    // cleanup read that file on project paths, and would take a consuming
+    // package's own resources/boost files for this package's orphans.
+    'capture' => [
+        'resources/boost',
     ],
 
     // Tracked paths are copied into the consuming project. A plain entry names

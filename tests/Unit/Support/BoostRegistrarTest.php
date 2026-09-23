@@ -105,3 +105,22 @@ it("writes Boost's own formatting contract so Boost rewriting it causes no churn
 
     removeTempDir($project);
 });
+
+it('reports agents only when the config names at least one', function (string|false $contents, bool $expected): void {
+    $project = makeTempDir();
+
+    if ($contents !== false) {
+        file_put_contents($project . '/boost.json', $contents);
+    }
+
+    expect((new BoostRegistrar)->hasAgents($project))->toBe($expected);
+
+    removeTempDir($project);
+})->with([
+    'agents listed' => [json_encode(['agents' => ['claude_code']]), true],
+    'no file' => [false, false],
+    'packages only, as the registrar writes it' => [json_encode(['packages' => ['mikebronner/development-settings']]), false],
+    'empty agents list' => [json_encode(['agents' => []]), false],
+    'agents not a list' => [json_encode(['agents' => 'claude_code']), false],
+    'not valid JSON' => ['{ this is not json', false],
+]);
