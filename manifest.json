@@ -1,9 +1,15 @@
 {
     ".ai/guidelines/01-identity.md": [
-        "b84767e8b3846bff498d7ced5ceecdd3"
+        "b84767e8b3846bff498d7ced5ceecdd3",
+        "74a2ee315f739875a7952afed9f56b7f",
+        "bf4c5115b2ba9fff9f7002534433b5b5"
     ],
     ".ai/guidelines/02-workflow.md": [
-        "ea7a744b93fbc1c8768e6c6bfc89182d"
+        "ea7a744b93fbc1c8768e6c6bfc89182d",
+        "b8b464291f38ff8cd3ad0c94bf186d39"
+    ],
+    ".ai/guidelines/03-commit-conventions.md": [
+        "4014c8a1f331c058b064b8006d0f255f"
     ],
     ".ai/guidelines/03-laravel-code-generation.md": [
         "1ffc44da447c7748550b3839f900dc67",
@@ -12,38 +18,94 @@
     ".ai/guidelines/04-commit-conventions.md": [
         "f563888ee9aaecc8ca32a7c789296bbc"
     ],
+    ".ai/guidelines/04-php-code-style.md": [
+        "005c8df09c5267288281591580e16c91"
+    ],
+    ".ai/guidelines/05-database-conventions.md": [
+        "b778763c57b484cd9dc2c97e97edc9f3"
+    ],
+    ".ai/guidelines/06-testing-conventions.md": [
+        "5c4ef9bd2ecb22162f2a7ddd5189885a"
+    ],
     ".ai/guidelines/agent-behavior.md": [
-        "b4b7bbe28e5c6114f966a3806a7b973f"
+        "b4b7bbe28e5c6114f966a3806a7b973f",
+        "123d59ce910ef1ba4c15d1d5d4a49fbe",
+        "75784aa3a1e13e823ebc2d04b31b11dc"
     ],
     ".ai/guidelines/code-style.md": [
         "a7d984ef9ce264cd92cdab8bac599d9f"
     ],
     ".ai/guidelines/commit-conventions.md": [
-        "44a41a59691bf320e48e6457a04ce424"
+        "44a41a59691bf320e48e6457a04ce424",
+        "df1b1d95e7bf9bafaa24c84157293127"
     ],
     ".ai/guidelines/database-conventions.md": [
         "b778763c57b484cd9dc2c97e97edc9f3"
     ],
+    ".ai/guidelines/php-code-style.md": [
+        "d35a6e1e2b8c8f1a30b7d8f629889a2b",
+        "1db4052f5786bb510ebc3c8836981258"
+    ],
     ".ai/guidelines/php-conventions.md": [
         "2f02523467a4085af1079a83d4f4bcf0"
     ],
+    ".ai/guidelines/skill-orchestration.md": [
+        "41dc6f6de25c9fa7d4a625a98017cd81",
+        "4db89f4c588fd293760a5ccb935a4100"
+    ],
     ".ai/guidelines/soul.md": [
-        "d5b29fd47ddc02b2106de84996de6aeb"
+        "d5b29fd47ddc02b2106de84996de6aeb",
+        "26ad95b37b5c5a4f68952f79e43d1470"
     ],
     ".ai/guidelines/testing-conventions.md": [
-        "705707de57f24c24164bf826c4858cfa"
+        "705707de57f24c24164bf826c4858cfa",
+        "7da445a6156f62b04fd92c7fb376e5d2",
+        "86abaccccd099c2084bef21528a211c3"
     ],
     ".ai/skills/a11y/SKILL.md": [
         "005e25c9878d395a7838e36e26351d45"
     ],
+    ".ai/skills/accessibility-tester/SKILL.md": [
+        "799d5140fea2640816ad5504e36bfff4"
+    ],
+    ".ai/skills/agent-organizer/SKILL.md": [
+        "685f8f32594696ccd9cbbbe119fd7288"
+    ],
+    ".ai/skills/architect-reviewer/SKILL.md": [
+        "97b591c2d9fdb42daa7df9e257db98a9"
+    ],
     ".ai/skills/architecture/SKILL.md": [
         "9fa2d80141086be751cbac372d0e3c45"
+    ],
+    ".ai/skills/code-reviewer/SKILL.md": [
+        "206907eedd334279922767e61f6ea484"
+    ],
+    ".ai/skills/compliance-auditor/SKILL.md": [
+        "173ac2a657eb2a8cdc876168cfe3d266"
+    ],
+    ".ai/skills/context-manager/SKILL.md": [
+        "96cd5b25c5269cf38ff16f19483b3bf0"
+    ],
+    ".ai/skills/database-administrator/SKILL.md": [
+        "96db7b2c6a5b3b5fa09a4d39d078a7e5"
+    ],
+    ".ai/skills/debugger/SKILL.md": [
+        "5012bec131a3c3bb9517ae445beb4926"
+    ],
+    ".ai/skills/dependency-manager/SKILL.md": [
+        "08e4d913302cdec1e30e5f3c9883edc8"
     ],
     ".ai/skills/deploying-laravel-cloud/SKILL.md": [
         "598a29cac91a7659a12ebe38878b4417"
     ],
     ".ai/skills/deploying-laravel-cloud/reference/checklists.md": [
         "cdc8532da7dc5ed118049158c4c8b734"
+    ],
+    ".ai/skills/devops-engineer/SKILL.md": [
+        "1ea8c6f0d93e3f60e3061086755e56e6"
+    ],
+    ".ai/skills/fintech-engineer/SKILL.md": [
+        "dc90205e77589b74d61c334c9e533af0"
     ],
     ".ai/skills/frontend-developer/SKILL.md": [
         "5012bec131a3c3bb9517ae445beb4926"
@@ -57,10 +119,17 @@
     ".ai/skills/git-commit/references/gitmoji.md": [
         "11512e3c1e306b9ce828c303fea5304f"
     ],
+    ".ai/skills/git-workflow-manager/SKILL.md": [
+        "e29989c8d24775466ba4bb5326187d0c"
+    ],
+    ".ai/skills/laravel-specialist/SKILL.md": [
+        "369994363c9a6ca8a09b996d84f213fb"
+    ],
     ".ai/skills/laravel/SKILL.md": [
         "65b8d28a66ae37968952ffef05fdfcb7",
         "5a0d4672043c40e75839ebd88140e5c5",
-        "d49f79c2ab9ddf7bfdd1f1a48d339259"
+        "d49f79c2ab9ddf7bfdd1f1a48d339259",
+        "40a21d6e7265af9776f1aea708a64c43"
     ],
     ".ai/skills/laravel/references/classes.md": [
         "81a1d9ff0e5642708bbeef1ecc5d54ed"
@@ -100,25 +169,57 @@
         "d270c31d5d1c1b42abe666caf09c1e68"
     ],
     ".ai/skills/laravel/references/testing.md": [
-        "e50cc74ee64c97df75ffacee53d66eed"
+        "e50cc74ee64c97df75ffacee53d66eed",
+        "0d99f02f8edb50041b9822f94fe0f7c5"
+    ],
+    ".ai/skills/pest-testing/SKILL.md": [
+        "c5304558a65341aa85691c528565cf3b"
     ],
     ".ai/skills/php-code-style/SKILL.md": [
         "7a24101bb4c9add88fa75ed11aaeb557"
+    ],
+    ".ai/skills/php-pro/SKILL.md": [
+        "76283b57efde36f9e7949d00000f245d"
     ],
     ".ai/skills/postgres/SKILL.md": [
         "43a7ff1d423115274a65398154ba0061",
         "6f1a0613cee70d337ffec16731256999"
     ],
+    ".ai/skills/qa-engineer/SKILL.md": [
+        "47c86a005cfb16dbd965e028a1816edf"
+    ],
     ".ai/skills/refactor/SKILL.md": [
         "de5f47f1f210c02d91e3f92fff5125ce",
         "f96b54012776e84288af76c05e02fafe"
     ],
+    ".ai/skills/refactoring-specialist/SKILL.md": [
+        "b4f08d7ef57cb4c8c63020109f33f69d"
+    ],
+    ".ai/skills/research-analyst/SKILL.md": [
+        "4ff1688a9ce8295f04ec86b28b38936b"
+    ],
+    ".ai/skills/search-specialist/SKILL.md": [
+        "66fbc33e881ac29bc123d7dd395bfb4f"
+    ],
+    ".ai/skills/security-auditor/SKILL.md": [
+        "4709a4aeffe9dba53d8682aadd4a6abe"
+    ],
     ".ai/skills/security/SKILL.md": [
         "9830885ec000979bd0d05f01444064ca"
     ],
+    ".ai/skills/sql-pro/SKILL.md": [
+        "77b55be1197e982981cc2440ab1c946f"
+    ],
+    ".ai/skills/terraform-engineer/SKILL.md": [
+        "45f3cc8616b957a58fbd211650c13c82"
+    ],
     ".github/workflows/sync-developer-settings.yml": [
         "3ed155007d03bc3370ac7471f527e794",
-        "3baa60b472b6a57f744bf306b4319b6c"
+        "3baa60b472b6a57f744bf306b4319b6c",
+        "78fc09744ac0caca6b1c499b1f9c519d",
+        "399e92f544dd4e5a5b60825106f1ae0d",
+        "1f61e3e0d88b9f51b5acae883d5736df",
+        "96799ee1dfa802002dd95c4b5203002d"
     ],
     ".gitignore": [
         "427bb566b7c2a25c556f9105ea2dbc01",
@@ -128,7 +229,16 @@
         "b0ffae38ea5bb39ad3361015ef7c3b69",
         "a1c87121b63790d4aea429bedcc6d14c",
         "8103f0ef0eee07d5d7b78bb84497ce60",
-        "30b611e04b07baf29ecf7ba2ca6113a9"
+        "30b611e04b07baf29ecf7ba2ca6113a9",
+        "10da1bd74a4b0ef774e7f70f8f70b5cc",
+        "9032a913ee09131c74234ac5488eb4b4",
+        "91990d02db276ed5bd7a21f2780db4e3"
+    ],
+    ".php-codesniffer/Insight/Sniffs/NamingConventions/UpperCaseEnumCaseSniff.php": [
+        "927b4c76c15b2280ae54fc540f11c8ac"
+    ],
+    ".php-codesniffer/Insight/ruleset.xml": [
+        "197d2a3197508ea8e581f9c36cd21bda"
     ],
     ".php-codesniffer/MikeBronner/ruleset.xml": [
         "197d2a3197508ea8e581f9c36cd21bda",
@@ -147,6 +257,7 @@
     ],
     "pint.json": [
         "9ab087085e2953193527c3466e4cda47",
-        "18525377b95d2d2c0c0809f5c0e3b88a"
+        "18525377b95d2d2c0c0809f5c0e3b88a",
+        "44003b4489d6ce1ec5d7199c44c5ed33"
     ]
 }
