@@ -3,10 +3,16 @@
 declare(strict_types=1);
 
 use Composer\IO\BufferIO;
+use Laravel\Prompts\Key;
+use Laravel\Prompts\Output\BufferedConsoleOutput;
+use Laravel\Prompts\Prompt;
+use Laravel\Prompts\Terminal;
 use MikeBronner\DevelopmentSettings\ComposerPlugin;
 use MikeBronner\DevelopmentSettings\Support\ContributionDetector;
 use MikeBronner\DevelopmentSettings\Support\GuidelineGuard;
 use MikeBronner\DevelopmentSettings\Support\LegacyFingerprint;
+use MikeBronner\DevelopmentSettings\Support\ManagedSection;
+use Symfony\Component\Console\Output\ConsoleOutput;
 
 /*
  * These tests drive `doPublish()`, the whole Composer hook, against a consuming
@@ -40,7 +46,7 @@ function boostStandIn(string $behaviour): string
 /**
  * A consuming project with the package installed in vendor.
  *
- * @param  array{app?: bool, boostInstalled?: bool, boost?: string, manifest?: array<string, list<string>>, sources?: array<string, string>, captured?: array<string, list<string>>}  $options
+ * @param  array{app?: bool, boostInstalled?: bool, boost?: string, manifest?: array<string, list<string>>, sources?: array<string, string>, captured?: array<string, list<string>>, paths?: array<string, array<array-key, string>>}  $options
  * @return array{0: string, 1: string} project dir, package dir
  */
 function makeConsumer(array $options = []): array
@@ -63,6 +69,7 @@ function makeConsumer(array $options = []): array
             'files' => [],
             'legacy_symlinks' => ['.ai'],
             'ignore' => ['.DS_Store'],
+            ...$options['paths'] ?? [],
         ],
     ];
 
@@ -89,9 +96,14 @@ function makeConsumer(array $options = []): array
     return [$project, $package];
 }
 
-function publishIn(string $project, string $hook = 'doPublish'): string
+function publishIn(string $project, string $hook = 'doPublish', bool $interactive = false): string
 {
     $io = new BufferIO;
+
+    if ($interactive) {
+        $io->setUserInputs([]);
+    }
+
     $cwd = (string) getcwd();
 
     chdir($project);
@@ -370,6 +382,251 @@ it('keeps capture checksums out of the manifest copy-sync and orphan cleanup rea
     expect(array_filter($manifestKeys, $underCapture))->toBe([])
         ->and($captureKeys)->not->toBe([])
         ->and(array_filter($captureKeys, fn (string $key): bool => ! $underCapture($key)))->toBe([]);
+});
+
+/*
+ * The managed `.gitignore`. The package ships v2 and knows v1 and v2.
+ */
+
+const GITIGNORE_V1 = "/vendor\n";
+const GITIGNORE_V2 = "/vendor\n/node_modules\n";
+
+/**
+ * A consumer whose `.gitignore` is a managed target, holding the given file.
+ */
+function gitignoreConsumer(string $local): string
+{
+    [$project] = makeConsumer([
+        'app' => false,
+        'manifest' => ['.gitignore' => [md5(GITIGNORE_V1), md5(GITIGNORE_V2)]],
+        'sources' => ['resources/project/gitignore' => GITIGNORE_V2],
+        'paths' => ['files' => ['resources/project/gitignore' => '.gitignore'], 'managed' => ['.gitignore']],
+    ]);
+
+    file_put_contents($project . '/.gitignore', $local);
+
+    return $project;
+}
+
+/**
+ * Run the prompt with the given key presses on a terminal that reads nothing
+ * from STDIN, then put a real terminal back.
+ */
+function withKeyPresses(array $keys, Closure $callback): mixed
+{
+    $terminal = new class($keys) extends Terminal
+    {
+        /** @param list<string> $keys */
+        public function __construct(private array $keys)
+        {
+            parent::__construct();
+        }
+
+        public function read(): string
+        {
+            return array_shift($this->keys) ?? throw new RuntimeException('The prompt asked for more keys than the test pressed.');
+        }
+
+        public function setTty(string $mode): void {}
+
+        public function restoreTty(): void {}
+
+        public function exit(): void {}
+
+        public function cols(): int
+        {
+            return 80;
+        }
+
+        public function lines(): int
+        {
+            return 24;
+        }
+
+        public function initDimensions(): void {}
+    };
+
+    $property = new ReflectionProperty(Prompt::class, 'terminal');
+    $property->setValue(null, $terminal);
+    Prompt::setOutput(new BufferedConsoleOutput);
+
+    try {
+        return $callback();
+    } finally {
+        $property->setValue(null, new Terminal);
+        Prompt::setOutput(new ConsoleOutput);
+    }
+}
+
+it('updates the managed section of a marked .gitignore and keeps every project line below it', function (): void {
+    $project = gitignoreConsumer(GITIGNORE_V1 . ManagedSection::MARKER . "\n!AGENTS.md\n/deprecations.log\n");
+
+    $output = publishIn($project);
+
+    expect(file_get_contents($project . '/.gitignore'))
+        ->toBe(GITIGNORE_V2 . ManagedSection::MARKER . "\n!AGENTS.md\n/deprecations.log\n")
+        ->and($output)->toContain('.gitignore')
+        ->and($output)->toContain('1 updated');
+
+    removeTempDir($project);
+});
+
+it('leaves a marked .gitignore alone when only its project lines differ', function (): void {
+    $local = GITIGNORE_V2 . ManagedSection::MARKER . "\nphpunit.xml\n";
+    $project = gitignoreConsumer($local);
+
+    $output = publishIn($project);
+
+    expect(file_get_contents($project . '/.gitignore'))->toBe($local)
+        ->and($output)->toContain('1 unchanged')
+        ->and($output)->not->toContain('locally modified');
+
+    removeTempDir($project);
+});
+
+it('converts an unmarked .gitignore that is a shipped version, without asking', function (): void {
+    $project = gitignoreConsumer(GITIGNORE_V1);
+
+    publishIn($project);
+
+    expect(file_get_contents($project . '/.gitignore'))->toBe(GITIGNORE_V2 . ManagedSection::MARKER . "\n");
+
+    removeTempDir($project);
+});
+
+it('only warns about an edited, unmarked .gitignore in a non-interactive run', function (): void {
+    $local = GITIGNORE_V1 . "!AGENTS.md\n";
+    $project = gitignoreConsumer($local);
+
+    $output = publishIn($project);
+
+    expect(file_get_contents($project . '/.gitignore'))->toBe($local)
+        ->and($output)->toContain('.gitignore (locally modified, no sync marker)')
+        ->and($output)->toContain('1 locally-modified file(s) have no sync marker and were not updated')
+        ->and($output)->toContain('1 skipped');
+
+    removeTempDir($project);
+});
+
+it('converts an edited, unmarked .gitignore on consent, keeping the whole file below the marker', function (): void {
+    $local = GITIGNORE_V1 . "!AGENTS.md\n";
+    $project = gitignoreConsumer($local);
+
+    withKeyPresses([Key::SPACE, Key::ENTER], fn () => publishIn($project, interactive: true));
+
+    expect(file_get_contents($project . '/.gitignore'))->toBe(GITIGNORE_V2 . ManagedSection::MARKER . "\n" . $local);
+
+    removeTempDir($project);
+});
+
+it('keeps an edited, unmarked .gitignore when the conversion is declined, which is the default', function (): void {
+    $local = GITIGNORE_V1 . "!AGENTS.md\n";
+    $project = gitignoreConsumer($local);
+
+    $output = withKeyPresses([Key::ENTER], fn () => publishIn($project, interactive: true));
+
+    expect(file_get_contents($project . '/.gitignore'))->toBe($local)
+        ->and($output)->toContain('1 skipped');
+
+    removeTempDir($project);
+});
+
+it('overwrites only the part above the marker when the user agrees to overwrite a locally modified .gitignore', function (): void {
+    $projectLines = "!AGENTS.md\n/deprecations.log\n# no trailing newline, on purpose";
+    $project = gitignoreConsumer(GITIGNORE_V1 . "/edited-above\n" . ManagedSection::MARKER . "\n" . $projectLines);
+
+    $output = withKeyPresses([Key::SPACE, Key::ENTER], fn () => publishIn($project, interactive: true));
+
+    expect(ManagedSection::split((string) file_get_contents($project . '/.gitignore')))
+        ->toBe(['managed' => GITIGNORE_V2, 'project' => $projectLines])
+        ->and($output)->toContain('.gitignore (locally modified)')
+        ->and($output)->toContain('1 updated');
+
+    removeTempDir($project);
+});
+
+it('keeps a locally modified .gitignore as it is when the overwrite is declined', function (): void {
+    $local = GITIGNORE_V1 . "/edited-above\n" . ManagedSection::MARKER . "\n!AGENTS.md\n";
+    $project = gitignoreConsumer($local);
+
+    $output = withKeyPresses([Key::ENTER], fn () => publishIn($project, interactive: true));
+
+    expect(file_get_contents($project . '/.gitignore'))->toBe($local)
+        ->and($output)->toContain('1 skipped');
+
+    removeTempDir($project);
+});
+
+it('reports a known-version .gitignore it cannot write as failed, never as updated', function (): void {
+    $project = gitignoreConsumer(GITIGNORE_V1);
+    chmod($project . '/.gitignore', 0444);
+
+    $output = publishIn($project);
+
+    chmod($project . '/.gitignore', 0644);
+
+    expect(file_get_contents($project . '/.gitignore'))->toBe(GITIGNORE_V1)
+        ->and($output)->toContain('.gitignore (write failed)')
+        ->and($output)->toContain('.gitignore was not updated. Could not write ')
+        ->and($output)->toContain('Permission denied')
+        ->and($output)->toContain('0 updated')
+        ->and($output)->toContain('1 skipped')
+        ->and($output)->not->toContain('↻');
+
+    removeTempDir($project);
+});
+
+it('reports a new file it cannot create as failed, never as created, and carries on', function (): void {
+    [$project] = makeConsumer([
+        'app' => false,
+        'sources' => ['a.yml' => "a\n", 'b.yml' => "b\n"],
+        'paths' => ['files' => ['a.yml' => 'locked/a.yml', 'b.yml']],
+    ]);
+    mkdir($project . '/locked', 0555);
+
+    $output = publishIn($project);
+
+    chmod($project . '/locked', 0755);
+
+    expect(file_exists($project . '/locked/a.yml'))->toBeFalse()
+        ->and(file_get_contents($project . '/b.yml'))->toBe("b\n")
+        ->and($output)->toContain('locked/a.yml (write failed)')
+        ->and($output)->toContain('locked/a.yml was not updated. Could not copy')
+        ->and($output)->toContain('1 new')
+        ->and($output)->toContain('1 skipped');
+
+    removeTempDir($project);
+});
+
+it('counts an agreed overwrite it cannot write as skipped, and says why', function (): void {
+    $local = GITIGNORE_V1 . "/edited-above\n" . ManagedSection::MARKER . "\n!AGENTS.md\n";
+    $project = gitignoreConsumer($local);
+    chmod($project . '/.gitignore', 0444);
+
+    $output = withKeyPresses([Key::SPACE, Key::ENTER], fn () => publishIn($project, interactive: true));
+
+    chmod($project . '/.gitignore', 0644);
+
+    expect(file_get_contents($project . '/.gitignore'))->toBe($local)
+        ->and($output)->toContain('.gitignore was not updated. Could not write')
+        ->and($output)->toContain('0 updated')
+        ->and($output)->toContain('1 skipped');
+
+    removeTempDir($project);
+});
+
+it('does not touch a .gitignore holding the sync marker twice, and says why', function (): void {
+    $local = GITIGNORE_V1 . ManagedSection::MARKER . "\n!AGENTS.md\n" . ManagedSection::MARKER . "\n";
+    $project = gitignoreConsumer($local);
+
+    $output = withKeyPresses([], fn () => publishIn($project, interactive: true));
+
+    expect(file_get_contents($project . '/.gitignore'))->toBe($local)
+        ->and($output)->toContain('.gitignore (sync marker appears twice, not touched)')
+        ->and($output)->toContain('.gitignore holds the sync marker more than once, so it was not touched')
+        ->and($output)->toContain('1 skipped');
+
+    removeTempDir($project);
 });
 
 it('captures before an update and publishes after install and update', function (): void {

@@ -101,6 +101,24 @@ The package tracks known file checksums via a manifest. When syncing:
 
 To accept the package version of a locally modified file, delete your local copy and run `composer update`.
 
+### Your own `.gitignore` rules
+
+The shipped `.gitignore` ends with one marker line:
+
+```gitignore
+# mike-bronner/laravel-development-settings: project entries go below this line. Anything above it is lost on the next sync.
+```
+
+The package owns everything above that line and replaces it on every sync. Everything below it is yours: the sync never changes it, and the upstream workflow never proposes it. Put your own rules there. Because they come last, they win, so `!AGENTS.md` below the marker keeps a hand-written `AGENTS.md` in git even though the shipped rules ignore it.
+
+- A `.gitignore` with no marker that is exactly a version this package shipped gets the marker automatically.
+- A `.gitignore` with no marker and your own edits is left alone. An interactive `composer update` offers to add the marker (default no), and moves your whole file, unchanged, below it. A non-interactive run only warns. Nothing is proposed upstream from it either way.
+- A `.gitignore` holding the marker twice is not touched at all, because the sync cannot tell where your part starts. Keep one marker line and run `composer update` again.
+- An edit above the marker is treated like any other local modification: flagged, kept unless you choose to overwrite it, and proposed upstream. Overwriting replaces only the part above the marker.
+- If the package stops shipping a file with a marker, it is removed only when the part above the marker is a version this package shipped and nothing sits below it. With your own rules below the marker, it is kept, and an interactive `composer update` asks whether to delete it.
+
+Which files work this way is set by `paths.managed` in the package config.
+
 ## ⚙️  Configuration
 
 All behavior is driven by `config/development-settings.php` within the package. It defines:
@@ -109,6 +127,7 @@ All behavior is driven by `config/development-settings.php` within the package. 
 - **`composer.remove`** — deprecated dependencies to remove
 - **`paths.directories`** — directories to sync (recursively)
 - **`paths.files`** — individual files to sync
+- **`paths.managed`** — tracked files the project shares with the package at one marker line (`.gitignore`)
 - **`paths.legacy_symlinks`** — project-root symlinks from older releases, removed on upgrade
 - **`paths.ignore`** — file and directory names excluded from discovery anywhere in the tree
 - **`hooks`** — the Boost composition command and its progress label
@@ -155,7 +174,7 @@ Changes flow both directions between this package and consuming repositories.
 3. A PR is automatically created on this repo
 4. After human review and merge, a new release distributes the changes
 
-The upstream workflow reads tracked paths directly from the package config — no hardcoded file lists to maintain. It reads both halves of each entry, so a file you edit at `.gitignore` goes back to the package as `resources/project/gitignore` rather than overwriting the package's own ignore rules.
+The upstream workflow reads tracked paths directly from the package config — no hardcoded file lists to maintain. It reads both halves of each entry, so a file you edit at `.gitignore` goes back to the package as `resources/project/gitignore` rather than overwriting the package's own ignore rules. From `.gitignore` it takes only the part above the sync marker, so your own rules below it stay in your project.
 
 This flow covers the **copied** config files only. Guidelines and skills are no longer copied into consuming projects, so a change to them is made here and released downstream; a guideline a project writes in its own `.ai/guidelines` stays that project's.
 

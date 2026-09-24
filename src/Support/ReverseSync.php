@@ -19,14 +19,19 @@ use RuntimeException;
  * edits, so the plugin and the workflow cannot disagree on what "modified"
  * means.
  *
+ * A managed target (`paths.managed`) is judged, and exported, on the part above
+ * its sync marker only. The project's lines below the marker are never
+ * proposed, and neither is a managed file with no marker or with more than
+ * one: neither can be split, so neither has a package part to propose.
+ *
  * The project is untrusted input: the workflow runs on its checkout, beside a
  * package checkout that holds a write token. So a path reached through a
- * symlink is never selected, and a path the workflow's line format cannot
- * carry fails the run instead of being split.
+ * symlink is never selected.
  *
  * The workflow runs against a package checkout with no Composer install, so
  * this class and its collaborators are required file by file. Keep it free of
- * dependencies beyond `FileDiscovery` and `Manifest`.
+ * dependencies beyond `CheckedFile`, `FileDiscovery`, `Manifest` and
+ * `ManagedSection`.
  */
 final class ReverseSync
 {
@@ -49,10 +54,49 @@ final class ReverseSync
      * checksum. A tracked path missing from the project, or reached through a
      * symlink anywhere along it, is skipped.
      *
-     * @param  array{directories?: array<array-key, string>, files?: array<array-key, string>}  $paths
+     * @param  array{directories?: array<array-key, string>, files?: array<array-key, string>, managed?: list<string>}  $paths
      * @return array<string, string> projectPath => packagePath, both relative
      */
     public function changedFiles(string $projectDir, array $paths): array
+    {
+        return array_map(fn (array $change): string => $change['package'], $this->changes($projectDir, $paths));
+    }
+
+    /**
+     * Write every changed file's proposal into the package checkout, and return
+     * what was written. For a managed target that is the part above the marker,
+     * and for every other file the whole file.
+     *
+     * The proposal written is the one `changes()` judged, from a single read of
+     * the project file: a second read could find other contents than the ones
+     * the manifest check passed.
+     *
+     * A directory or file that cannot be written throws, and so fails the
+     * workflow job. Carrying on would drop the proposal while the job stays
+     * green, because the next step only sees the files that were written.
+     *
+     * @param  array{directories?: array<array-key, string>, files?: array<array-key, string>, managed?: list<string>}  $paths
+     * @return array<string, string> projectPath => packagePath, both relative
+     */
+    public function export(string $projectDir, string $packageDir, array $paths): array
+    {
+        $changes = $this->changes($projectDir, $paths);
+
+        foreach ($changes as $change) {
+            CheckedFile::write($packageDir . '/' . $change['package'], $change['proposal']);
+        }
+
+        return array_map(fn (array $change): string => $change['package'], $changes);
+    }
+
+    /**
+     * Every changed file, with the package path it maps to and what it
+     * proposes, read once.
+     *
+     * @param  array{directories?: array<array-key, string>, files?: array<array-key, string>, managed?: list<string>}  $paths
+     * @return array<string, array{package: string, proposal: string}>
+     */
+    private function changes(string $projectDir, array $paths): array
     {
         $root = realpath($projectDir);
 
@@ -75,18 +119,30 @@ final class ReverseSync
                 continue;
             }
 
-            if ($this->manifest->isKnown($projectPath, (string) md5_file($file))) {
+            $proposal = $this->proposal($file, in_array($projectPath, $paths['managed'] ?? [], strict: true));
+
+            if ($proposal === null || $this->manifest->isKnown($projectPath, md5($proposal))) {
                 continue;
             }
 
-            if (preg_match('/[\t\r\n]/', $projectPath . $packagePath) === 1) {
-                throw new RuntimeException('A changed tracked path contains a tab or line break: ' . json_encode($projectPath));
-            }
-
-            $changed[$projectPath] = $packagePath;
+            $changed[$projectPath] = ['package' => $packagePath, 'proposal' => $proposal];
         }
 
         return $changed;
+    }
+
+    /**
+     * What the file would propose upstream, or null when it proposes nothing.
+     */
+    private function proposal(string $file, bool $managed): ?string
+    {
+        $contents = CheckedFile::read($file);
+
+        if (! $managed) {
+            return $contents;
+        }
+
+        return ManagedSection::split($contents)['managed'] ?? null;
     }
 
     /**

@@ -73,6 +73,17 @@ return [
             '.github/workflows/sync-developer-settings.yml',
         ],
 
+        // Tracked targets the project shares with this package, split at one
+        // marker line (Support\ManagedSection). The sync owns everything above
+        // the marker and never touches anything below it, so a project keeps
+        // its own rules through every update, and the reverse sync proposes
+        // only edits above the marker. Each entry is a target path, and must
+        // also be listed under `files`. A file without the marker is converted
+        // automatically only when it is a version this package shipped.
+        'managed' => [
+            '.gitignore',
+        ],
+
         // Project-root symlinks earlier versions created to point at shared
         // sources inside vendor. Those sources now ship at resources/boost and
         // Laravel Boost reads them from vendor itself, so the links are removed

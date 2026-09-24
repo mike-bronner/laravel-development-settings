@@ -2,8 +2,12 @@
 
 declare(strict_types=1);
 
+use MikeBronner\DevelopmentSettings\Support\CheckedFile;
+use MikeBronner\DevelopmentSettings\Support\FileDiscovery;
+use MikeBronner\DevelopmentSettings\Support\ManagedSection;
 use MikeBronner\DevelopmentSettings\Support\Manifest;
 use MikeBronner\DevelopmentSettings\Support\ReverseSync;
+use MikeBronner\DevelopmentSettings\Tests\Fixtures\ReadCountingStream;
 
 function seedProjectFile(string $dir, string $relativePath, string $contents): void
 {
@@ -163,14 +167,149 @@ it('skips symlinks inside a tracked directory and a tracked directory that is on
     removeTempDir($dir);
 });
 
-it('refuses a changed file whose name the line format cannot carry', function (): void {
+/*
+ * Managed targets: only the part above the marker is the package's, so only
+ * that part is ever judged or proposed.
+ */
+
+function managedPaths(): array
+{
+    return ['files' => ['resources/project/gitignore' => '.gitignore'], 'managed' => ['.gitignore']];
+}
+
+it('never proposes project lines below the marker of a managed target', function (): void {
     $dir = makeTempDir();
-    seedProjectFile($dir, "stubs/two\nlines.md", 'edited');
-    $sync = new ReverseSync(unrelatedManifest());
+    seedProjectFile($dir, '.gitignore', "/vendor\n" . ManagedSection::MARKER . "\n!AGENTS.md\nphpunit.xml\n");
+    $sync = new ReverseSync(new Manifest(['.gitignore' => [md5("/vendor\n")]]));
+
+    expect($sync->changedFiles($dir, managedPaths()))->toBe([]);
+
+    removeTempDir($dir);
+});
+
+it('proposes an edit above the marker of a managed target', function (): void {
+    $dir = makeTempDir();
+    seedProjectFile($dir, '.gitignore', "/vendor\n/storage\n" . ManagedSection::MARKER . "\n!AGENTS.md\n");
+    $sync = new ReverseSync(new Manifest(['.gitignore' => [md5("/vendor\n")]]));
+
+    expect($sync->changedFiles($dir, managedPaths()))->toBe(['.gitignore' => 'resources/project/gitignore']);
+
+    removeTempDir($dir);
+});
+
+it('never proposes a managed target it cannot split', function (string $contents): void {
+    $dir = makeTempDir();
+    seedProjectFile($dir, '.gitignore', $contents);
+    $sync = new ReverseSync(new Manifest(['.gitignore' => [md5("/vendor\n")]]));
+
+    expect($sync->changedFiles($dir, managedPaths()))->toBe([]);
+
+    removeTempDir($dir);
+})->with([
+    'no marker, edited' => ["/vendor\n!AGENTS.md\n"],
+    'marker twice' => ["/storage\n" . ManagedSection::MARKER . "\n" . ManagedSection::MARKER . "\n!AGENTS.md\n"],
+]);
+
+it('exports only the part above the marker of a managed target', function (): void {
+    $project = makeTempDir();
+    $package = makeTempDir();
+    seedProjectFile($project, '.gitignore', "/vendor\n/storage\n" . ManagedSection::MARKER . "\n!AGENTS.md\n");
+    $sync = new ReverseSync(new Manifest(['.gitignore' => [md5("/vendor\n")]]));
+
+    $exported = $sync->export($project, $package, managedPaths());
+
+    expect($exported)->toBe(['.gitignore' => 'resources/project/gitignore'])
+        ->and(file_get_contents($package . '/resources/project/gitignore'))->toBe("/vendor\n/storage\n");
+
+    removeTempDir($project);
+    removeTempDir($package);
+});
+
+it('exports a changed file that is not managed whole, and nothing unchanged', function (): void {
+    $project = makeTempDir();
+    $package = makeTempDir();
+    seedProjectFile($project, '.github/workflows/sync.yml', "edited\n" . ManagedSection::MARKER . "\nkept\n");
+    seedProjectFile($project, 'pint.json', 'shipped');
+    $sync = new ReverseSync(new Manifest(['pint.json' => [md5('shipped')]]));
+
+    $exported = $sync->export($project, $package, ['files' => ['.github/workflows/sync.yml', 'pint.json'], 'managed' => ['.gitignore']]);
+
+    expect($exported)->toBe(['.github/workflows/sync.yml' => '.github/workflows/sync.yml'])
+        ->and(file_get_contents($package . '/.github/workflows/sync.yml'))->toBe("edited\n" . ManagedSection::MARKER . "\nkept\n")
+        ->and(file_exists($package . '/pint.json'))->toBeFalse();
+
+    removeTempDir($project);
+    removeTempDir($package);
+});
+
+/*
+ * Export writes the proposal the manifest check judged. A second read of the
+ * project file could return other contents, which would reach the package
+ * unjudged.
+ */
+it('reads each changed project file once while exporting it', function (): void {
+    $project = makeTempDir();
+    $package = makeTempDir();
+    seedProjectFile($project, '.gitignore', "/vendor\n/storage\n" . ManagedSection::MARKER . "\n!AGENTS.md\n");
+    seedProjectFile($project, 'pint.json', 'edited');
+    $sync = new ReverseSync(new Manifest(['.gitignore' => [md5("/vendor\n")]]));
+    $paths = ['files' => ['resources/project/gitignore' => '.gitignore', 'pint.json'], 'managed' => ['.gitignore']];
+    $root = (string) realpath($project);
+
+    // Loaded now, so the autoloader's reads are not counted.
+    class_exists(CheckedFile::class);
+    class_exists(FileDiscovery::class);
+
+    $reads = ReadCountingStream::watch(fn (): array => $sync->export($project, $package, $paths));
+
+    expect($reads)->toBe([$root . '/.gitignore' => 1, $root . '/pint.json' => 1])
+        ->and(file_get_contents($package . '/resources/project/gitignore'))->toBe("/vendor\n/storage\n")
+        ->and(file_get_contents($package . '/pint.json'))->toBe('edited');
+
+    removeTempDir($project);
+    removeTempDir($package);
+});
+
+it('throws when a changed file cannot be written to the package checkout', function (): void {
+    $project = makeTempDir();
+    $package = makeTempDir();
+    seedProjectFile($project, 'pint.json', 'edited');
+    seedProjectFile($package, 'pint.json', 'shipped');
+    chmod($package . '/pint.json', 0444);
 
     try {
-        $sync->changedFiles($dir, ['directories' => ['stubs']]);
+        (new ReverseSync(unrelatedManifest()))->export($project, $package, ['files' => ['pint.json']]);
     } finally {
-        removeTempDir($dir);
+        chmod($package . '/pint.json', 0644);
+        removeTempDir($project);
+        removeTempDir($package);
     }
-})->throws(RuntimeException::class, 'contains a tab or line break');
+})->throws(RuntimeException::class, 'Could not write');
+
+it('throws when a changed file needs a directory the package checkout cannot hold', function (): void {
+    $project = makeTempDir();
+    $package = makeTempDir();
+    seedProjectFile($project, '.github/workflows/sync.yml', 'edited');
+    chmod($package, 0555);
+
+    try {
+        (new ReverseSync(unrelatedManifest()))->export($project, $package, ['files' => ['.github/workflows/sync.yml']]);
+    } finally {
+        chmod($package, 0755);
+        removeTempDir($project);
+        removeTempDir($package);
+    }
+})->throws(RuntimeException::class, 'Could not create');
+
+it('throws when a tracked file in the project cannot be read', function (): void {
+    $project = makeTempDir();
+    seedProjectFile($project, 'pint.json', 'edited');
+    chmod($project . '/pint.json', 0000);
+
+    try {
+        (new ReverseSync(unrelatedManifest()))->changedFiles($project, ['files' => ['pint.json']]);
+    } finally {
+        chmod($project . '/pint.json', 0644);
+        removeTempDir($project);
+    }
+})->throws(RuntimeException::class, 'Could not read');
