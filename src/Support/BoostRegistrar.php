@@ -33,12 +33,19 @@ final class BoostRegistrar
     public const FILE = 'boost.json';
 
     /**
-     * Ensure `$package` is listed. Creates `boost.json` when absent — the entry
-     * is inert until Boost is installed, and then seeds the default selection.
+     * Ensure `$package` is listed, and that none of the names in `$replaces`
+     * is. Creates `boost.json` when absent — the entry is inert until Boost is
+     * installed, and then seeds the default selection.
      *
+     * `$replaces` holds names this package itself shipped under earlier. An
+     * upgraded project still lists them, and Boost would keep filtering on a
+     * package that is no longer installed. Only those exact entries are
+     * removed: every other package in the list belongs to the project.
+     *
+     * @param  list<string>  $replaces
      * @return self::REGISTERED|self::UNCHANGED|self::UNREADABLE
      */
-    public function register(string $projectDir, string $package): string
+    public function register(string $projectDir, string $package, array $replaces = []): string
     {
         $path = $projectDir . '/' . self::FILE;
         $config = $this->read($path);
@@ -53,12 +60,20 @@ final class BoostRegistrar
             return self::UNREADABLE;
         }
 
-        if (in_array($package, $packages, strict: true)) {
+        $kept = array_values(array_filter(
+            $packages,
+            static fn (mixed $entry): bool => ! in_array($entry, $replaces, strict: true),
+        ));
+
+        if (! in_array($package, $kept, strict: true)) {
+            $kept[] = $package;
+        }
+
+        if ($kept === array_values($packages)) {
             return self::UNCHANGED;
         }
 
-        $packages[] = $package;
-        $config['packages'] = array_values($packages);
+        $config['packages'] = $kept;
         ksort($config);
 
         file_put_contents(

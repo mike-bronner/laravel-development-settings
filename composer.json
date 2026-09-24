@@ -1,7 +1,7 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
     "keywords": ["laravel", "developer"],
-    "name": "mikebronner/development-settings",
+    "name": "mike-bronner/laravel-development-settings",
     "description": "Shared settings for Laravel development.",
     "type": "composer-plugin",
     "license": "proprietary",
@@ -23,6 +23,9 @@
         "nunomaduro/collision": "^8.6",
         "pestphp/pest": "^3.0",
         "composer/composer": "^2.0"
+    },
+    "replace": {
+        "mikebronner/development-settings": "self.version"
     },
     "conflict": {
         "laravel/boost": "<2.9"

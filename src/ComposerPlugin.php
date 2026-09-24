@@ -28,7 +28,14 @@ use MikeBronner\DevelopmentSettings\Support\SystemProcess;
 
 final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 {
-    private const PACKAGE_NAME = 'mikebronner/development-settings';
+    private const PACKAGE_NAME = 'mike-bronner/laravel-development-settings';
+
+    /**
+     * The name this package shipped under before the repository moved. An
+     * upgraded project can still hold it in `boost.json` and in a symlink-era
+     * `.ai` link, and only this package can clean those up.
+     */
+    private const LEGACY_PACKAGE_NAME = 'mikebronner/development-settings';
     private const MANIFEST_FILE = 'manifest.json';
     private const BOX_WIDTH = 80;
 
@@ -131,7 +138,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         if (! $packageDir) {
             // Running inside development-settings itself: nothing to publish.
             if (! $this->isRunningInOwnRepository()) {
-                $io->writeError('<error>Could not locate developer-settings package directory</error>');
+                $io->writeError('<error>Could not locate the ' . self::PACKAGE_NAME . ' package directory</error>');
             }
 
             return;
@@ -152,7 +159,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         // vendor and orphan cleanup would delete this package's own sources.
         $removedLinks = (new LegacySymlink)->remove(
             projectDir: $projectDir,
-            packageDir: $packageDir,
+            packageDirs: [$packageDir, $projectDir . '/vendor/' . self::LEGACY_PACKAGE_NAME],
             linkPaths: $config['paths']['legacy_symlinks'] ?? [],
         );
         $removedFingerprint = (new LegacyFingerprint)->remove($projectDir);
@@ -165,7 +172,11 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         // Only where Boost can actually compose. A package has no artisan, so
         // registering it there would write a config file nothing ever reads.
         $registration = $this->composesBoost($projectDir)
-            ? (new BoostRegistrar)->register($projectDir, self::PACKAGE_NAME)
+            ? (new BoostRegistrar)->register(
+                projectDir: $projectDir,
+                package: self::PACKAGE_NAME,
+                replaces: [self::LEGACY_PACKAGE_NAME],
+            )
             : null;
 
         $composerConfig = $config['composer'] ?? [];

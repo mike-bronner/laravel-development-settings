@@ -14,23 +14,27 @@ namespace MikeBronner\DevelopmentSettings\Support;
  * directory and — once the release drops the link target — leaves a dangling
  * path that breaks composition outright.
  *
- * Only a link resolving inside this package is removed. A real directory is
+ * Only a link resolving inside one of the given package directories is
+ * removed. The caller passes the current vendor directory and the one the
+ * package used before its rename: Composer deletes the old one, so a link into
+ * it dangles and would never match the current directory. A real directory is
  * never touched: after the upgrade `.ai` belongs to the consuming project.
  */
 final class LegacySymlink
 {
     /**
+     * @param  list<string>  $packageDirs  directories this package lives or lived in; they need not exist
      * @param  list<string>  $linkPaths  project-relative link paths to clean up
      * @return list<string> the link paths that were removed
      */
-    public function remove(string $projectDir, string $packageDir, array $linkPaths): array
+    public function remove(string $projectDir, array $packageDirs, array $linkPaths): array
     {
         $removed = [];
 
         foreach ($linkPaths as $linkPath) {
             $link = $projectDir . '/' . $linkPath;
 
-            if (! is_link($link) || ! $this->pointsInto($link, $packageDir)) {
+            if (! is_link($link) || ! $this->pointsIntoAny($link, $packageDirs)) {
                 continue;
             }
 
@@ -39,6 +43,20 @@ final class LegacySymlink
         }
 
         return $removed;
+    }
+
+    /**
+     * @param  list<string>  $packageDirs
+     */
+    private function pointsIntoAny(string $link, array $packageDirs): bool
+    {
+        foreach ($packageDirs as $packageDir) {
+            if ($this->pointsInto($link, $packageDir)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

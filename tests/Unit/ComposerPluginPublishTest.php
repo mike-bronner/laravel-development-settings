@@ -11,7 +11,7 @@ use MikeBronner\DevelopmentSettings\Support\LegacyFingerprint;
 /*
  * These tests drive `doPublish()`, the whole Composer hook, against a consuming
  * project on disk. The package it installs from is a real directory under
- * `vendor/mikebronner/development-settings` whose config names no dependencies
+ * `vendor/mike-bronner/laravel-development-settings` whose config names no dependencies
  * (so no `composer update` is ever spawned) and whose Boost command is a stand-in.
  */
 
@@ -46,7 +46,7 @@ function boostStandIn(string $behaviour): string
 function makeConsumer(array $options = []): array
 {
     $project = makeTempDir('devset-publish-');
-    $package = $project . '/vendor/mikebronner/development-settings';
+    $package = $project . '/vendor/mike-bronner/laravel-development-settings';
 
     mkdir($package . '/config', 0755, true);
     file_put_contents($project . '/composer.json', json_encode(['require-dev' => new stdClass]) . "\n");
@@ -120,7 +120,7 @@ it('registers the package and composes in a fresh clone that has no boost.json',
 
     $output = publishIn($project);
 
-    expect(boostConfigIn($project))->toBe(['packages' => ['mikebronner/development-settings']])
+    expect(boostConfigIn($project))->toBe(['packages' => ['mike-bronner/laravel-development-settings']])
         ->and($output)->toContain('boost.json (registered with Boost)')
         ->and($output)->toContain('1 new')
         ->and(boostRan($project))->toBeTrue()
@@ -180,7 +180,7 @@ it('does not warn about agents when boost.json names them', function (): void {
     [$project] = makeConsumer();
     file_put_contents($project . '/boost.json', json_encode([
         'agents' => ['claude_code'],
-        'packages' => ['mikebronner/development-settings'],
+        'packages' => ['mike-bronner/laravel-development-settings'],
     ]));
 
     $output = publishIn($project);
@@ -226,7 +226,7 @@ it('stays quiet about Boost while it is still queued for installation, but still
 
     $output = publishIn($project);
 
-    expect(boostConfigIn($project))->toBe(['packages' => ['mikebronner/development-settings']])
+    expect(boostConfigIn($project))->toBe(['packages' => ['mike-bronner/laravel-development-settings']])
         ->and(boostRan($project))->toBeFalse()
         ->and($output)->not->toContain('Composing Laravel Boost');
 
@@ -241,7 +241,7 @@ it('removes the legacy .ai link and leaves the package sources it pointed at int
 
     mkdir($package . '/.ai/guidelines', 0755, true);
     file_put_contents($package . '/.ai/guidelines/01-identity.md', $source);
-    symlink('vendor/mikebronner/development-settings/.ai', $project . '/.ai');
+    symlink('vendor/mike-bronner/laravel-development-settings/.ai', $project . '/.ai');
 
     $output = publishIn($project);
 
@@ -251,6 +251,38 @@ it('removes the legacy .ai link and leaves the package sources it pointed at int
         ->and(file_get_contents($package . '/.ai/guidelines/01-identity.md'))->toBe($source)
         ->and($output)->toContain('.ai (stale symlink into vendor)')
         ->and($output)->not->toContain('01-identity.md');
+
+    removeTempDir($project);
+});
+
+it('replaces the pre-rename package name in boost.json on upgrade', function (): void {
+    [$project] = makeConsumer();
+    file_put_contents($project . '/boost.json', json_encode([
+        'agents' => ['claude_code'],
+        'packages' => ['acme/other', 'mikebronner/development-settings'],
+    ]));
+
+    $output = publishIn($project);
+
+    expect(boostConfigIn($project))->toBe([
+        'agents' => ['claude_code'],
+        'packages' => ['acme/other', 'mike-bronner/laravel-development-settings'],
+    ])
+        ->and($output)->toContain('boost.json (registered with Boost)');
+
+    removeTempDir($project);
+});
+
+it('removes a dangling .ai link into the pre-rename vendor path on upgrade', function (): void {
+    [$project] = makeConsumer();
+
+    // Composer has already deleted vendor/mikebronner/development-settings.
+    symlink('vendor/mikebronner/development-settings/.ai', $project . '/.ai');
+
+    $output = publishIn($project);
+
+    expect(is_link($project . '/.ai'))->toBeFalse()
+        ->and($output)->toContain('.ai (stale symlink into vendor)');
 
     removeTempDir($project);
 });

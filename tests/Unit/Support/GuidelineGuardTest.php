@@ -112,7 +112,7 @@ it('examines agent files below the project root, whatever the agent', function (
 
 it('ignores dependency and history directories', function (): void {
     $project = makeTempDir();
-    writeProjectFile($project, 'vendor/mikebronner/development-settings/resources/boost/g.md', armedAgentFile());
+    writeProjectFile($project, 'vendor/mike-bronner/laravel-development-settings/resources/boost/g.md', armedAgentFile());
     writeProjectFile($project, 'node_modules/some-package/README.md', armedAgentFile());
     writeProjectFile($project, '.git/description.md', armedAgentFile());
 
@@ -123,7 +123,7 @@ it('ignores dependency and history directories', function (): void {
 
 it('does not read through a symlink into vendor', function (): void {
     $project = makeTempDir();
-    $package = 'vendor/mikebronner/development-settings';
+    $package = 'vendor/mike-bronner/laravel-development-settings';
     writeProjectFile($project, $package . '/.ai/guidelines/01.md', armedAgentFile());
     writeProjectFile($project, $package . '/resources/boost/CLAUDE.md', armedAgentFile());
 

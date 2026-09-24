@@ -13,12 +13,12 @@ jobs:
       - name: Checkout source repo
         uses: actions/checkout@v4
 
-      - name: Checkout developer-settings
+      - name: Checkout laravel-development-settings
         uses: actions/checkout@v4
         with:
-          repository: mikebronner/development-settings
+          repository: mike-bronner/laravel-development-settings
           token: ${{ secrets.DEVELOPER_SETTINGS_TOKEN }}
-          path: _developer-settings
+          path: _laravel-development-settings
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -40,7 +40,7 @@ jobs:
         id: config
         run: |
           PAIRS=$(php -r '
-            $package = "_developer-settings";
+            $package = "_laravel-development-settings";
 
             require "$package/src/Support/FileDiscovery.php";
             require "$package/src/Support/Manifest.php";
@@ -79,7 +79,7 @@ jobs:
             if [ -z "$project_path" ] || [ -z "$package_path" ]; then
               continue
             fi
-            target="_developer-settings/$package_path"
+            target="_laravel-development-settings/$package_path"
             mkdir -p "$(dirname "$target")"
             cp "$project_path" "$target"
           done <<< "$TRACKED_PATHS"
@@ -87,7 +87,7 @@ jobs:
       - name: Detect changes
         id: changes
         run: |
-          cd _developer-settings
+          cd _laravel-development-settings
           MODIFIED=$(git diff --name-only)
           NEW=$(git ls-files --others --exclude-standard)
           ALL_CHANGED=$(echo -e "$MODIFIED\n$NEW" | sort -u | grep -v '^$' || true)
@@ -104,7 +104,7 @@ jobs:
         if: steps.changes.outputs.has_changes == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
-          path: _developer-settings
+          path: _laravel-development-settings
           token: ${{ secrets.DEVELOPER_SETTINGS_TOKEN }}
           branch: sync/${{ github.repository_owner }}/${{ github.event.repository.name }}
           delete-branch: true
