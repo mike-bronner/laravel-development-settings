@@ -69,6 +69,15 @@ final class ReadCountingStream
     }
 
     /**
+     * PHP 8.6 fails `file_put_contents()`, `copy()` and `fclose()` when the
+     * flush does, and a wrapper with no `stream_flush()` reports a failed one.
+     */
+    public function stream_flush(): bool
+    {
+        return fflush($this->handle);
+    }
+
+    /**
      * @return array<int|string, int>|false
      */
     public function stream_stat(): array|false
