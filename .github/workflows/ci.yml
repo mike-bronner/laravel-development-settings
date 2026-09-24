@@ -8,6 +8,22 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    # PHP 8.6 is unreleased and setup-php installs a nightly build for it. A
+    # nightly can break for upstream reasons, so its job warns, never blocks.
+    continue-on-error: ${{ matrix.experimental }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4', '8.5']
+        experimental: [false]
+        include:
+          - php: '8.6'
+            experimental: true
+
+    name: PHP ${{ matrix.php }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -15,11 +31,16 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: ${{ matrix.php }}
           coverage: none
 
+      # No lock is committed, so each job resolves the dependencies its own
+      # PHP version allows, as a consuming project on that version would.
+      # Only the nightly job ignores upper PHP bounds, which dependencies may
+      # not have raised for an unreleased version yet. Every other job keeps
+      # the platform check, because it proves the declared range installs.
       - name: Install dependencies
-        run: composer install --no-interaction --no-progress
+        run: composer update --no-interaction --no-progress ${{ matrix.experimental && '--ignore-platform-req=php+' || '' }}
 
       - name: Manifest is up to date
         run: php bin/generate-manifest.php --check
