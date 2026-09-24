@@ -101,7 +101,7 @@ it('runs clone → branch → add → commit → push → pr in order', function
         ->and($log)->toContain('git commit -m')
         ->and($log)->toContain('git push -u origin')
         ->and($log)->toContain('gh pr create')
-        ->and($log)->toContain('mikebronner/development-settings');
+        ->and($log)->toContain('mike-bronner/laravel-development-settings');
 
     // Clone dir is cleaned up afterwards.
     expect(is_dir($cloneDir))->toBeFalse();

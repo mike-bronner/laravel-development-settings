@@ -18,7 +18,7 @@ use RecursiveIteratorIterator;
  */
 final class Contributor
 {
-    public const REPO = 'mikebronner/development-settings';
+    public const REPO = 'mike-bronner/laravel-development-settings';
 
     public function __construct(private Process $process) {}
 

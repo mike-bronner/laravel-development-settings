@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "8b9b416d9264eabe8511218ea129f9e9",
+    "content-hash": "89bf1bbcae6a578b9619aa32999a3d9a",
     "packages": [
         {
             "name": "laravel/prompts",
