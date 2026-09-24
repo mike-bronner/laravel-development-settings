@@ -8,6 +8,14 @@ on:
 
 jobs:
   sync:
+    # The package runs this workflow on itself, because it ships the calling
+    # workflow as a tracked file and the shipped source is its own root copy.
+    # It is not a consuming project: its root .gitignore differs on purpose
+    # from the shipped resources/project/gitignore, so a run here copies the
+    # root file over the shipped one and proposes that upstream (PR #32).
+    # The name is the one after the rename from mikebronner/development-settings,
+    # which github.repository reports from then on. Every other caller runs.
+    if: github.repository != 'mike-bronner/laravel-development-settings'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source repo
