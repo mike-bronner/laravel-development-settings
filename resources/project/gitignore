@@ -99,7 +99,6 @@ composer.lock
 .kiro
 .mcp.json
 .opencode
-.pi
 .vscode/mcp.json
 .zed
 AGENTS.md
