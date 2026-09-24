@@ -76,6 +76,11 @@ jobs:
             }
           '
 
+      # The PR body shows the changed files inside a code fence. A file name is
+      # project input and may hold backticks, and a run of them as long as the
+      # fence would close it early and let the rest render as markdown. So the
+      # fence is made one backtick longer than the longest run in the list,
+      # which no line of the list can then close.
       - name: Detect changes
         id: changes
         run: |
@@ -85,8 +90,14 @@ jobs:
           ALL_CHANGED=$(echo -e "$MODIFIED\n$NEW" | sort -u | grep -v '^$' || true)
 
           if [ -n "$ALL_CHANGED" ]; then
+            FENCE='```'
+            while printf '%s\n' "$ALL_CHANGED" | grep -qF -- "$FENCE"; do
+              FENCE="$FENCE\`"
+            done
+
             DELIMITER="EOF_$(openssl rand -hex 16)"
             echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "fence=$FENCE" >> "$GITHUB_OUTPUT"
             echo "files<<$DELIMITER" >> "$GITHUB_OUTPUT"
             echo "$ALL_CHANGED" >> "$GITHUB_OUTPUT"
             echo "$DELIMITER" >> "$GITHUB_OUTPUT"
@@ -107,9 +118,9 @@ jobs:
             Changes to shared config files detected in `${{ github.repository }}`.
 
             **Changed files:**
-            ```
+            ${{ steps.changes.outputs.fence }}
             ${{ steps.changes.outputs.files }}
-            ```
+            ${{ steps.changes.outputs.fence }}
 
             **Source commit:** ${{ github.event.head_commit.url }}
 

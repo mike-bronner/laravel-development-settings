@@ -24,7 +24,10 @@ use LogicException;
  * Orphans are manifest paths no longer shipped that still exist downstream.
  * They are split into "safe" (an unmodified known version — deletable) and
  * "protected" (locally customized — must not be silently deleted), mirroring
- * the protect-local-edits philosophy used for updates.
+ * the protect-local-edits philosophy used for updates. An orphan holding the
+ * marker once is judged on the part above it, as classification judges a
+ * managed target, and is safe only when nothing sits below the marker: those
+ * lines are the project's, and deleting the file would take them with it.
  */
 final class FileSync
 {
@@ -236,8 +239,20 @@ final class FileSync
         return $this->manifest->isKnown($relativePath, md5($contents)) ? '' : $contents;
     }
 
+    /**
+     * The marker decides, not `$this->managed`: a target that stops shipping
+     * leaves `paths.files`, and so `paths.managed` with it, while the project
+     * still holds the file the managed sync wrote.
+     */
     private function isLocalCopyKnown(string $projectDir, string $path): bool
     {
-        return $this->manifest->isKnown($path, (string) md5_file($projectDir . '/' . $path));
+        $contents = (string) file_get_contents($projectDir . '/' . $path);
+        $section = ManagedSection::split($contents);
+
+        if ($section === null) {
+            return $this->manifest->isKnown($path, md5($contents));
+        }
+
+        return $section['project'] === '' && $this->manifest->isKnown($path, md5($section['managed']));
     }
 }

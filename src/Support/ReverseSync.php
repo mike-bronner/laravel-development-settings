@@ -59,6 +59,45 @@ final class ReverseSync
      */
     public function changedFiles(string $projectDir, array $paths): array
     {
+        return array_map(fn (array $change): string => $change['package'], $this->changes($projectDir, $paths));
+    }
+
+    /**
+     * Write every changed file's proposal into the package checkout, and return
+     * what was written. For a managed target that is the part above the marker,
+     * and for every other file the whole file.
+     *
+     * The proposal written is the one `changes()` judged, from a single read of
+     * the project file: a second read could find other contents than the ones
+     * the manifest check passed.
+     *
+     * A directory or file that cannot be written throws, and so fails the
+     * workflow job. Carrying on would drop the proposal while the job stays
+     * green, because the next step only sees the files that were written.
+     *
+     * @param  array{directories?: array<array-key, string>, files?: array<array-key, string>, managed?: list<string>}  $paths
+     * @return array<string, string> projectPath => packagePath, both relative
+     */
+    public function export(string $projectDir, string $packageDir, array $paths): array
+    {
+        $changes = $this->changes($projectDir, $paths);
+
+        foreach ($changes as $change) {
+            CheckedFile::write($packageDir . '/' . $change['package'], $change['proposal']);
+        }
+
+        return array_map(fn (array $change): string => $change['package'], $changes);
+    }
+
+    /**
+     * Every changed file, with the package path it maps to and what it
+     * proposes, read once.
+     *
+     * @param  array{directories?: array<array-key, string>, files?: array<array-key, string>, managed?: list<string>}  $paths
+     * @return array<string, array{package: string, proposal: string}>
+     */
+    private function changes(string $projectDir, array $paths): array
+    {
         $root = realpath($projectDir);
 
         if ($root === false) {
@@ -86,33 +125,7 @@ final class ReverseSync
                 continue;
             }
 
-            $changed[$projectPath] = $packagePath;
-        }
-
-        return $changed;
-    }
-
-    /**
-     * Write every changed file's proposal into the package checkout, and return
-     * what was written. For a managed target that is the part above the marker,
-     * and for every other file the whole file.
-     *
-     * A directory or file that cannot be written throws, and so fails the
-     * workflow job. Carrying on would drop the proposal while the job stays
-     * green, because the next step only sees the files that were written.
-     *
-     * @param  array{directories?: array<array-key, string>, files?: array<array-key, string>, managed?: list<string>}  $paths
-     * @return array<string, string> projectPath => packagePath, both relative
-     */
-    public function export(string $projectDir, string $packageDir, array $paths): array
-    {
-        $changed = $this->changedFiles($projectDir, $paths);
-
-        foreach ($changed as $projectPath => $packagePath) {
-            $managed = in_array($projectPath, $paths['managed'] ?? [], strict: true);
-            $proposal = (string) $this->proposal(realpath($projectDir) . '/' . $projectPath, $managed);
-
-            CheckedFile::write($packageDir . '/' . $packagePath, $proposal);
+            $changed[$projectPath] = ['package' => $packagePath, 'proposal' => $proposal];
         }
 
         return $changed;

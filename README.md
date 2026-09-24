@@ -115,6 +115,7 @@ The package owns everything above that line and replaces it on every sync. Every
 - A `.gitignore` with no marker and your own edits is left alone. An interactive `composer update` offers to add the marker (default no), and moves your whole file, unchanged, below it. A non-interactive run only warns. Nothing is proposed upstream from it either way.
 - A `.gitignore` holding the marker twice is not touched at all, because the sync cannot tell where your part starts. Keep one marker line and run `composer update` again.
 - An edit above the marker is treated like any other local modification: flagged, kept unless you choose to overwrite it, and proposed upstream. Overwriting replaces only the part above the marker.
+- If the package stops shipping a file with a marker, it is removed only when the part above the marker is a version this package shipped and nothing sits below it. With your own rules below the marker, it is kept, and an interactive `composer update` asks whether to delete it.
 
 Which files work this way is set by `paths.managed` in the package config.
 

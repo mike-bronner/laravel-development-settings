@@ -251,6 +251,29 @@ it('refuses to write a managed target holding the marker twice, and leaves it as
     removeTempDir(dirname($sourceFile));
 });
 
+/*
+ * A managed target that stops shipping leaves `paths.managed` too, so the sync
+ * is built without it here: the marker in the file is what identifies it.
+ */
+it('judges a managed orphan on the part above its marker', function (string $local, string $expected): void {
+    $project = makeTempDir();
+    seedTree($project, ['.gitignore' => $local]);
+    $sync = new FileSync(new Manifest(['.gitignore' => [md5(SHIPPED_V1), md5(SHIPPED_V2)]]));
+
+    expect($sync->safeOrphans($project, []) === ['.gitignore'] ? 'safe' : 'protected')->toBe($expected)
+        ->and(array_merge($sync->safeOrphans($project, []), $sync->protectedOrphans($project, [])))->toBe(['.gitignore']);
+
+    removeTempDir($project);
+})->with([
+    'marked current version, nothing below' => [marked(SHIPPED_V2, ''), 'safe'],
+    'marked older version, nothing below' => [marked(SHIPPED_V1, ''), 'safe'],
+    'marked known version, project lines below' => [marked(SHIPPED_V2, "!AGENTS.md\n"), 'protected'],
+    'edited above the marker' => [marked("/vendor\nphpunit.xml\n", ''), 'protected'],
+    'marker twice' => [marked(SHIPPED_V2, marked('', '')), 'protected'],
+    'unmarked known version' => [SHIPPED_V1, 'safe'],
+    'unmarked and edited' => [SHIPPED_V1 . "!AGENTS.md\n", 'protected'],
+]);
+
 it('copies a target that is not managed byte for byte, creating its directory', function (): void {
     $source = makeTempDir();
     $project = makeTempDir();

@@ -91,3 +91,97 @@ it('fails the step when a changed file cannot be written to the package checkout
 
     removeTempDir($project);
 });
+
+/*
+ * Runs the workflow's change detection, as written in the YAML, on a package
+ * checkout holding changed files, and renders the PR body from its outputs.
+ * File names are project input, so each one must stay inside the fence.
+ */
+
+/**
+ * @return array<string, string> the step outputs, by name
+ */
+function runDetectStep(string $project): array
+{
+    $workflow = (string) file_get_contents(dirname(__DIR__, 2) . '/.github/workflows/reusable-sync.yml');
+
+    expect(preg_match("/^      - name: Detect changes\n.*?^        run: \|\n(.*?)\n\n      - name:/ms", $workflow, $match))->toBe(1);
+
+    $script = (string) preg_replace('/^ {10}/m', '', $match[1]);
+    $outputFile = $project . '/github-output';
+    touch($outputFile);
+
+    $command = 'cd ' . escapeshellarg($project) . ' && GITHUB_OUTPUT=' . escapeshellarg($outputFile) . ' bash -e -c ' . escapeshellarg($script) . ' 2>&1';
+    exec($command, $output, $exitCode);
+
+    expect($exitCode)->toBe(0, implode("\n", $output));
+
+    $lines = explode("\n", (string) file_get_contents($outputFile));
+    $outputs = [];
+
+    while (($line = array_shift($lines)) !== null) {
+        if (preg_match('/^(\w+)<<(\S+)$/', $line, $heredoc) === 1) {
+            $value = [];
+
+            while (($next = array_shift($lines)) !== null && $next !== $heredoc[2]) {
+                $value[] = $next;
+            }
+
+            $outputs[$heredoc[1]] = implode("\n", $value);
+        } elseif (preg_match('/^(\w+)=(.*)$/', $line, $pair) === 1) {
+            $outputs[$pair[1]] = $pair[2];
+        }
+    }
+
+    return $outputs;
+}
+
+/**
+ * The PR body as the workflow writes it, with the step outputs filled in.
+ *
+ * @param  array<string, string>  $outputs
+ */
+function renderPullRequestBody(array $outputs): string
+{
+    $workflow = (string) file_get_contents(dirname(__DIR__, 2) . '/.github/workflows/reusable-sync.yml');
+
+    expect(preg_match("/^          body: \|\n(.*?)\n          commit-message:/ms", $workflow, $match))->toBe(1);
+
+    $body = (string) preg_replace('/^ {12}/m', '', $match[1]);
+    $body = (string) preg_replace_callback(
+        '/\$\{\{ steps\.changes\.outputs\.(\w+) \}\}/',
+        fn (array $name): string => $outputs[$name[1]] ?? '',
+        $body,
+    );
+
+    return (string) preg_replace('/\$\{\{ [^}]+ \}\}/', 'owner/project', $body);
+}
+
+it('keeps every changed file name inside the code fence of the PR body', function (): void {
+    $project = makeTempDir('devset-detect-');
+    $package = $project . '/_laravel-development-settings';
+
+    // pint.json is staged, then edited, so `git diff` reports it. The other
+    // two are untracked.
+    mkdir($package);
+    file_put_contents($package . '/pint.json', 'shipped');
+    exec('cd ' . escapeshellarg($package) . ' && git init -q && git add pint.json');
+    file_put_contents($package . '/pint.json', 'edited');
+    file_put_contents($package . '/a```b.txt', 'x');
+    file_put_contents($package . '/````', 'x');
+
+    $lines = explode("\n", renderPullRequestBody(runDetectStep($project)));
+    $open = (int) array_search('**Changed files:**', $lines, strict: true) + 1;
+    $fence = $lines[$open];
+    $closing = '/^ {0,3}`{' . strlen($fence) . ',}[ \t]*$/';
+    $length = 0;
+
+    while (preg_match($closing, $lines[$open + 1 + $length]) !== 1) {
+        $length++;
+    }
+
+    expect($fence)->toMatch('/^`{3,}$/')
+        ->and(array_slice($lines, $open + 1, $length))->toBe(['````', 'a```b.txt', 'pint.json']);
+
+    removeTempDir($project);
+});

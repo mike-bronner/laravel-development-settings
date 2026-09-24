@@ -2,9 +2,12 @@
 
 declare(strict_types=1);
 
+use MikeBronner\DevelopmentSettings\Support\CheckedFile;
+use MikeBronner\DevelopmentSettings\Support\FileDiscovery;
 use MikeBronner\DevelopmentSettings\Support\ManagedSection;
 use MikeBronner\DevelopmentSettings\Support\Manifest;
 use MikeBronner\DevelopmentSettings\Support\ReverseSync;
+use MikeBronner\DevelopmentSettings\Tests\Fixtures\ReadCountingStream;
 
 function seedProjectFile(string $dir, string $relativePath, string $contents): void
 {
@@ -234,6 +237,34 @@ it('exports a changed file that is not managed whole, and nothing unchanged', fu
     expect($exported)->toBe(['.github/workflows/sync.yml' => '.github/workflows/sync.yml'])
         ->and(file_get_contents($package . '/.github/workflows/sync.yml'))->toBe("edited\n" . ManagedSection::MARKER . "\nkept\n")
         ->and(file_exists($package . '/pint.json'))->toBeFalse();
+
+    removeTempDir($project);
+    removeTempDir($package);
+});
+
+/*
+ * Export writes the proposal the manifest check judged. A second read of the
+ * project file could return other contents, which would reach the package
+ * unjudged.
+ */
+it('reads each changed project file once while exporting it', function (): void {
+    $project = makeTempDir();
+    $package = makeTempDir();
+    seedProjectFile($project, '.gitignore', "/vendor\n/storage\n" . ManagedSection::MARKER . "\n!AGENTS.md\n");
+    seedProjectFile($project, 'pint.json', 'edited');
+    $sync = new ReverseSync(new Manifest(['.gitignore' => [md5("/vendor\n")]]));
+    $paths = ['files' => ['resources/project/gitignore' => '.gitignore', 'pint.json'], 'managed' => ['.gitignore']];
+    $root = (string) realpath($project);
+
+    // Loaded now, so the autoloader's reads are not counted.
+    class_exists(CheckedFile::class);
+    class_exists(FileDiscovery::class);
+
+    $reads = ReadCountingStream::watch(fn (): array => $sync->export($project, $package, $paths));
+
+    expect($reads)->toBe([$root . '/.gitignore' => 1, $root . '/pint.json' => 1])
+        ->and(file_get_contents($package . '/resources/project/gitignore'))->toBe("/vendor\n/storage\n")
+        ->and(file_get_contents($package . '/pint.json'))->toBe('edited');
 
     removeTempDir($project);
     removeTempDir($package);

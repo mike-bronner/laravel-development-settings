@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use MikeBronner\DevelopmentSettings\Support\FileDiscovery;
+use MikeBronner\DevelopmentSettings\Support\ManagedSection;
 use MikeBronner\DevelopmentSettings\Support\Manifest;
 
 /*
@@ -35,5 +36,23 @@ it('ships every managed target as a tracked file whose source ends with a newlin
     foreach ($paths['managed'] as $target) {
         expect($files)->toHaveKey($target)
             ->and(file_get_contents($root . '/' . $files[$target]))->toEndWith("\n");
+    }
+});
+
+/*
+ * The sync writes a managed source above the marker. A source that held the
+ * marker itself would give every project two, and every run after that would
+ * refuse the file.
+ */
+it('ships no managed source that holds the sync marker', function (): void {
+    $root = dirname(__DIR__, 2);
+    $paths = (require $root . '/config/development-settings.php')['paths'];
+    $files = FileDiscovery::trackedPaths($paths['files']);
+
+    expect($paths['managed'])->not->toBe([]);
+
+    foreach ($paths['managed'] as $target) {
+        expect($files)->toHaveKey($target)
+            ->and(ManagedSection::markers((string) file_get_contents($root . '/' . $files[$target])))->toBe(0, $target);
     }
 });
