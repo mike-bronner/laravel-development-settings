@@ -25,6 +25,7 @@ use MikeBronner\DevelopmentSettings\Support\LegacyFingerprint;
 use MikeBronner\DevelopmentSettings\Support\LegacySymlink;
 use MikeBronner\DevelopmentSettings\Support\Manifest;
 use MikeBronner\DevelopmentSettings\Support\SystemProcess;
+use RuntimeException;
 
 final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 {
@@ -164,7 +165,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         );
         $removedFingerprint = (new LegacyFingerprint)->remove($projectDir);
 
-        $fileSync = new FileSync($manifest);
+        $fileSync = new FileSync($manifest, managed: $config['paths']['managed'] ?? []);
         $scan = $fileSync->classify($projectDir, $filesToPublish);
         $safeOrphans = $fileSync->safeOrphans($projectDir, $filesToPublish);
         $protectedOrphans = $fileSync->protectedOrphans($projectDir, $filesToPublish);
@@ -185,7 +186,28 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             remove: $composerConfig['remove'] ?? [],
         );
 
+        // New and known-version files need no answer from the user, so they are
+        // written before the summary lists them: a write that fails is listed
+        // as failed, never as created or updated. As with a failed Boost run,
+        // the failure is reported with its cause and the run carries on.
+        $failedWrites = [];
+
+        foreach (['new', 'updatable'] as $group) {
+            foreach ($scan[$group] as $path => $sourceFile) {
+                $failure = $this->writeTracked($fileSync, $projectDir, $path, $sourceFile);
+
+                if ($failure !== null) {
+                    unset($scan[$group][$path]);
+                    $failedWrites[$path] = $failure;
+                }
+            }
+        }
+
         $this->writeBoxHeader($io);
+
+        foreach (array_keys($failedWrites) as $path) {
+            $io->write($this->formatOutputLine(type: 'failed', path: $path));
+        }
 
         foreach (array_keys($scan['new']) as $path) {
             $io->write($this->formatOutputLine(type: 'created', path: $path));
@@ -197,6 +219,14 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 
         foreach (array_keys($scan['modified']) as $path) {
             $io->write($this->formatOutputLine(type: 'modified', path: $path));
+        }
+
+        foreach (array_keys($scan['unmarked']) as $path) {
+            $io->write($this->formatOutputLine(type: 'unmarked', path: $path));
+        }
+
+        foreach (array_keys($scan['refused']) as $path) {
+            $io->write($this->formatOutputLine(type: 'refused', path: $path));
         }
 
         foreach ($safeOrphans as $path) {
@@ -244,6 +274,37 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             );
         }
 
+        // An edited file with no sync marker cannot be split into the package's
+        // part and the project's, so it is only converted on consent. The
+        // conversion loses nothing: the whole file moves below the marker.
+        $filesToConvert = [];
+
+        if ($scan['unmarked'] !== []) {
+            if ($io->isInteractive()) {
+                Prompt::interactive(true);
+
+                $filesToConvert = multiselect(
+                    label: 'Add the sync marker to these locally modified files?',
+                    options: array_combine(array_keys($scan['unmarked']), array_keys($scan['unmarked'])),
+                    default: [],
+                    required: false,
+                    hint: 'Your whole file moves below the marker. Unselected files are kept as they are.',
+                );
+            } else {
+                $io->writeError(sprintf(
+                    '<comment>  %d locally-modified file(s) have no sync marker and were not updated. Run composer interactively to add it; your entries are kept below it.</comment>',
+                    count($scan['unmarked']),
+                ));
+            }
+        }
+
+        foreach (array_keys($scan['refused']) as $path) {
+            $io->writeError(sprintf(
+                '<error>  %s holds the sync marker more than once, so it was not touched. Keep one marker line and run composer again.</error>',
+                $path,
+            ));
+        }
+
         $orphansToDelete = [];
 
         if ($protectedOrphans !== []) {
@@ -266,32 +327,40 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         }
 
         $stats = [
-            'new' => 0,
-            'updated' => 0,
+            'new' => count($scan['new']),
+            'updated' => count($scan['updatable']),
             'unchanged' => count($scan['unchanged']),
-            'skipped' => 0,
+            'skipped' => count($scan['refused']) + count($failedWrites),
             'removed' => 0,
         ];
 
-        foreach ($scan['new'] as $path => $sourceFile) {
-            $this->copyFile($sourceFile, $projectDir . '/' . $path);
-            $stats['new']++;
-        }
+        $consented = [
+            ...array_intersect_key($scan['modified'], array_flip($filesToOverwrite)),
+            ...array_intersect_key($scan['unmarked'], array_flip($filesToConvert)),
+        ];
 
-        foreach ($scan['updatable'] as $path => $sourceFile) {
-            $this->copyFile($sourceFile, $projectDir . '/' . $path);
-            $stats['updated']++;
-        }
+        foreach ([...$scan['modified'], ...$scan['unmarked']] as $path => $sourceFile) {
+            if (array_key_exists($path, $consented)) {
+                $failure = $this->writeTracked($fileSync, $projectDir, $path, $sourceFile);
 
-        foreach ($scan['modified'] as $path => $sourceFile) {
-            if (in_array($path, $filesToOverwrite, true)) {
-                $this->copyFile($sourceFile, $projectDir . '/' . $path);
-                $stats['updated']++;
+                if ($failure === null) {
+                    $stats['updated']++;
 
-                continue;
+                    continue;
+                }
+
+                $failedWrites[$path] = $failure;
             }
 
             $stats['skipped']++;
+        }
+
+        foreach ($failedWrites as $path => $failure) {
+            $io->writeError(sprintf(
+                '<error>  %s was not updated. %s Fix the cause, then run the Composer command again.</error>',
+                $path,
+                rtrim($failure, '.') . '.',
+            ));
         }
 
         foreach ($safeOrphans as $orphanPath) {
@@ -391,6 +460,9 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             'updated' => ['icon' => '↻', 'style' => 'comment'],
             'modified' => ['icon' => '⚠', 'style' => 'fg=yellow'],
             'orphan_protected' => ['icon' => '⚠', 'style' => 'fg=yellow'],
+            'unmarked' => ['icon' => '⚠', 'style' => 'fg=yellow'],
+            'refused' => ['icon' => '⚠', 'style' => 'fg=red'],
+            'failed' => ['icon' => '✗', 'style' => 'fg=red', 'suffix' => ' (write failed)'],
             'unlinked' => ['icon' => '-', 'style' => 'fg=magenta', 'suffix' => ' (stale symlink into vendor)'],
             'stale_fingerprint' => ['icon' => '-', 'style' => 'fg=magenta', 'suffix' => ' (stale Boost fingerprint)'],
             'registered' => ['icon' => '+', 'style' => 'info', 'suffix' => ' (registered with Boost)'],
@@ -408,6 +480,8 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 
         $displayPath = match ($type) {
             'modified' => "{$path} (locally modified)",
+            'unmarked' => "{$path} (locally modified, no sync marker)",
+            'refused' => "{$path} (sync marker appears twice, not touched)",
             'orphan_protected' => "{$path} (removed upstream, kept — locally modified)",
             default => $path . $suffix,
         };
@@ -639,6 +713,20 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         return (new SystemProcess)->run($command);
     }
 
+    /**
+     * Write one tracked file, and answer why it failed, or null when it did not.
+     */
+    private function writeTracked(FileSync $fileSync, string $projectDir, string $path, string $sourceFile): ?string
+    {
+        try {
+            $fileSync->write($projectDir, $path, $sourceFile);
+        } catch (RuntimeException $exception) {
+            return $exception->getMessage();
+        }
+
+        return null;
+    }
+
     private function getPackageDir(): ?string
     {
         $vendorDir = getcwd() . '/vendor/' . self::PACKAGE_NAME;
@@ -661,16 +749,5 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $data = json_decode((string) file_get_contents($composerFile), associative: true);
 
         return is_array($data) && ($data['name'] ?? null) === self::PACKAGE_NAME;
-    }
-
-    private function copyFile(string $source, string $destination): void
-    {
-        $directory = dirname($destination);
-
-        if (! is_dir($directory)) {
-            mkdir($directory, 0755, true);
-        }
-
-        copy($source, $destination);
     }
 }

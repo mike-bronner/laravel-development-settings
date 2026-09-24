@@ -33,24 +33,30 @@ jobs:
         with:
           php-version: '8.4'
 
-      # One line per changed tracked file, as "project path<TAB>package path".
-      # The two differ wherever the package ships a file under another name, so
-      # the copy below reads the pair rather than one path used twice.
-      # ReverseSync expands directory entries to files, skips anything reached
-      # through a symlink, and drops every file whose checksum the manifest
-      # knows: an unmodified shipped version, even an older one, is not a local
-      # edit. The job fails with ReverseSync's message when the loaded manifest
-      # records no paths (missing, unparseable or empty), because every tracked
-      # file would then look modified. It also fails on a changed path holding
-      # a tab or line break, which this line format cannot carry. The classes
-      # are required directly because the package is checked out, not installed.
-      - name: List changed tracked files
-        id: config
+      # Writes every changed tracked file into the package checkout, under its
+      # package path, which differs from the project path wherever the package
+      # ships a file under another name. ReverseSync expands directory entries
+      # to files, skips anything reached through a symlink, and drops every
+      # file whose checksum the manifest knows: an unmodified shipped version,
+      # even an older one, is not a local edit. A managed target (.gitignore)
+      # proposes only the part above its sync marker, and nothing at all when
+      # it has no marker or more than one, so a project's own rules below the
+      # marker never reach the package. The job fails with ReverseSync's
+      # message when the loaded manifest records no paths (missing,
+      # unparseable or empty), because every tracked file would then look
+      # modified. It also fails when a file cannot be read or written, rather
+      # than dropping that proposal while the job stays green. The classes are
+      # required directly because the package is checked out, not installed.
+      # The copy happens here, in PHP, because a managed file's proposal is
+      # part of the file, which `cp` cannot write.
+      - name: Copy changed files to package
         run: |
-          PAIRS=$(php -r '
+          php -r '
             $package = "_laravel-development-settings";
 
+            require "$package/src/Support/CheckedFile.php";
             require "$package/src/Support/FileDiscovery.php";
+            require "$package/src/Support/ManagedSection.php";
             require "$package/src/Support/Manifest.php";
             require "$package/src/Support/ReverseSync.php";
 
@@ -59,38 +65,16 @@ jobs:
 
             try {
               $changed = (new MikeBronner\DevelopmentSettings\Support\ReverseSync($manifest))
-                ->changedFiles(getcwd(), $paths);
+                ->export(getcwd(), $package, $paths);
             } catch (RuntimeException $exception) {
               fwrite(STDERR, $exception->getMessage() . PHP_EOL);
               exit(1);
             }
 
             foreach ($changed as $projectPath => $packagePath) {
-              echo $projectPath . "\t" . $packagePath . PHP_EOL;
+              echo json_encode($projectPath) . " -> " . json_encode($packagePath) . PHP_EOL;
             }
-          ')
-          # The paths come from the project, so the delimiter must not be
-          # guessable from inside it.
-          DELIMITER="EOF_$(openssl rand -hex 16)"
-          echo "paths<<$DELIMITER" >> "$GITHUB_OUTPUT"
-          echo "$PAIRS" >> "$GITHUB_OUTPUT"
-          echo "$DELIMITER" >> "$GITHUB_OUTPUT"
-
-      # The pairs arrive through the environment, never through an expression
-      # inside the script: an expression is pasted into the script text before
-      # bash parses it, so a crafted filename would run as shell.
-      - name: Copy changed files to package
-        env:
-          TRACKED_PATHS: ${{ steps.config.outputs.paths }}
-        run: |
-          while IFS=$'\t' read -r project_path package_path; do
-            if [ -z "$project_path" ] || [ -z "$package_path" ]; then
-              continue
-            fi
-            target="_laravel-development-settings/$package_path"
-            mkdir -p "$(dirname "$target")"
-            cp "$project_path" "$target"
-          done <<< "$TRACKED_PATHS"
+          '
 
       - name: Detect changes
         id: changes
