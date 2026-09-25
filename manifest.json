@@ -233,7 +233,8 @@
         "30b611e04b07baf29ecf7ba2ca6113a9",
         "10da1bd74a4b0ef774e7f70f8f70b5cc",
         "9032a913ee09131c74234ac5488eb4b4",
-        "91990d02db276ed5bd7a21f2780db4e3"
+        "91990d02db276ed5bd7a21f2780db4e3",
+        "934042a901cf6b6de6cd3f529e529f16"
     ],
     ".php-codesniffer/Insight/Sniffs/NamingConventions/UpperCaseEnumCaseSniff.php": [
         "927b4c76c15b2280ae54fc540f11c8ac"
@@ -260,5 +261,8 @@
         "9ab087085e2953193527c3466e4cda47",
         "18525377b95d2d2c0c0809f5c0e3b88a",
         "44003b4489d6ce1ec5d7199c44c5ed33"
+    ],
+    "testbench.yaml": [
+        "a56f0c4f744604f1875cc74e1767bfb4"
     ]
 }

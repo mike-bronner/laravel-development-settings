@@ -56,3 +56,12 @@ it('ships no managed source that holds the sync marker', function (): void {
             ->and(ManagedSection::markers((string) file_get_contents($root . '/' . $files[$target])))->toBe(0, $target);
     }
 });
+
+it('ships a rooting testbench.yaml and ignores it in the project', function (): void {
+    $root = dirname(__DIR__, 2);
+    $files = FileDiscovery::trackedPaths((require $root . '/config/development-settings.php')['paths']['files']);
+
+    expect($files)->toHaveKey('testbench.yaml')
+        ->and(file_get_contents($root . '/' . $files['testbench.yaml']))->toBe("laravel: ./\n")
+        ->and(explode("\n", (string) file_get_contents($root . '/' . $files['.gitignore'])))->toContain('/testbench.yaml');
+});

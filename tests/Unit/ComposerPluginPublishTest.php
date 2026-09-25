@@ -629,10 +629,64 @@ it('does not touch a .gitignore holding the sync marker twice, and says why', fu
     removeTempDir($project);
 });
 
-it('captures before an update and publishes after install and update', function (): void {
+it('captures before an update, publishes after install and update, then routes MCP after the root scripts', function (): void {
     expect(ComposerPlugin::getSubscribedEvents())->toBe([
         'pre-update-cmd' => 'captureBeforeUpdate',
-        'post-install-cmd' => 'publish',
-        'post-update-cmd' => 'publish',
+        'post-install-cmd' => [['publish', 0], ['routeMcpThroughTestbench', -1]],
+        'post-update-cmd' => [['publish', 0], ['routeMcpThroughTestbench', -1]],
     ]);
+});
+
+function boostMcpEntry(string $project): array
+{
+    return json_decode((string) file_get_contents($project . '/.mcp.json'), associative: true)['mcpServers']['laravel-boost'];
+}
+
+it('routes the Boost MCP server through Testbench in a package, and says so', function (): void {
+    [$project] = makeConsumer(['app' => false]);
+    file_put_contents($project . '/.mcp.json', json_encode(['mcpServers' => ['laravel-boost' => ['command' => 'php', 'args' => ['artisan', 'boost:mcp']]]]));
+
+    $output = publishIn($project, 'doRouteMcpThroughTestbench');
+
+    expect(boostMcpEntry($project)['args'])->toBe(['vendor/bin/testbench', 'boost:mcp'])
+        ->and($output)->toContain('.mcp.json now runs the Boost MCP server through vendor/bin/testbench.');
+
+    removeTempDir($project);
+});
+
+it('leaves the Boost MCP server of an app, which has artisan, as Boost wrote it', function (): void {
+    [$project] = makeConsumer();
+    $content = json_encode(['mcpServers' => ['laravel-boost' => ['command' => 'php', 'args' => ['artisan', 'boost:mcp']]]]);
+    file_put_contents($project . '/.mcp.json', $content);
+
+    $output = publishIn($project, 'doRouteMcpThroughTestbench');
+
+    expect(file_get_contents($project . '/.mcp.json'))->toBe($content)
+        ->and($output)->toBe('');
+
+    removeTempDir($project);
+});
+
+it('names a config it could not route through Testbench, and why', function (): void {
+    [$project] = makeConsumer(['app' => false]);
+    mkdir($project . '/.zed');
+    file_put_contents($project . '/.zed/settings.json', "{\n  // mine\n  \"context_servers\": {\"laravel-boost\": {\"command\": \"php\", \"args\": [\"artisan\", \"boost:mcp\"]}},\n}\n");
+
+    $output = publishIn($project, 'doRouteMcpThroughTestbench');
+
+    expect($output)->toContain('.zed/settings.json holds a Boost MCP entry that was not pointed at vendor/bin/testbench: it is not plain JSON');
+
+    removeTempDir($project);
+});
+
+it('routes nothing when this package is not installed, as in its own repository', function (): void {
+    $project = makeTempDir('devset-publish-');
+    $content = json_encode(['mcpServers' => ['laravel-boost' => ['command' => 'php', 'args' => ['artisan', 'boost:mcp']]]]);
+    file_put_contents($project . '/.mcp.json', $content);
+
+    publishIn($project, 'doRouteMcpThroughTestbench');
+
+    expect(file_get_contents($project . '/.mcp.json'))->toBe($content);
+
+    removeTempDir($project);
 });

@@ -25,6 +25,7 @@ use MikeBronner\DevelopmentSettings\Support\LegacyFingerprint;
 use MikeBronner\DevelopmentSettings\Support\LegacySymlink;
 use MikeBronner\DevelopmentSettings\Support\Manifest;
 use MikeBronner\DevelopmentSettings\Support\SystemProcess;
+use MikeBronner\DevelopmentSettings\Support\TestbenchMcp;
 use RuntimeException;
 
 final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
@@ -39,9 +40,9 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     private const LEGACY_PACKAGE_NAME = 'mikebronner/development-settings';
     private const MANIFEST_FILE = 'manifest.json';
     private const BOX_WIDTH = 80;
+    private const AFTER_ROOT_SCRIPTS = -1;
 
     private static bool $dependenciesInjected = false;
-    private IOInterface $io;
 
     public function activate(Composer $composer, IOInterface $io): void
     {
@@ -56,9 +57,14 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     {
         return [
             ScriptEvents::PRE_UPDATE_CMD => 'captureBeforeUpdate',
-            ScriptEvents::POST_INSTALL_CMD => 'publish',
-            ScriptEvents::POST_UPDATE_CMD => 'publish',
+            ScriptEvents::POST_INSTALL_CMD => [['publish', 0], ['routeMcpThroughTestbench', self::AFTER_ROOT_SCRIPTS]],
+            ScriptEvents::POST_UPDATE_CMD => [['publish', 0], ['routeMcpThroughTestbench', self::AFTER_ROOT_SCRIPTS]],
         ];
+    }
+
+    public function routeMcpThroughTestbench(Event $event): void
+    {
+        $this->doRouteMcpThroughTestbench($event->getIO());
     }
 
     public function publish(Event $event): void
@@ -123,6 +129,30 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $io->write($result['status'] === 0
             ? '<info>  ' . $result['message'] . '</info>'
             : '<error>  ' . $result['message'] . '</error>');
+    }
+
+    private function doRouteMcpThroughTestbench(IOInterface $io): void
+    {
+        $projectDir = (string) getcwd();
+
+        if (! $this->getPackageDir() || $this->composesBoost($projectDir)) {
+            return;
+        }
+
+        $result = (new TestbenchMcp)->rewrite($projectDir);
+
+        foreach ($result['rewritten'] as $path) {
+            $io->write(sprintf('<info>  ↻ %s now runs the Boost MCP server through %s.</info>', $path, TestbenchMcp::TESTBENCH));
+        }
+
+        foreach ($result['skipped'] as $path => $reason) {
+            $io->writeError(sprintf(
+                '<comment>  %s holds a Boost MCP entry that was not pointed at %s: %s.</comment>',
+                $path,
+                TestbenchMcp::TESTBENCH,
+                rtrim($reason, '.'),
+            ));
+        }
     }
 
     private function contributionBranch(string $projectDir): string
@@ -699,10 +729,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $io->writeError('<comment>  Edit the file yourself, then run the Composer command again. This package will not repair it: where your own text ends cannot be read from the file.</comment>');
     }
 
-    /**
-     * Whether Boost can compose here. Full Laravel apps have `artisan`;
-     * packages have no console entry point of their own.
-     */
     private function composesBoost(string $projectDir): bool
     {
         return file_exists($projectDir . '/artisan');

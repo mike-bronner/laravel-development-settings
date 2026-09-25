@@ -68,6 +68,7 @@ return [
             // dotted copy would act as a real ignore file for its own
             // directory).
             'resources/project/gitignore' => '.gitignore',
+            'resources/project/testbench.yaml' => 'testbench.yaml',
             'phpmd.xml',
             'pint.json',
             '.github/workflows/sync-developer-settings.yml',

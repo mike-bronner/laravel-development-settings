@@ -114,3 +114,4 @@ opencode.json
 /bootstrap/cache
 /storage/framework
 /storage/logs
+/testbench.yaml
