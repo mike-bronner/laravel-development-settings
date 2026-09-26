@@ -15,10 +15,10 @@ That's it. The package automatically syncs files and manages dependencies on eve
 This package is a Composer plugin that hooks into Composer's pre-update, post-install and post-update events. Before an update, it offers to contribute any edits you made to its installed guidelines and skills (see "Contributing edits made in vendor" below). After an install or update, it:
 
 1. **Syncs tracked config files** (`pint.json`, `phpmd.xml`, …) from the package into your project
-2. **Registers itself with Laravel Boost** by adding its name to the `packages` list in your `boost.json` (applications only — a package has no `artisan` and composes nothing)
+2. **Registers itself with Laravel Boost** by adding its name to the `packages` list in your `boost.json` (wherever Boost can run: an application, or a package with Orchestra Testbench installed)
 3. **Installs or removes dev dependencies** as defined in the package config
 4. **Preserves local modifications** — changed files aren't overwritten, and removed-upstream files you customized aren't deleted without asking
-5. **Composes Laravel Boost** — apps run `php artisan boost:install --guidelines --skills --no-interaction`; packages have no `artisan` to run it with, so they are skipped. Composition is refused, by file and with the reason, when it would overwrite hand-written content (see "Why a run can refuse to compose" below). A run that composes nothing is reported as failed (see "Choosing your agents" below)
+5. **Composes Laravel Boost** — apps run `php artisan boost:install --no-interaction` with `--guidelines --skills --mcp`, whatever your `boost.json` says; packages run the same install through Orchestra Testbench (see "Packages" below). Composition is refused, by file and with the reason, when it would overwrite hand-written content (see "Why a run can refuse to compose" below). A run that composes nothing is reported as failed (see "Choosing your agents" below)
 6. **Removes the legacy `.ai` symlink and `.dev-settings-boost` file** left by releases before the move to `resources/boost` (see "Upgrading" below)
 
 ### How the AI guidelines and skills reach your project
@@ -32,7 +32,19 @@ Two conditions have to hold, and both are enforced:
 
 Your project is a **direct** dependency's consumer or it gets nothing: Boost excludes transitive dependencies by design, so a package that picks this one up indirectly receives no guidelines.
 
-Composition itself needs `artisan`, so only full applications get composed agent files. A package consuming this one keeps the sources current in vendor, but nothing composes them — read `resources/boost` directly, or compose from the application that consumes the package.
+### Packages
+
+A package has no `artisan`, so the plugin composes it through Orchestra Testbench (`vendor/bin/testbench`). Nothing needs setting up: `composer update` is the whole procedure. For that one command, the plugin roots Testbench at your repository, so Boost reads your `composer.lock` and writes `boost.json`, the skills and the agent files into your repository rather than into vendor. It creates `bootstrap/cache` and `storage/framework/views` first, because Testbench cannot boot rooted without them. The shipped `.gitignore` ignores both.
+
+The same run writes Boost's MCP entries, as it does in an app. Boost writes them as `php artisan boost:mcp`, which cannot start in a package, so the plugin then points every existing entry at `php vendor/bin/testbench boost:mcp`. That server is deliberately not rooted: a rooted one cannot run a single tool. Its documentation search is not narrowed to your package's versions, which is a Boost limitation.
+
+To choose your agents in a package, run the rooted install yourself:
+
+```bash
+APP_BASE_PATH=. APP_ENV=local php -d variables_order=EGPCS vendor/bin/testbench boost:install
+```
+
+The next `composer update` points its MCP entries at Testbench. A package without `orchestra/testbench` is not composed, and the run says so.
 
 ### Choosing your agents
 
@@ -46,7 +58,7 @@ php artisan boost:install
 
 When Boost detects no agent at all, it exits successfully having written nothing. The plugin checks for a freshly composed agent file after the run, and reports the run as failed when there is none, rather than printing "done".
 
-Boost also registers its commands only when `APP_ENV` is `local` or `APP_DEBUG` is true. On a clone with no `.env` yet, the run fails, and the next `composer install` after you create one composes.
+In an application, Boost also registers its commands only when `APP_ENV` is `local` or `APP_DEBUG` is true. On a clone with no `.env` yet, the run fails, and the next `composer install` after you create one composes.
 
 ### Why a run can refuse to compose
 

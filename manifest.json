@@ -233,7 +233,8 @@
         "30b611e04b07baf29ecf7ba2ca6113a9",
         "10da1bd74a4b0ef774e7f70f8f70b5cc",
         "9032a913ee09131c74234ac5488eb4b4",
-        "91990d02db276ed5bd7a21f2780db4e3"
+        "91990d02db276ed5bd7a21f2780db4e3",
+        "697d7c01f1e80b55be04900a1590cf03"
     ],
     ".php-codesniffer/Insight/Sniffs/NamingConventions/UpperCaseEnumCaseSniff.php": [
         "927b4c76c15b2280ae54fc540f11c8ac"

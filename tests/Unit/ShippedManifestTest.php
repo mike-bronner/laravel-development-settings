@@ -56,3 +56,12 @@ it('ships no managed source that holds the sync marker', function (): void {
             ->and(ManagedSection::markers((string) file_get_contents($root . '/' . $files[$target])))->toBe(0, $target);
     }
 });
+
+it('ships no testbench.yaml, which would root boost:mcp where no Boost tool can run', function (): void {
+    $root = dirname(__DIR__, 2);
+    $files = FileDiscovery::trackedPaths((require $root . '/config/development-settings.php')['paths']['files']);
+    $manifest = json_decode((string) file_get_contents($root . '/manifest.json'), associative: true);
+
+    expect($files)->not->toHaveKey('testbench.yaml')
+        ->and($manifest)->not->toHaveKey('testbench.yaml');
+});

@@ -108,9 +108,10 @@ GEMINI.md
 boost.json
 opencode.json
 
-# Skeleton directories the Boost package runner of earlier releases created to
-# boot Boost in a package (no artisan). The upgrade does not remove them,
-# because a project may keep its own files there, so they stay ignored.
+# Directories Testbench needs to boot Boost rooted at a package (no artisan).
+# The plugin creates them before it composes there, and earlier releases
+# created them too. They are never removed, because a project may keep its own
+# files there, so they stay ignored.
 /bootstrap/cache
 /storage/framework
 /storage/logs

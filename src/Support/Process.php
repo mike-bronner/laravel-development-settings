@@ -4,12 +4,10 @@ declare(strict_types=1);
 
 namespace MikeBronner\DevelopmentSettings\Support;
 
-/**
- * Thin wrapper around proc_open for running external commands and returning
- * their exit code. Output is consumed but discarded. Extracted so command
- * execution can be seamed (and faked) in tests for the contribute flow.
- */
+// Runs an external command and answers its exit code, nothing else. Extracted
+// so command execution can be faked in tests for the contribute flow. A caller
+// that must show why a command failed uses SystemProcess::capture() instead.
 interface Process
 {
-    public function run(string $command, ?string $workingDirectory = null): int;
+    public function run(string $command, ?string $workingDirectory = null, array $environment = []): int;
 }

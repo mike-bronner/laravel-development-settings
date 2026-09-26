@@ -25,7 +25,7 @@ final class RecordingProcess implements Process
      */
     public function __construct(private array $exitCodes = [], private int $default = 0) {}
 
-    public function run(string $command, ?string $workingDirectory = null): int
+    public function run(string $command, ?string $workingDirectory = null, array $environment = []): int
     {
         $this->commands[] = $command;
 

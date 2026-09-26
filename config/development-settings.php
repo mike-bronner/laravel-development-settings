@@ -12,28 +12,42 @@ return [
             'laravel/boost' => '^2.9',
             'laravel/pint' => '^1.24',
         ],
-        // PHP_CodeSniffer belongs to mike-bronner/phpcs-rules, not this
-        // package. A project that also requires phpcs-rules keeps slevomat as
-        // its transitive dependency.
-        'remove' => [
-            'slevomat/coding-standard',
-        ],
+        // Packages named here are dropped from a project's require-dev. The
+        // list is empty on purpose: slevomat/coding-standard is not removed,
+        // because mike-bronner/clean-code requires it, so `composer remove`
+        // could never succeed and every project would report a failure.
+        'remove' => [],
     ],
 
-    // Boost composition command, run in full Laravel apps (which have artisan).
-    // Packages have no artisan and no console entry point of their own, so they
-    // compose nothing — their agent files come from the application consuming
-    // them, or are read straight out of resources/boost.
+    // Boost composition commands. `command` runs in full Laravel apps, through
+    // their own artisan. `package_command` runs in a repository with no
+    // artisan, through Orchestra Testbench, and only when vendor/bin/testbench
+    // is installed.
+    //
+    // The package command is rooted at the repository for this one run, so
+    // Boost reads the repository's composer files and writes boost.json and the
+    // skills there instead of into vendor's Testbench skeleton. The plugin sets
+    // APP_BASE_PATH (the repository) and APP_ENV=local on the command only:
+    // Testbench reads APP_BASE_PATH from $_ENV alone, hence the
+    // variables_order flag, and a rooted Testbench boots as production, where
+    // Boost registers no commands. No testbench.yaml is shipped for this: it
+    // would root every Testbench run, and a rooted boost:mcp cannot run a
+    // single tool, because Boost runs them through the base path's artisan.
+    // In a package the plugin then points Boost's MCP entries at an unrooted
+    // vendor/bin/testbench.
+    //
+    // The plugin appends --guidelines --skills --mcp to both commands, so every
+    // project gets all three Boost features, whatever its boost.json says.
     //
     // `boost:install`, not `boost:update`: `boost.json` is gitignored, so a
     // fresh clone has none, and `boost:update` composes nothing from a config
     // that enables no guidelines or skills. `install` is the command that
-    // writes the config it needs. The flags make it non-interactive and pin the
-    // two features this package ships; agents come from `boost.json` when it
-    // names any, and otherwise from what Boost detects on the machine.
+    // writes the config it needs. Agents come from `boost.json` when it names
+    // any, and otherwise from what Boost detects on the machine.
     'hooks' => [
-        'command' => 'php artisan boost:install --guidelines --skills --no-interaction',
-        'description' => 'Composing Laravel Boost guidelines and skills...',
+        'command' => 'php artisan boost:install --no-interaction',
+        'package_command' => 'php -d variables_order=EGPCS vendor/bin/testbench boost:install --no-interaction',
+        'description' => 'Composing Laravel Boost...',
     ],
 
     // Package sources a consuming project may edit in place, inside vendor.
