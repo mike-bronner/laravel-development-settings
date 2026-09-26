@@ -7,29 +7,6 @@ namespace MikeBronner\DevelopmentSettings\Support;
 use RuntimeException;
 use stdClass;
 
-/**
- * Points Boost's `laravel-boost` MCP entry at Testbench in a repository with
- * no `artisan`.
- *
- * Boost writes that entry as `php artisan boost:mcp` for every agent, with
- * the artisan command hardcoded. A package has no `artisan`, so the server
- * never starts there. Testbench runs the same command through
- * `vendor/bin/testbench boost:mcp`, so this class swaps the artisan argument
- * for that one and leaves the rest of the entry as Boost wrote it.
- *
- * Every `boost:install` writes the artisan entries back, the plugin's own
- * included. So the plugin runs this after its own composition and after the
- * root package's post-install and post-update scripts, which may run an
- * install of their own: running any earlier would be undone. The entry it
- * writes is unrooted: a Testbench rooted at the repository cannot run a single
- * Boost tool, because Boost runs each one through the base path's `artisan`.
- *
- * It only rewrites an entry that already exists and never adds one: which
- * agents a project uses is Boost's decision. A file it cannot write back
- * safely is skipped and reported with the reason, never repaired: JSON with
- * comments or trailing commas, a path that resolves outside the project, an
- * entry of a shape it does not know, or a write that fails.
- */
 final class TestbenchMcp
 {
     public const SERVER = 'laravel-boost';
@@ -40,12 +17,8 @@ final class TestbenchMcp
 
     private const COMMAND = 'command';
 
-    /**
-     * Each JSON config Boost writes, with the key that holds its servers and
-     * the entry field that holds the command's arguments.
-     *
-     * @var array<string, array{string, string}>
-     */
+    // Each JSON config Boost writes: the key that holds its servers, and the
+    // entry field that holds the command's arguments.
     private const JSON_CONFIGS = [
         '.mcp.json' => ['mcpServers', self::ARGS],
         '.agents/mcp_config.json' => ['mcpServers', self::ARGS],
@@ -60,9 +33,6 @@ final class TestbenchMcp
         'opencode.jsonc' => ['mcp', self::COMMAND],
     ];
 
-    /**
-     * @var list<string>
-     */
     private const TOML_CONFIGS = [
         '.codex/config.toml',
         '.grok/config.toml',
@@ -70,15 +40,6 @@ final class TestbenchMcp
 
     private const TOML_STRING = '"(?:\\\\.|[^"\\\\])*"';
 
-    /**
-     * Rewrite every Boost MCP entry in the project that runs through artisan.
-     *
-     * A file that is missing, holds no Boost entry, or already runs through
-     * Testbench is left out of both lists. A skipped file is keyed on its
-     * relative path, with the reason it was not written.
-     *
-     * @return array{rewritten: list<string>, skipped: array<string, string>}
-     */
     public function rewrite(string $projectDir): array
     {
         $result = ['rewritten' => [], 'skipped' => []];
@@ -125,12 +86,6 @@ final class TestbenchMcp
         return $result;
     }
 
-    /**
-     * The config with its Boost entry rewritten, or null when there is nothing
-     * to change. The file is re-encoded as a whole, so one `json_decode`
-     * cannot read, such as JSONC with comments, is refused: writing it back
-     * would drop the comments.
-     */
     private function rewriteJson(string $content, string $projectDir, string $key, string $list): ?string
     {
         $config = json_decode(trim($this->withoutBom($content)));
@@ -160,11 +115,6 @@ final class TestbenchMcp
         return json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
     }
 
-    /**
-     * The config with its Boost entry's `args` line rewritten, or null when
-     * there is nothing to change. Only that one array is replaced, so every
-     * other byte of the file, comments included, is kept.
-     */
     private function rewriteToml(string $content, string $projectDir): ?string
     {
         $header = '/^\[mcp_servers\.(?:' . self::SERVER . '|"' . self::SERVER . '")\][ \t]*$/m';
@@ -173,6 +123,8 @@ final class TestbenchMcp
             return null;
         }
 
+        // Only the entry table's args array is replaced, so every other byte of
+        // the file, comments included, is kept.
         $start = $match[0][1] + strlen($match[0][0]);
         $end = preg_match('/^[ \t]*\[/m', $content, $next, PREG_OFFSET_CAPTURE, $start) === 1 ? $next[0][1] : strlen($content);
         $table = substr($content, $start, $end - $start);
@@ -200,14 +152,6 @@ final class TestbenchMcp
         return substr_replace($content, $formatted, $start + $args[2][1], strlen($args[2][0]));
     }
 
-    /**
-     * The argument list with the artisan path before `boost:mcp` replaced by
-     * Testbench, returned unchanged when it already runs through Testbench.
-     * An absolute artisan path becomes an absolute Testbench path.
-     *
-     * @param  list<mixed>  $list
-     * @return list<mixed>
-     */
     private function throughTestbench(array $list, string $projectDir): array
     {
         $index = array_search('boost:mcp', $list, strict: true);

@@ -28,15 +28,14 @@ const EXITS_WITH_ERROR = 'exits with an error';
 /**
  * The Boost command stand-in. It records having run, which command it stood in
  * for (`artisan` or `testbench`), the rooting environment it saw, whether
- * Testbench's directories existed and whether it was asked for the MCP
- * entries (`--mcp`, which the plugin appends), then does what Boost does in the named
- * case: write a composed block into `AGENTS.md`, write nothing and exit 0 (no
- * agent found), or exit non-zero.
+ * Testbench's directories existed and the arguments the plugin appended, then
+ * does what Boost does in the named case: write a composed block into
+ * `AGENTS.md`, write nothing and exit 0 (no agent found), or exit non-zero.
  */
 function boostStandIn(string $behaviour, string $runner): string
 {
     $block = GuidelineGuard::OPENING_TAG . "\n=== rules ===\n" . GuidelineGuard::CLOSING_TAG . "\n";
-    $record = 'file_put_contents("boost.ran", json_encode(["runner" => ' . var_export($runner, true) . ', "APP_BASE_PATH" => getenv("APP_BASE_PATH"), "APP_ENV" => getenv("APP_ENV"), "directories" => is_dir("bootstrap/cache") && is_dir("storage/framework/views"), "mcp" => in_array("--mcp", $argv, true)]));';
+    $record = 'file_put_contents("boost.ran", json_encode(["runner" => ' . var_export($runner, true) . ', "APP_BASE_PATH" => getenv("APP_BASE_PATH"), "APP_ENV" => getenv("APP_ENV"), "directories" => is_dir("bootstrap/cache") && is_dir("storage/framework/views"), "flags" => array_slice($argv, 1)]));';
 
     $script = $record . match ($behaviour) {
         COMPOSES => ' file_put_contents("AGENTS.md", ' . var_export($block, true) . ');',
@@ -133,9 +132,6 @@ function boostRan(string $project): bool
     return file_exists($project . '/boost.ran');
 }
 
-/**
- * @return array{runner: string, APP_BASE_PATH: string|false, APP_ENV: string|false, directories: bool, mcp: bool}
- */
 function boostRun(string $project): array
 {
     return json_decode((string) file_get_contents($project . '/boost.ran'), associative: true);
@@ -165,7 +161,7 @@ it('composes an app through artisan, unrooted, even with Testbench installed', f
 
     publishIn($project);
 
-    expect(boostRun($project))->toBe(['runner' => 'artisan', 'APP_BASE_PATH' => false, 'APP_ENV' => false, 'directories' => false, 'mcp' => false])
+    expect(boostRun($project))->toBe(['runner' => 'artisan', 'APP_BASE_PATH' => false, 'APP_ENV' => false, 'directories' => false, 'flags' => ['--guidelines', '--skills', '--mcp']])
         ->and(is_dir($project . '/bootstrap'))->toBeFalse()
         ->and(is_dir($project . '/storage'))->toBeFalse();
 
@@ -179,7 +175,7 @@ it('registers and composes a package through Testbench, rooted at the repository
 
     expect(boostConfigIn($project))->toBe(['packages' => ['mike-bronner/laravel-development-settings']])
         ->and($output)->toContain('boost.json (registered with Boost)')
-        ->and(boostRun($project))->toBe(['runner' => 'testbench', 'APP_BASE_PATH' => realpath($project), 'APP_ENV' => 'local', 'directories' => true, 'mcp' => true])
+        ->and(boostRun($project))->toBe(['runner' => 'testbench', 'APP_BASE_PATH' => realpath($project), 'APP_ENV' => 'local', 'directories' => true, 'flags' => ['--guidelines', '--skills', '--mcp']])
         ->and($output)->toContain('Composing Laravel Boost guidelines and skills... done')
         // The root reaches the one command, never the Composer process: every
         // Testbench run after it, `boost:mcp` included, stays unrooted.
@@ -189,16 +185,23 @@ it('registers and composes a package through Testbench, rooted at the repository
     removeTempDir($project);
 });
 
-it('does not ask Boost for MCP entries in a package whose boost.json turns MCP off', function (): void {
-    [$project] = makeConsumer(['app' => false, 'testbench' => true]);
-    file_put_contents($project . '/boost.json', json_encode(['agents' => ['claude_code', 'copilot'], 'mcp' => false]));
+it('passes Boost every feature, whatever boost.json says, in an app and in a package', function (bool $app, array $config): void {
+    [$project] = makeConsumer(['app' => $app, 'testbench' => true]);
+    file_put_contents($project . '/boost.json', json_encode(['agents' => ['claude_code'], ...$config]));
 
     publishIn($project);
 
-    expect(boostRun($project)['mcp'])->toBeFalse();
+    expect(boostRun($project)['flags'])->toBe(['--guidelines', '--skills', '--mcp']);
 
     removeTempDir($project);
-});
+})->with([
+    'app' => true,
+    'package' => false,
+])->with([
+    'no feature keys' => [[]],
+    'mcp off' => [['mcp' => false]],
+    'every feature off' => [['guidelines' => false, 'skills' => false, 'mcp' => false]],
+]);
 
 it('names the rooted Testbench install as the next step when a package composes nothing', function (): void {
     [$project] = makeConsumer(['app' => false, 'testbench' => true, 'boost' => COMPOSES_NOTHING]);

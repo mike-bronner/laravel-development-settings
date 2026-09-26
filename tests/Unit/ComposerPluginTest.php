@@ -35,7 +35,9 @@ function runBoostOn(string $project): BufferIO
         $project,
         [
             'hooks' => [
-                'command' => 'touch ' . escapeshellarg($project . '/composed.marker'),
+                // The trailing `--` hands the appended feature flags to the
+                // script, not to PHP.
+                'command' => escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg('touch(' . var_export($project . '/composed.marker', true) . ');') . ' --',
                 'description' => 'Updating Laravel Boost...',
             ],
         ],

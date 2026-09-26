@@ -18,7 +18,7 @@ This package is a Composer plugin that hooks into Composer's pre-update, post-in
 2. **Registers itself with Laravel Boost** by adding its name to the `packages` list in your `boost.json` (wherever Boost can run: an application, or a package with Orchestra Testbench installed)
 3. **Installs or removes dev dependencies** as defined in the package config
 4. **Preserves local modifications** — changed files aren't overwritten, and removed-upstream files you customized aren't deleted without asking
-5. **Composes Laravel Boost** — apps run `php artisan boost:install --guidelines --skills --no-interaction`; packages run the same install through Orchestra Testbench (see "Packages" below). Composition is refused, by file and with the reason, when it would overwrite hand-written content (see "Why a run can refuse to compose" below). A run that composes nothing is reported as failed (see "Choosing your agents" below)
+5. **Composes Laravel Boost** — apps run `php artisan boost:install --no-interaction` with `--guidelines --skills --mcp`, whatever your `boost.json` says; packages run the same install through Orchestra Testbench (see "Packages" below). Composition is refused, by file and with the reason, when it would overwrite hand-written content (see "Why a run can refuse to compose" below). A run that composes nothing is reported as failed (see "Choosing your agents" below)
 6. **Removes the legacy `.ai` symlink and `.dev-settings-boost` file** left by releases before the move to `resources/boost` (see "Upgrading" below)
 
 ### How the AI guidelines and skills reach your project
@@ -36,7 +36,7 @@ Your project is a **direct** dependency's consumer or it gets nothing: Boost exc
 
 A package has no `artisan`, so the plugin composes it through Orchestra Testbench (`vendor/bin/testbench`). Nothing needs setting up: `composer update` is the whole procedure. For that one command, the plugin roots Testbench at your repository, so Boost reads your `composer.lock` and writes `boost.json`, the skills and the agent files into your repository rather than into vendor. It creates `bootstrap/cache` and `storage/framework/views` first, because Testbench cannot boot rooted without them. The shipped `.gitignore` ignores both.
 
-The same run writes Boost's MCP entries, unless your `boost.json` sets `"mcp": false`. Boost writes them as `php artisan boost:mcp`, which cannot start in a package, so the plugin then points every existing entry at `php vendor/bin/testbench boost:mcp`. That server is deliberately not rooted: a rooted one cannot run a single tool. Its documentation search is not narrowed to your package's versions, which is a Boost limitation.
+The same run writes Boost's MCP entries, as it does in an app. Boost writes them as `php artisan boost:mcp`, which cannot start in a package, so the plugin then points every existing entry at `php vendor/bin/testbench boost:mcp`. That server is deliberately not rooted: a rooted one cannot run a single tool. Its documentation search is not narrowed to your package's versions, which is a Boost limitation.
 
 To choose your agents in a package, run the rooted install yourself:
 

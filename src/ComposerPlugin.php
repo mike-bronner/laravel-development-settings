@@ -43,24 +43,17 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     private const BOX_WIDTH = 80;
     private const AFTER_ROOT_SCRIPTS = -1;
 
-    /**
-     * What a developer runs to install Boost by hand in a repository with no
-     * artisan: the plugin's package command, rooted the same way, prompting.
-     */
+    private const BOOST_FEATURES = ' --guidelines --skills --mcp';
+    private const PACKAGE_COMMAND = 'php -d variables_order=EGPCS ' . TestbenchMcp::TESTBENCH . ' boost:install --no-interaction';
     private const PACKAGE_BOOST_INSTALL = 'APP_BASE_PATH=. APP_ENV=local php -d variables_order=EGPCS ' . TestbenchMcp::TESTBENCH . ' boost:install';
 
-    /**
-     * The directories Testbench needs to boot rooted at a package. Without the
-     * views directory Boost exits successfully having added no guidelines.
-     */
+    // Without the views directory a rooted Testbench exits successfully having
+    // composed no guidelines.
     private const TESTBENCH_DIRECTORIES = ['bootstrap/cache', 'storage/framework/views'];
 
     private static bool $dependenciesInjected = false;
 
-    public function activate(Composer $composer, IOInterface $io): void
-    {
-        $this->io = $io;
-    }
+    public function activate(Composer $composer, IOInterface $io): void {}
 
     public function deactivate(Composer $composer, IOInterface $io): void {}
 
@@ -653,7 +646,8 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     }
 
     /**
-     * Compose the AI guidelines and skills (Laravel Boost) into agent files.
+     * Install Laravel Boost's guidelines, skills and MCP entries, whatever
+     * `boost.json` says.
      *
      * A full Laravel app is composed through its own `artisan`. A repository
      * with no `artisan` is composed through Orchestra Testbench, rooted at the
@@ -714,13 +708,15 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             ));
         }
 
-        $description = $config['hooks']['description'] ?? 'Composing Laravel Boost guidelines and skills...';
+        $description = $config['hooks']['description'] ?? 'Composing Laravel Boost...';
         $io->write("  <info>{$description}</info> ", false);
 
+        // Every feature is passed explicitly, so a leftover boost.json setting
+        // can never turn one off: Boost ignores boost.json once a flag is given.
         $startedAt = time();
         $result = $isApp
-            ? $this->executeCommand($config['hooks']['command'] ?? 'php artisan boost:install --guidelines --skills --no-interaction')
-            : $this->composePackage($io, $projectDir, $config);
+            ? $this->executeCommand(($config['hooks']['command'] ?? 'php artisan boost:install --no-interaction') . self::BOOST_FEATURES)
+            : $this->composePackage($io, $projectDir, ($config['hooks']['package_command'] ?? self::PACKAGE_COMMAND) . self::BOOST_FEATURES);
 
         if ($result === null) {
             return;
@@ -772,21 +768,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $io->writeError('<comment>  Edit the file yourself, then run the Composer command again. This package will not repair it: where your own text ends cannot be read from the file.</comment>');
     }
 
-    /**
-     * Run Boost's install through Testbench, rooted at the repository, and
-     * answer its exit code, or null when it could not be started.
-     *
-     * It also writes the Boost MCP entries, unless `boost.json` turns MCP off:
-     * a package has no other way to get a working one, and an install run
-     * with only `--guidelines --skills` writes none. Boost writes them through
-     * `artisan`; the `routeMcpThroughTestbench` listener rewrites them after.
-     *
-     * The root is set on this one command, never on the Composer process, so
-     * no Testbench run after it, such as the package's own tests or
-     * `testbench boost:mcp`, is rooted. A rooted `boost:mcp` cannot run a
-     * single tool: Boost runs each one through the base path's `artisan`.
-     */
-    private function composePackage(IOInterface $io, string $projectDir, array $config): ?int
+    private function composePackage(IOInterface $io, string $projectDir, string $command): ?int
     {
         try {
             foreach (self::TESTBENCH_DIRECTORIES as $directory) {
@@ -802,12 +784,10 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             return null;
         }
 
-        $command = $config['hooks']['package_command'] ?? 'php -d variables_order=EGPCS ' . TestbenchMcp::TESTBENCH . ' boost:install --guidelines --skills --no-interaction';
-
-        return $this->executeCommand(
-            (new BoostRegistrar)->declinesMcp($projectDir) ? $command : $command . ' --mcp',
-            ['APP_BASE_PATH' => $projectDir, 'APP_ENV' => 'local'],
-        );
+        // The root is set on this one command, never on the Composer process:
+        // a rooted `testbench boost:mcp` cannot run a single tool, because
+        // Boost runs each one through the base path's `artisan`.
+        return $this->executeCommand($command, ['APP_BASE_PATH' => $projectDir, 'APP_ENV' => 'local']);
     }
 
     private function isApp(string $projectDir): bool
@@ -824,9 +804,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         return $this->isApp($projectDir) || is_file($projectDir . '/' . TestbenchMcp::TESTBENCH);
     }
 
-    /**
-     * @param  array<string, string>  $environment
-     */
     private function executeCommand(string $command, array $environment = []): int
     {
         return (new SystemProcess)->run(command: $command, environment: $environment);

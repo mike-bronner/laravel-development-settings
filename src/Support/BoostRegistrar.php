@@ -96,16 +96,6 @@ final class BoostRegistrar
     }
 
     /**
-     * Whether `boost.json` turns Boost's MCP server off. Only an explicit
-     * `false` does: a fresh clone's file holds no `mcp` key at all, and an
-     * unreadable one is not read as a choice.
-     */
-    public function declinesMcp(string $projectDir): bool
-    {
-        return ($this->read($projectDir . '/' . self::FILE)['mcp'] ?? null) === false;
-    }
-
-    /**
      * An absent file is an empty config to be created. Anything present that is
      * not a JSON object is left alone — a hand-edited or corrupt `boost.json`
      * belongs to the developer, and overwriting it would destroy their agent,
