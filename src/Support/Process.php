@@ -11,5 +11,8 @@ namespace MikeBronner\DevelopmentSettings\Support;
  */
 interface Process
 {
-    public function run(string $command, ?string $workingDirectory = null): int;
+    /**
+     * @param  array<string, string>  $environment  variables set for this command only, over the inherited environment
+     */
+    public function run(string $command, ?string $workingDirectory = null, array $environment = []): int;
 }

@@ -7,10 +7,13 @@ namespace MikeBronner\DevelopmentSettings\Support;
 /**
  * Thin proc_open wrapper. Runs the command, drains stdout and stderr
  * (discarding them), and returns the exit code.
+ *
+ * Extra environment variables reach the command only. They are never set on
+ * the Composer process itself, so nothing that runs after it inherits them.
  */
 final class SystemProcess implements Process
 {
-    public function run(string $command, ?string $workingDirectory = null): int
+    public function run(string $command, ?string $workingDirectory = null, array $environment = []): int
     {
         $process = proc_open(
             $command,
@@ -21,6 +24,7 @@ final class SystemProcess implements Process
             ],
             $pipes,
             $workingDirectory ?? getcwd(),
+            $environment === [] ? null : [...getenv(), ...$environment],
         );
 
         if (! is_resource($process)) {

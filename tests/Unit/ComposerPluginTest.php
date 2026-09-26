@@ -97,11 +97,11 @@ it('leaves the damaged agent file exactly as it found it', function (): void {
     removeTempDir($project);
 });
 
-it('stays quiet in a project Boost cannot compose in', function (): void {
+it('tells a project with neither artisan nor Testbench why Boost did not run', function (): void {
     $project = makeComposableProject('# CLAUDE.md');
     unlink($project . '/artisan');
 
-    expect(runBoostOn($project)->getOutput())->toBe('')
+    expect(runBoostOn($project)->getOutput())->toContain('no artisan and no vendor/bin/testbench, so Laravel Boost was not run')
         ->and(composed($project))->toBeFalse();
 
     removeTempDir($project);

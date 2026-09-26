@@ -20,10 +20,23 @@ return [
         ],
     ],
 
-    // Boost composition command, run in full Laravel apps (which have artisan).
-    // Packages have no artisan and no console entry point of their own, so they
-    // compose nothing — their agent files come from the application consuming
-    // them, or are read straight out of resources/boost.
+    // Boost composition commands. `command` runs in full Laravel apps, through
+    // their own artisan. `package_command` runs in a repository with no
+    // artisan, through Orchestra Testbench, and only when vendor/bin/testbench
+    // is installed.
+    //
+    // The package command is rooted at the repository for this one run, so
+    // Boost reads the repository's composer files and writes boost.json and the
+    // skills there instead of into vendor's Testbench skeleton. The plugin sets
+    // APP_BASE_PATH (the repository) and APP_ENV=local on the command only:
+    // Testbench reads APP_BASE_PATH from $_ENV alone, hence the
+    // variables_order flag, and a rooted Testbench boots as production, where
+    // Boost registers no commands. No testbench.yaml is shipped for this: it
+    // would root every Testbench run, and a rooted boost:mcp cannot run a
+    // single tool, because Boost runs them through the base path's artisan.
+    // The plugin appends --mcp to the package command unless boost.json sets
+    // "mcp": false, so a package gets its MCP entries without a hand-run
+    // install; it then points them at an unrooted vendor/bin/testbench.
     //
     // `boost:install`, not `boost:update`: `boost.json` is gitignored, so a
     // fresh clone has none, and `boost:update` composes nothing from a config
@@ -33,6 +46,7 @@ return [
     // names any, and otherwise from what Boost detects on the machine.
     'hooks' => [
         'command' => 'php artisan boost:install --guidelines --skills --no-interaction',
+        'package_command' => 'php -d variables_order=EGPCS vendor/bin/testbench boost:install --guidelines --skills --no-interaction',
         'description' => 'Composing Laravel Boost guidelines and skills...',
     ],
 
@@ -68,7 +82,6 @@ return [
             // dotted copy would act as a real ignore file for its own
             // directory).
             'resources/project/gitignore' => '.gitignore',
-            'resources/project/testbench.yaml' => 'testbench.yaml',
             'phpmd.xml',
             'pint.json',
             '.github/workflows/sync-developer-settings.yml',

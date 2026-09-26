@@ -17,9 +17,12 @@ use stdClass;
  * `vendor/bin/testbench boost:mcp`, so this class swaps the artisan argument
  * for that one and leaves the rest of the entry as Boost wrote it.
  *
- * The plugin runs it after the root package's own post-install and
- * post-update scripts. Those scripts may run `testbench boost:install`, which
- * writes the artisan entries back, so running any earlier would be undone.
+ * Every `boost:install` writes the artisan entries back, the plugin's own
+ * included. So the plugin runs this after its own composition and after the
+ * root package's post-install and post-update scripts, which may run an
+ * install of their own: running any earlier would be undone. The entry it
+ * writes is unrooted: a Testbench rooted at the repository cannot run a single
+ * Boost tool, because Boost runs each one through the base path's `artisan`.
  *
  * It only rewrites an entry that already exists and never adds one: which
  * agents a project uses is Boost's decision. A file it cannot write back

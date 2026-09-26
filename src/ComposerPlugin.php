@@ -16,6 +16,7 @@ use function Laravel\Prompts\multiselect;
 
 use Laravel\Prompts\Prompt;
 use MikeBronner\DevelopmentSettings\Support\BoostRegistrar;
+use MikeBronner\DevelopmentSettings\Support\CheckedFile;
 use MikeBronner\DevelopmentSettings\Support\ContributionDetector;
 use MikeBronner\DevelopmentSettings\Support\Contributor;
 use MikeBronner\DevelopmentSettings\Support\FileDiscovery;
@@ -41,6 +42,18 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     private const MANIFEST_FILE = 'manifest.json';
     private const BOX_WIDTH = 80;
     private const AFTER_ROOT_SCRIPTS = -1;
+
+    /**
+     * What a developer runs to install Boost by hand in a repository with no
+     * artisan: the plugin's package command, rooted the same way, prompting.
+     */
+    private const PACKAGE_BOOST_INSTALL = 'APP_BASE_PATH=. APP_ENV=local php -d variables_order=EGPCS ' . TestbenchMcp::TESTBENCH . ' boost:install';
+
+    /**
+     * The directories Testbench needs to boot rooted at a package. Without the
+     * views directory Boost exits successfully having added no guidelines.
+     */
+    private const TESTBENCH_DIRECTORIES = ['bootstrap/cache', 'storage/framework/views'];
 
     private static bool $dependenciesInjected = false;
 
@@ -135,7 +148,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     {
         $projectDir = (string) getcwd();
 
-        if (! $this->getPackageDir() || $this->composesBoost($projectDir)) {
+        if (! $this->getPackageDir() || $this->isApp($projectDir)) {
             return;
         }
 
@@ -200,8 +213,9 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $safeOrphans = $fileSync->safeOrphans($projectDir, $filesToPublish);
         $protectedOrphans = $fileSync->protectedOrphans($projectDir, $filesToPublish);
 
-        // Only where Boost can actually compose. A package has no artisan, so
-        // registering it there would write a config file nothing ever reads.
+        // Only where Boost can actually compose. A package without Testbench has
+        // no way to run Boost, so registering there would write a config file
+        // nothing ever reads.
         $registration = $this->composesBoost($projectDir)
             ? (new BoostRegistrar)->register(
                 projectDir: $projectDir,
@@ -641,8 +655,11 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     /**
      * Compose the AI guidelines and skills (Laravel Boost) into agent files.
      *
-     * Only full Laravel apps are composed, through their own `artisan`. A
-     * package has no console entry point to run Boost with.
+     * A full Laravel app is composed through its own `artisan`. A repository
+     * with no `artisan` is composed through Orchestra Testbench, rooted at the
+     * repository for this one command, and only when Testbench is installed.
+     * The Boost MCP entries that run writes still name `artisan`; the
+     * `routeMcpThroughTestbench` listener points them at Testbench afterwards.
      *
      * Boost composes from this package's `resources/boost` in vendor *and* from
      * the project's own `.ai`, so the run is unconditional: the package sources
@@ -660,7 +677,19 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         // so there is no Boost command to call yet. Staying quiet beats a red
         // "failed": installing the dev dependencies runs this plugin again, and
         // that run composes.
-        if (! $this->composesBoost($projectDir) || ! is_dir($projectDir . '/vendor/laravel/boost')) {
+        if (! is_dir($projectDir . '/vendor/laravel/boost')) {
+            return;
+        }
+
+        $isApp = $this->isApp($projectDir);
+        $installCommand = $isApp ? 'php artisan boost:install' : self::PACKAGE_BOOST_INSTALL;
+
+        if (! $this->composesBoost($projectDir)) {
+            $io->writeError(sprintf(
+                '<comment>  This repository has no artisan and no %s, so Laravel Boost was not run. Require orchestra/testbench as a dev dependency to compose its guidelines and skills.</comment>',
+                TestbenchMcp::TESTBENCH,
+            ));
+
             return;
         }
 
@@ -679,8 +708,9 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         // nothing at all.
         if (! (new BoostRegistrar)->hasAgents($projectDir)) {
             $io->writeError(sprintf(
-                '<comment>  %s names no agents, so Laravel Boost composes for the agents it detects on this machine. Run "php artisan boost:install" once to choose them.</comment>',
+                '<comment>  %s names no agents, so Laravel Boost composes for the agents it detects on this machine. Run "%s" once to choose them.</comment>',
                 BoostRegistrar::FILE,
+                $installCommand,
             ));
         }
 
@@ -688,11 +718,21 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $io->write("  <info>{$description}</info> ", false);
 
         $startedAt = time();
-        $result = $this->executeCommand($config['hooks']['command'] ?? 'php artisan boost:install --guidelines --skills --no-interaction');
+        $result = $isApp
+            ? $this->executeCommand($config['hooks']['command'] ?? 'php artisan boost:install --guidelines --skills --no-interaction')
+            : $this->composePackage($io, $projectDir, $config);
+
+        if ($result === null) {
+            return;
+        }
 
         if ($result !== 0) {
             $io->write('<error>failed</error>');
-            $io->writeError('<error>  Laravel Boost exited with an error. Run "php artisan boost:install" to see why. Boost registers its commands only when APP_ENV is local or APP_DEBUG is true.</error>');
+            $io->writeError(sprintf(
+                '<error>  Laravel Boost exited with an error. Run "%s" to see why.%s</error>',
+                $installCommand,
+                $isApp ? ' Boost registers its commands only when APP_ENV is local or APP_DEBUG is true.' : '',
+            ));
 
             return;
         }
@@ -701,7 +741,10 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         // zero exit alone would report "done" for a run that wrote nothing.
         if (! $guard->composedSince($projectDir, $startedAt)) {
             $io->write('<error>failed</error>');
-            $io->writeError('<error>  Laravel Boost ran but composed no agent file: it found no agent to compose for. Run "php artisan boost:install" and choose your agents.</error>');
+            $io->writeError(sprintf(
+                '<error>  Laravel Boost ran but composed no agent file: it found no agent to compose for. Run "%s" and choose your agents.</error>',
+                $installCommand,
+            ));
 
             return;
         }
@@ -729,14 +772,64 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $io->writeError('<comment>  Edit the file yourself, then run the Composer command again. This package will not repair it: where your own text ends cannot be read from the file.</comment>');
     }
 
-    private function composesBoost(string $projectDir): bool
+    /**
+     * Run Boost's install through Testbench, rooted at the repository, and
+     * answer its exit code, or null when it could not be started.
+     *
+     * It also writes the Boost MCP entries, unless `boost.json` turns MCP off:
+     * a package has no other way to get a working one, and an install run
+     * with only `--guidelines --skills` writes none. Boost writes them through
+     * `artisan`; the `routeMcpThroughTestbench` listener rewrites them after.
+     *
+     * The root is set on this one command, never on the Composer process, so
+     * no Testbench run after it, such as the package's own tests or
+     * `testbench boost:mcp`, is rooted. A rooted `boost:mcp` cannot run a
+     * single tool: Boost runs each one through the base path's `artisan`.
+     */
+    private function composePackage(IOInterface $io, string $projectDir, array $config): ?int
+    {
+        try {
+            foreach (self::TESTBENCH_DIRECTORIES as $directory) {
+                CheckedFile::ensureDirectory($projectDir . '/' . $directory);
+            }
+        } catch (RuntimeException $exception) {
+            $io->write('<error>failed</error>');
+            $io->writeError(sprintf(
+                '<error>  Laravel Boost was not run: Testbench cannot boot without its directories. %s</error>',
+                rtrim($exception->getMessage(), '.') . '.',
+            ));
+
+            return null;
+        }
+
+        $command = $config['hooks']['package_command'] ?? 'php -d variables_order=EGPCS ' . TestbenchMcp::TESTBENCH . ' boost:install --guidelines --skills --no-interaction';
+
+        return $this->executeCommand(
+            (new BoostRegistrar)->declinesMcp($projectDir) ? $command : $command . ' --mcp',
+            ['APP_BASE_PATH' => $projectDir, 'APP_ENV' => 'local'],
+        );
+    }
+
+    private function isApp(string $projectDir): bool
     {
         return file_exists($projectDir . '/artisan');
     }
 
-    private function executeCommand(string $command): int
+    /**
+     * Whether Boost can run here at all: through `artisan` in an app, through
+     * Testbench in a repository with none.
+     */
+    private function composesBoost(string $projectDir): bool
     {
-        return (new SystemProcess)->run($command);
+        return $this->isApp($projectDir) || is_file($projectDir . '/' . TestbenchMcp::TESTBENCH);
+    }
+
+    /**
+     * @param  array<string, string>  $environment
+     */
+    private function executeCommand(string $command, array $environment = []): int
+    {
+        return (new SystemProcess)->run(command: $command, environment: $environment);
     }
 
     /**

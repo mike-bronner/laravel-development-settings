@@ -201,3 +201,22 @@ it('reports agents only when the config names at least one', function (string|fa
     'agents not a list' => [json_encode(['agents' => 'claude_code']), false],
     'not valid JSON' => ['{ this is not json', false],
 ]);
+
+it('reads MCP as declined only when the config sets it to false', function (string|false $contents, bool $expected): void {
+    $project = makeTempDir();
+
+    if ($contents !== false) {
+        file_put_contents($project . '/boost.json', $contents);
+    }
+
+    expect((new BoostRegistrar)->declinesMcp($project))->toBe($expected);
+
+    removeTempDir($project);
+})->with([
+    'mcp false' => [json_encode(['mcp' => false]), true],
+    'mcp true' => [json_encode(['mcp' => true]), false],
+    'no mcp key, as a fresh clone has it' => [json_encode(['packages' => ['mike-bronner/laravel-development-settings']]), false],
+    'mcp falsy but not false' => [json_encode(['mcp' => 0]), false],
+    'no file' => [false, false],
+    'not valid JSON' => ['{ this is not json', false],
+]);

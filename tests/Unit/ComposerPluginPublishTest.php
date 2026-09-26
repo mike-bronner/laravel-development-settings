@@ -26,27 +26,32 @@ const COMPOSES_NOTHING = 'composes nothing';
 const EXITS_WITH_ERROR = 'exits with an error';
 
 /**
- * The Boost command stand-in. It records having run, then does what Boost
- * does in the named case: write a composed block into `AGENTS.md`, write
- * nothing and exit 0 (no agent found), or exit non-zero.
+ * The Boost command stand-in. It records having run, which command it stood in
+ * for (`artisan` or `testbench`), the rooting environment it saw, whether
+ * Testbench's directories existed and whether it was asked for the MCP
+ * entries (`--mcp`, which the plugin appends), then does what Boost does in the named
+ * case: write a composed block into `AGENTS.md`, write nothing and exit 0 (no
+ * agent found), or exit non-zero.
  */
-function boostStandIn(string $behaviour): string
+function boostStandIn(string $behaviour, string $runner): string
 {
     $block = GuidelineGuard::OPENING_TAG . "\n=== rules ===\n" . GuidelineGuard::CLOSING_TAG . "\n";
+    $record = 'file_put_contents("boost.ran", json_encode(["runner" => ' . var_export($runner, true) . ', "APP_BASE_PATH" => getenv("APP_BASE_PATH"), "APP_ENV" => getenv("APP_ENV"), "directories" => is_dir("bootstrap/cache") && is_dir("storage/framework/views"), "mcp" => in_array("--mcp", $argv, true)]));';
 
-    $script = match ($behaviour) {
-        COMPOSES => 'touch("boost.ran"); file_put_contents("AGENTS.md", ' . var_export($block, true) . ');',
-        COMPOSES_NOTHING => 'touch("boost.ran");',
-        EXITS_WITH_ERROR => 'touch("boost.ran"); exit(1);',
+    $script = $record . match ($behaviour) {
+        COMPOSES => ' file_put_contents("AGENTS.md", ' . var_export($block, true) . ');',
+        COMPOSES_NOTHING => '',
+        EXITS_WITH_ERROR => ' exit(1);',
     };
 
-    return escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg($script);
+    // The trailing `--` hands an appended flag to the script, not to PHP.
+    return escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg($script) . ' --';
 }
 
 /**
  * A consuming project with the package installed in vendor.
  *
- * @param  array{app?: bool, boostInstalled?: bool, boost?: string, manifest?: array<string, list<string>>, sources?: array<string, string>, captured?: array<string, list<string>>, paths?: array<string, array<array-key, string>>}  $options
+ * @param  array{app?: bool, testbench?: bool, boostInstalled?: bool, boost?: string, manifest?: array<string, list<string>>, sources?: array<string, string>, captured?: array<string, list<string>>, paths?: array<string, array<array-key, string>>}  $options
  * @return array{0: string, 1: string} project dir, package dir
  */
 function makeConsumer(array $options = []): array
@@ -60,7 +65,8 @@ function makeConsumer(array $options = []): array
     $config = [
         'composer' => ['install' => [], 'remove' => []],
         'hooks' => [
-            'command' => boostStandIn($options['boost'] ?? COMPOSES),
+            'command' => boostStandIn($options['boost'] ?? COMPOSES, 'artisan'),
+            'package_command' => boostStandIn($options['boost'] ?? COMPOSES, 'testbench'),
             'description' => 'Composing Laravel Boost guidelines and skills...',
         ],
         'capture' => ['resources/boost'],
@@ -93,6 +99,11 @@ function makeConsumer(array $options = []): array
         mkdir($project . '/vendor/laravel/boost', 0755, true);
     }
 
+    if ($options['testbench'] ?? false) {
+        mkdir($project . '/vendor/bin', 0755, true);
+        file_put_contents($project . '/vendor/bin/testbench', "#!/usr/bin/env php\n");
+    }
+
     return [$project, $package];
 }
 
@@ -122,6 +133,14 @@ function boostRan(string $project): bool
     return file_exists($project . '/boost.ran');
 }
 
+/**
+ * @return array{runner: string, APP_BASE_PATH: string|false, APP_ENV: string|false, directories: bool, mcp: bool}
+ */
+function boostRun(string $project): array
+{
+    return json_decode((string) file_get_contents($project . '/boost.ran'), associative: true);
+}
+
 function boostConfigIn(string $project): array
 {
     return json_decode((string) file_get_contents($project . '/boost.json'), associative: true);
@@ -137,6 +156,85 @@ it('registers the package and composes in a fresh clone that has no boost.json',
         ->and($output)->toContain('1 new')
         ->and(boostRan($project))->toBeTrue()
         ->and($output)->toContain('Composing Laravel Boost guidelines and skills... done');
+
+    removeTempDir($project);
+});
+
+it('composes an app through artisan, unrooted, even with Testbench installed', function (): void {
+    [$project] = makeConsumer(['testbench' => true]);
+
+    publishIn($project);
+
+    expect(boostRun($project))->toBe(['runner' => 'artisan', 'APP_BASE_PATH' => false, 'APP_ENV' => false, 'directories' => false, 'mcp' => false])
+        ->and(is_dir($project . '/bootstrap'))->toBeFalse()
+        ->and(is_dir($project . '/storage'))->toBeFalse();
+
+    removeTempDir($project);
+});
+
+it('registers and composes a package through Testbench, rooted at the repository for that one command', function (): void {
+    [$project] = makeConsumer(['app' => false, 'testbench' => true]);
+
+    $output = publishIn($project);
+
+    expect(boostConfigIn($project))->toBe(['packages' => ['mike-bronner/laravel-development-settings']])
+        ->and($output)->toContain('boost.json (registered with Boost)')
+        ->and(boostRun($project))->toBe(['runner' => 'testbench', 'APP_BASE_PATH' => realpath($project), 'APP_ENV' => 'local', 'directories' => true, 'mcp' => true])
+        ->and($output)->toContain('Composing Laravel Boost guidelines and skills... done')
+        // The root reaches the one command, never the Composer process: every
+        // Testbench run after it, `boost:mcp` included, stays unrooted.
+        ->and(getenv('APP_BASE_PATH'))->toBeFalse()
+        ->and(getenv('APP_ENV'))->toBeFalse();
+
+    removeTempDir($project);
+});
+
+it('does not ask Boost for MCP entries in a package whose boost.json turns MCP off', function (): void {
+    [$project] = makeConsumer(['app' => false, 'testbench' => true]);
+    file_put_contents($project . '/boost.json', json_encode(['agents' => ['claude_code', 'copilot'], 'mcp' => false]));
+
+    publishIn($project);
+
+    expect(boostRun($project)['mcp'])->toBeFalse();
+
+    removeTempDir($project);
+});
+
+it('names the rooted Testbench install as the next step when a package composes nothing', function (): void {
+    [$project] = makeConsumer(['app' => false, 'testbench' => true, 'boost' => COMPOSES_NOTHING]);
+
+    $output = publishIn($project);
+
+    expect($output)->toContain('Run "APP_BASE_PATH=. APP_ENV=local php -d variables_order=EGPCS vendor/bin/testbench boost:install" once to choose them.')
+        ->and($output)->toContain('Run "APP_BASE_PATH=. APP_ENV=local php -d variables_order=EGPCS vendor/bin/testbench boost:install" and choose your agents.')
+        ->and($output)->not->toContain('php artisan');
+
+    removeTempDir($project);
+});
+
+it('names the rooted Testbench install when Boost fails in a package, and not the APP_ENV hint', function (): void {
+    [$project] = makeConsumer(['app' => false, 'testbench' => true, 'boost' => EXITS_WITH_ERROR]);
+
+    $output = publishIn($project);
+
+    expect($output)->toContain('... failed')
+        ->and($output)->toContain('Laravel Boost exited with an error. Run "APP_BASE_PATH=. APP_ENV=local php -d variables_order=EGPCS vendor/bin/testbench boost:install" to see why.')
+        ->and($output)->not->toContain('Boost registers its commands only when');
+
+    removeTempDir($project);
+});
+
+it('does not run Boost in a package when Testbench cannot get its directories, and says why', function (): void {
+    [$project] = makeConsumer(['app' => false, 'testbench' => true]);
+    file_put_contents($project . '/bootstrap', "not a directory\n");
+
+    $output = publishIn($project);
+
+    expect(boostRan($project))->toBeFalse()
+        ->and($output)->toContain('Composing Laravel Boost guidelines and skills... failed')
+        ->and($output)->toContain('Laravel Boost was not run: Testbench cannot boot without its directories. Could not create')
+        ->and($output)->not->toContain('exited with an error')
+        ->and($output)->not->toContain('done');
 
     removeTempDir($project);
 });
@@ -204,7 +302,7 @@ it('does not warn about agents when boost.json names them', function (): void {
     removeTempDir($project);
 });
 
-it('neither registers nor composes in a package, which has no artisan', function (): void {
+it('neither registers nor composes in a package without Testbench, and says what is missing', function (): void {
     [$project] = makeConsumer(['app' => false]);
 
     $output = publishIn($project);
@@ -212,7 +310,19 @@ it('neither registers nor composes in a package, which has no artisan', function
     expect(file_exists($project . '/boost.json'))->toBeFalse()
         ->and(boostRan($project))->toBeFalse()
         ->and($output)->not->toContain('registered with Boost')
-        ->and($output)->not->toContain('Composing Laravel Boost');
+        ->and($output)->not->toContain('Composing Laravel Boost')
+        ->and($output)->toContain('This repository has no artisan and no vendor/bin/testbench, so Laravel Boost was not run. Require orchestra/testbench as a dev dependency');
+
+    removeTempDir($project);
+});
+
+it('stays quiet in a package without Testbench while Boost is still queued for installation', function (): void {
+    [$project] = makeConsumer(['app' => false, 'boostInstalled' => false]);
+
+    $output = publishIn($project);
+
+    expect(boostRan($project))->toBeFalse()
+        ->and($output)->not->toContain('Laravel Boost');
 
     removeTempDir($project);
 });

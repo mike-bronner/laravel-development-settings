@@ -57,11 +57,11 @@ it('ships no managed source that holds the sync marker', function (): void {
     }
 });
 
-it('ships a rooting testbench.yaml and ignores it in the project', function (): void {
+it('ships no testbench.yaml, which would root boost:mcp where no Boost tool can run', function (): void {
     $root = dirname(__DIR__, 2);
     $files = FileDiscovery::trackedPaths((require $root . '/config/development-settings.php')['paths']['files']);
+    $manifest = json_decode((string) file_get_contents($root . '/manifest.json'), associative: true);
 
-    expect($files)->toHaveKey('testbench.yaml')
-        ->and(file_get_contents($root . '/' . $files['testbench.yaml']))->toBe("laravel: ./\n")
-        ->and(explode("\n", (string) file_get_contents($root . '/' . $files['.gitignore'])))->toContain('/testbench.yaml');
+    expect($files)->not->toHaveKey('testbench.yaml')
+        ->and($manifest)->not->toHaveKey('testbench.yaml');
 });
