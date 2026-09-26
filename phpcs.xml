@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!--
+    Shared PHP_CodeSniffer config, synced by mike-bronner/laravel-development-settings.
+    An edited copy is kept as a local modification and proposed back upstream.
+-->
+<ruleset>
+    <description>The CleanCode standard over the whole project.</description>
+
+    <!--
+        The project root, not a list of directories: PHP_CodeSniffer stops with
+        an error on a listed path that does not exist, and applications and
+        packages keep their code in different ones. The patterns are relative to
+        the checked path, so they exclude these root directories only.
+    -->
+    <file>.</file>
+    <exclude-pattern type="relative">^bootstrap/cache/*</exclude-pattern>
+    <exclude-pattern type="relative">^node_modules/*</exclude-pattern>
+    <exclude-pattern type="relative">^public/*</exclude-pattern>
+    <exclude-pattern type="relative">^storage/*</exclude-pattern>
+    <exclude-pattern type="relative">^vendor/*</exclude-pattern>
+
+    <rule ref="CleanCode"/>
+</ruleset>

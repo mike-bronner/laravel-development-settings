@@ -12,9 +12,9 @@ return [
             'laravel/boost' => '^2.9',
             'laravel/pint' => '^1.24',
         ],
-        // PHP_CodeSniffer belongs to mike-bronner/phpcs-rules, not this
-        // package. A project that also requires phpcs-rules keeps slevomat as
-        // its transitive dependency.
+        // The PHP_CodeSniffer rules belong to mike-bronner/clean-code, which
+        // this package requires, so slevomat stays installed as its transitive
+        // dependency.
         'remove' => [
             'slevomat/coding-standard',
         ],
@@ -68,6 +68,10 @@ return [
             // dotted copy would act as a real ignore file for its own
             // directory).
             'resources/project/gitignore' => '.gitignore',
+            // Runs the CleanCode standard from mike-bronner/clean-code. It
+            // ships under the path releases before 0.3.3 used, so their
+            // unmodified copies are known versions and are replaced.
+            'phpcs.xml',
             'phpmd.xml',
             'pint.json',
             '.github/workflows/sync-developer-settings.yml',
