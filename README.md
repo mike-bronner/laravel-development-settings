@@ -15,10 +15,10 @@ That's it. The package automatically syncs files and manages dependencies on eve
 This package is a Composer plugin that hooks into Composer's pre-update, post-install and post-update events. Before an update, it offers to contribute any edits you made to its installed guidelines and skills (see "Contributing edits made in vendor" below). After an install or update, it:
 
 1. **Syncs tracked config files** (`pint.json`, `phpmd.xml`, …) from the package into your project
-2. **Registers itself with Laravel Boost** by adding its name to the `packages` list in your `boost.json` (wherever Boost can run: an application, or a package with Orchestra Testbench installed)
+2. **Registers itself with Laravel Boost** by adding its name to the `packages` list in your `boost.json` (wherever Boost can run: an application, or a package with Orchestra Testbench installed). In a package it also writes an `artisan` shim and a managed `.gitattributes` (see "Packages" below)
 3. **Installs or removes dev dependencies** as defined in the package config
 4. **Preserves local modifications** — changed files aren't overwritten, and removed-upstream files you customized aren't deleted without asking
-5. **Composes Laravel Boost** — apps run `php artisan boost:install --no-interaction` with `--guidelines --skills --mcp`, whatever your `boost.json` says; packages run the same install through Orchestra Testbench (see "Packages" below). Composition is refused, by file and with the reason, when it would overwrite hand-written content (see "Why a run can refuse to compose" below). A run that composes nothing is reported as failed (see "Choosing your agents" below)
+5. **Composes Laravel Boost** — apps run `php artisan boost:install --no-interaction` with `--guidelines --skills --mcp`, whatever your `boost.json` says; packages run the same command through the `artisan` shim (see "Packages" below). Composition is refused, by file and with the reason, when it would overwrite hand-written content (see "Why a run can refuse to compose" below). A run that composes nothing is reported as failed (see "Choosing your agents" below)
 6. **Removes the legacy `.ai` symlink and `.dev-settings-boost` file** left by releases before the move to `resources/boost` (see "Upgrading" below)
 
 ### How the AI guidelines and skills reach your project
@@ -34,17 +34,15 @@ Your project is a **direct** dependency's consumer or it gets nothing: Boost exc
 
 ### Packages
 
-A package has no `artisan`, so the plugin composes it through Orchestra Testbench (`vendor/bin/testbench`). Nothing needs setting up: `composer update` is the whole procedure. For that one command, the plugin roots Testbench at your repository, so Boost reads your `composer.lock` and writes `boost.json`, the skills and the agent files into your repository rather than into vendor. It creates `bootstrap/cache` and `storage/framework/views` first, because Testbench cannot boot rooted without them. The shipped `.gitignore` ignores both.
+A package has no `artisan` of its own. When it has Orchestra Testbench installed (`vendor/bin/testbench`), the plugin writes one: a short shim that boots Testbench rooted at your repository. From then on the package runs Boost the way an app does. `composer update` runs `php artisan boost:install`, Boost writes `boost.json`, the skills, the agent files and `php artisan boost:mcp` MCP entries into your repository, and every MCP tool works, `record-rule` included. MCP entries an earlier release pointed at `vendor/bin/testbench` are rewritten by the same run. Choose your agents with `php artisan boost:install`, as in an app.
 
-The same run writes Boost's MCP entries, as it does in an app. Boost writes them as `php artisan boost:mcp`, which cannot start in a package, so the plugin then points every existing entry at `php vendor/bin/testbench boost:mcp`. That server is deliberately not rooted: a rooted one cannot run a single tool. Its documentation search is not narrowed to your package's versions, which is a Boost limitation.
+Commit the shim. Its first comment line marks it as this package's file: an `artisan` without that line is an app's and is never touched. The plugin updates a shim it shipped before and keeps one you edited, listing it as locally modified. The shim creates `bootstrap/cache` and `storage/framework/views` on each run, because Testbench cannot boot rooted without them. The shipped `.gitignore` ignores both. Without Testbench installed, the shim stops with an error that names the missing dependency.
 
-To choose your agents in a package, run the rooted install yourself:
+The shim must not reach the people who install your package, so the plugin also manages a `.gitattributes` that marks `/artisan` as `export-ignore`, keeping it out of the Composer dist archive. It works like the managed `.gitignore`: the plugin owns the lines above the sync marker, and your own rules go below it. An existing `.gitattributes` has no marker yet, so an interactive `composer update` offers to add it and moves your whole file below it. A non-interactive run only warns, and the shim stays in your archive until you accept.
 
-```bash
-APP_BASE_PATH=. APP_ENV=local php -d variables_order=EGPCS vendor/bin/testbench boost:install
-```
+`php artisan test` runs your suite rooted at the repository, like every Artisan command. `vendor/bin/phpunit` is unaffected.
 
-The next `composer update` points its MCP entries at Testbench. A package without `orchestra/testbench` is not composed, and the run says so.
+A package without `orchestra/testbench` gets no shim and is not composed, and the run says so.
 
 ### Choosing your agents
 
@@ -218,12 +216,12 @@ The `manifest.json` tracks every known checksum of all managed files. It is how 
 When releasing a new version:
 
 1. Update the source files (`config/development-settings.php` paths if adding/removing)
-2. Run `composer dev-settings:manifest` to regenerate `manifest.json` and `capture-manifest.json`
+2. Run `composer dev-settings:manifest` to regenerate `manifest.json`, `capture-manifest.json` and `package-manifest.json`
 3. Commit and tag a new release
 
-`capture-manifest.json` is its sibling for the guideline and skill sources under `resources/boost`, keyed on package paths. It only feeds the edit check above. It is kept out of `manifest.json` on purpose: copy-sync and orphan cleanup read that file on project paths, and a `resources/boost/…` key there would let cleanup delete a consuming package's own `resources/boost` files. The same command generates both, append-only.
+`capture-manifest.json` is its sibling for the guideline and skill sources under `resources/boost`, keyed on package paths. It only feeds the edit check above. It is kept out of `manifest.json` on purpose: copy-sync and orphan cleanup read that file on project paths, and a `resources/boost/…` key there would let cleanup delete a consuming package's own `resources/boost` files. `package-manifest.json` holds the known versions of the files only a package receives: the `artisan` shim and the `.gitattributes`. The plugin reads it only in a package with Testbench. Kept in `manifest.json`, the `artisan` key would reach every app, where copy-sync would call the app's own `artisan` locally modified and orphan cleanup would offer to delete it. The same command generates all three, append-only.
 
-CI can guard against a stale manifest with `php bin/generate-manifest.php --check` (exits non-zero if regenerating either file would change anything).
+CI can guard against a stale manifest with `php bin/generate-manifest.php --check` (exits non-zero if regenerating any of the files would change anything).
 
 ## 🧪 Local Development
 

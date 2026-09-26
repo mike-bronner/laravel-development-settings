@@ -12,6 +12,7 @@ use MikeBronner\DevelopmentSettings\Support\ContributionDetector;
 use MikeBronner\DevelopmentSettings\Support\GuidelineGuard;
 use MikeBronner\DevelopmentSettings\Support\LegacyFingerprint;
 use MikeBronner\DevelopmentSettings\Support\ManagedSection;
+use MikeBronner\DevelopmentSettings\Support\PackageRepository;
 use Symfony\Component\Console\Output\ConsoleOutput;
 
 /*
@@ -19,40 +20,39 @@ use Symfony\Component\Console\Output\ConsoleOutput;
  * project on disk. The package it installs from is a real directory under
  * `vendor/mike-bronner/laravel-development-settings` whose config names no dependencies
  * (so no `composer update` is ever spawned) and whose Boost command is a stand-in.
+ * It ships this repository's own artisan shim and .gitattributes sources.
  */
 
 const COMPOSES = 'composes';
 const COMPOSES_NOTHING = 'composes nothing';
 const EXITS_WITH_ERROR = 'exits with an error';
 
-/**
- * The Boost command stand-in. It records having run, which command it stood in
- * for (`artisan` or `testbench`), the rooting environment it saw, whether
- * Testbench's directories existed and the arguments the plugin appended, then
- * does what Boost does in the named case: write a composed block into
- * `AGENTS.md`, write nothing and exit 0 (no agent found), or exit non-zero.
- */
-function boostStandIn(string $behaviour, string $runner): string
+// The Boost command stand-in, as PHP code. It records having run, the rooting
+// it saw and the arguments it was given, then does what Boost does in the
+// named case: write a composed block into `AGENTS.md`, write nothing and exit
+// 0 (no agent found), or exit non-zero.
+function boostScript(string $behaviour): string
 {
     $block = GuidelineGuard::OPENING_TAG . "\n=== rules ===\n" . GuidelineGuard::CLOSING_TAG . "\n";
-    $record = 'file_put_contents("boost.ran", json_encode(["runner" => ' . var_export($runner, true) . ', "APP_BASE_PATH" => getenv("APP_BASE_PATH"), "APP_ENV" => getenv("APP_ENV"), "directories" => is_dir("bootstrap/cache") && is_dir("storage/framework/views"), "flags" => array_slice($argv, 1)]));';
+    $record = 'file_put_contents("boost.ran", json_encode(["APP_BASE_PATH" => $_ENV["APP_BASE_PATH"] ?? null, "APP_ENV" => $_ENV["APP_ENV"] ?? null, "TESTBENCH_WORKING_PATH" => getenv("TESTBENCH_WORKING_PATH"), "directories" => is_dir("bootstrap/cache") && is_dir("storage/framework/views"), "arguments" => array_slice($argv, 1)]));';
 
-    $script = $record . match ($behaviour) {
+    return $record . match ($behaviour) {
         COMPOSES => ' file_put_contents("AGENTS.md", ' . var_export($block, true) . '); echo "Boost stand-in composed AGENTS.md\n";',
         COMPOSES_NOTHING => ' echo "Boost stand-in found no agent\n";',
-        EXITS_WITH_ERROR => ' fwrite(STDERR, "Boost stand-in: <error>command \"boost:install\"</error> is not defined\n"); exit(1);',
+        EXITS_WITH_ERROR => ' fwrite(STDERR, "Boost stand-in: <error>command \\"boost:install\\"</error> is not defined\n"); exit(1);',
     };
-
-    // The trailing `--` hands an appended flag to the script, not to PHP.
-    return escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg($script) . ' --';
 }
 
-/**
- * A consuming project with the package installed in vendor.
- *
- * @param  array{app?: bool, testbench?: bool, boostInstalled?: bool, boost?: string, manifest?: array<string, list<string>>, sources?: array<string, string>, captured?: array<string, list<string>>, paths?: array<string, array<array-key, string>>}  $options
- * @return array{0: string, 1: string} project dir, package dir
- */
+// The Boost command, run straight through PHP. The trailing `--` hands an
+// appended flag to the script, not to PHP.
+function boostStandIn(string $behaviour): string
+{
+    return escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg(boostScript($behaviour)) . ' --';
+}
+
+// A consuming project with the package installed in vendor. `command`
+// replaces the Boost command, `packageManifest` the shipped package-manifest.json,
+// and `testbench` installs a Testbench that runs the Boost stand-in.
 function makeConsumer(array $options = []): array
 {
     $project = makeTempDir('devset-publish-');
@@ -64,10 +64,10 @@ function makeConsumer(array $options = []): array
     $config = [
         'composer' => ['install' => [], 'remove' => []],
         'hooks' => [
-            'command' => boostStandIn($options['boost'] ?? COMPOSES, 'artisan'),
-            'package_command' => boostStandIn($options['boost'] ?? COMPOSES, 'testbench'),
+            'command' => $options['command'] ?? boostStandIn($options['boost'] ?? COMPOSES),
             'description' => 'Composing Laravel Boost guidelines and skills...',
         ],
+        'package' => (require dirname(__DIR__, 2) . '/config/development-settings.php')['package'],
         'capture' => ['resources/boost'],
         'paths' => [
             'directories' => [],
@@ -81,6 +81,15 @@ function makeConsumer(array $options = []): array
     file_put_contents($package . '/config/development-settings.php', '<?php return ' . var_export($config, true) . ';');
     file_put_contents($package . '/manifest.json', json_encode($options['manifest'] ?? new stdClass) . "\n");
     file_put_contents($package . '/' . ContributionDetector::MANIFEST_FILE, json_encode($options['captured'] ?? new stdClass) . "\n");
+    file_put_contents($package . '/' . PackageRepository::MANIFEST_FILE, json_encode($options['packageManifest'] ?? shippedPackageManifest()) . "\n");
+
+    foreach (array_keys($config['package']['files']) as $source) {
+        if (! is_dir(dirname($package . '/' . $source))) {
+            mkdir(dirname($package . '/' . $source), 0755, true);
+        }
+
+        copy(dirname(__DIR__, 2) . '/' . $source, $package . '/' . $source);
+    }
 
     foreach ($options['sources'] ?? [] as $relativePath => $content) {
         if (! is_dir(dirname($package . '/' . $relativePath))) {
@@ -100,7 +109,7 @@ function makeConsumer(array $options = []): array
 
     if ($options['testbench'] ?? false) {
         mkdir($project . '/vendor/bin', 0755, true);
-        file_put_contents($project . '/vendor/bin/testbench', "#!/usr/bin/env php\n");
+        file_put_contents($project . '/' . PackageRepository::TESTBENCH, "<?php\n" . boostScript($options['boost'] ?? COMPOSES) . "\n");
     }
 
     return [$project, $package];
@@ -125,6 +134,17 @@ function publishIn(string $project, string $hook = 'doPublish', bool $interactiv
     }
 
     return $io->getOutput();
+}
+
+// The package manifest as this repository ships it: every current source known.
+function shippedPackageManifest(): array
+{
+    return json_decode((string) file_get_contents(dirname(__DIR__, 2) . '/' . PackageRepository::MANIFEST_FILE), associative: true);
+}
+
+function shimSource(): string
+{
+    return (string) file_get_contents(dirname(__DIR__, 2) . '/resources/project/artisan');
 }
 
 function boostRan(string $project): bool
@@ -158,31 +178,79 @@ it('registers the package and composes in a fresh clone that has no boost.json',
     removeTempDir($project);
 });
 
-it('composes an app through artisan, unrooted, even with Testbench installed', function (): void {
+it('composes an app through its own artisan, and gives it no package file, even with Testbench installed', function (): void {
     [$project] = makeConsumer(['testbench' => true]);
+    file_put_contents($project . '/.gitattributes', "* text=auto\n");
 
-    publishIn($project);
+    $output = publishIn($project);
 
-    expect(boostRun($project))->toBe(['runner' => 'artisan', 'APP_BASE_PATH' => false, 'APP_ENV' => false, 'directories' => false, 'flags' => ['--guidelines', '--skills', '--mcp']])
+    expect(boostRun($project)['arguments'])->toBe(['--guidelines', '--skills', '--mcp'])
+        ->and(boostRun($project)['APP_BASE_PATH'])->toBeNull()
+        ->and(file_get_contents($project . '/artisan'))->toBe("#!/usr/bin/env php\n")
+        ->and(file_get_contents($project . '/.gitattributes'))->toBe("* text=auto\n")
+        ->and($output)->not->toMatch('/  (artisan|\.gitattributes)\b/')
         ->and(is_dir($project . '/bootstrap'))->toBeFalse()
         ->and(is_dir($project . '/storage'))->toBeFalse();
 
     removeTempDir($project);
 });
 
-it('registers and composes a package through Testbench, rooted at the repository for that one command', function (): void {
-    [$project] = makeConsumer(['app' => false, 'testbench' => true]);
+// The package manifest knows `artisan`. An app's own artisan is no version of
+// it, so if the manifest reached an app, copy-sync would call that file locally
+// modified and orphan cleanup would offer to delete it.
+it("never reports or offers to delete an app's own artisan", function (): void {
+    [$project] = makeConsumer([
+        'testbench' => true,
+        'packageManifest' => [...shippedPackageManifest(), 'artisan' => [md5("#!/usr/bin/env php\n")], 'retired.txt' => [md5("x\n")]],
+    ]);
 
     $output = publishIn($project);
 
-    expect(boostConfigIn($project))->toBe(['packages' => ['mike-bronner/laravel-development-settings']])
+    expect(file_get_contents($project . '/artisan'))->toBe("#!/usr/bin/env php\n")
+        ->and($output)->not->toMatch('/  artisan\b/')
+        ->and($output)->toContain('0 removed');
+
+    removeTempDir($project);
+});
+
+it('writes the artisan shim and the managed .gitattributes into a package with Testbench, then composes through the shim', function (): void {
+    [$project, $package] = makeConsumer(['app' => false, 'testbench' => true]);
+
+    $output = publishIn($project);
+
+    expect(file_get_contents($project . '/artisan'))->toBe(shimSource())
+        ->and(file_get_contents($project . '/.gitattributes'))->toBe(file_get_contents($package . '/resources/project/gitattributes') . ManagedSection::MARKER . "\n")
+        ->and($output)->toMatch('/\+  artisan /')
+        ->and($output)->toMatch('/\+  \.gitattributes /')
+        ->and(boostConfigIn($project))->toBe(['packages' => ['mike-bronner/laravel-development-settings']])
         ->and($output)->toContain('boost.json (registered with Boost)')
-        ->and(boostRun($project))->toBe(['runner' => 'testbench', 'APP_BASE_PATH' => realpath($project), 'APP_ENV' => 'local', 'directories' => true, 'flags' => ['--guidelines', '--skills', '--mcp']])
-        ->and($output)->toContain('Composing Laravel Boost guidelines and skills... done')
-        // The root reaches the one command, never the Composer process: every
-        // Testbench run after it, `boost:mcp` included, stays unrooted.
-        ->and(getenv('APP_BASE_PATH'))->toBeFalse()
-        ->and(getenv('APP_ENV'))->toBeFalse();
+        ->and(boostRun($project)['arguments'])->toBe(['--guidelines', '--skills', '--mcp'])
+        ->and($output)->toContain('Composing Laravel Boost guidelines and skills... done');
+
+    removeTempDir($project);
+});
+
+// The real shim runs the real command line, and the Testbench it boots is the
+// stand-in: this is the path `php artisan boost:install` takes in a package.
+it('runs Boost in a package through the shim, rooted at the repository, and never roots Composer', function (): void {
+    [$project] = makeConsumer([
+        'app' => false,
+        'testbench' => true,
+        'command' => escapeshellarg(PHP_BINARY) . ' artisan boost:install --no-interaction',
+    ]);
+
+    $output = publishIn($project);
+
+    expect(boostRun($project))->toBe([
+        'APP_BASE_PATH' => realpath($project),
+        'APP_ENV' => 'local',
+        'TESTBENCH_WORKING_PATH' => realpath($project),
+        'directories' => true,
+        'arguments' => ['boost:install', '--no-interaction', '--guidelines', '--skills', '--mcp'],
+    ])
+        ->and($output)->toContain('... done')
+        ->and($_ENV['APP_BASE_PATH'] ?? null)->toBeNull()
+        ->and(getenv('TESTBENCH_WORKING_PATH'))->toBeFalse();
 
     removeTempDir($project);
 });
@@ -193,7 +261,7 @@ it('passes Boost every feature, whatever boost.json says, in an app and in a pac
 
     publishIn($project);
 
-    expect(boostRun($project)['flags'])->toBe(['--guidelines', '--skills', '--mcp']);
+    expect(boostRun($project)['arguments'])->toBe(['--guidelines', '--skills', '--mcp']);
 
     removeTempDir($project);
 })->with([
@@ -205,41 +273,72 @@ it('passes Boost every feature, whatever boost.json says, in an app and in a pac
     'every feature off' => [['guidelines' => false, 'skills' => false, 'mcp' => false]],
 ]);
 
-it('names the rooted Testbench install as the next step when a package composes nothing', function (): void {
+it('updates a shim this package shipped before', function (): void {
+    $old = str_replace('rooted at this repository.', "rooted at this repository.\n// An older release.", shimSource());
+    [$project] = makeConsumer([
+        'app' => false,
+        'testbench' => true,
+        'packageManifest' => [...shippedPackageManifest(), 'artisan' => [md5($old), md5(shimSource())]],
+    ]);
+    file_put_contents($project . '/artisan', $old);
+
+    $output = publishIn($project);
+
+    expect(file_get_contents($project . '/artisan'))->toBe(shimSource())
+        ->and($output)->toMatch('/↻  artisan /')
+        ->and(boostRan($project))->toBeTrue();
+
+    removeTempDir($project);
+});
+
+it('keeps an edited shim and names it as locally modified', function (): void {
+    $edited = shimSource() . "// Mine.\n";
+    [$project] = makeConsumer(['app' => false, 'testbench' => true]);
+    file_put_contents($project . '/artisan', $edited);
+
+    $output = publishIn($project);
+
+    expect(file_get_contents($project . '/artisan'))->toBe($edited)
+        ->and($output)->toContain('artisan (locally modified)')
+        ->and(boostRan($project))->toBeTrue();
+
+    removeTempDir($project);
+});
+
+it('does not run Boost through a shim whose Testbench is gone, and says what is missing', function (): void {
+    [$project] = makeConsumer(['app' => false]);
+    file_put_contents($project . '/artisan', shimSource());
+
+    $output = publishIn($project);
+
+    expect(file_get_contents($project . '/artisan'))->toBe(shimSource())
+        ->and(boostRan($project))->toBeFalse()
+        ->and(file_exists($project . '/boost.json'))->toBeFalse()
+        ->and($output)->toContain('no artisan of its own and no vendor/bin/testbench, so Laravel Boost was not run');
+
+    removeTempDir($project);
+});
+
+it("only warns about a package's own unmarked .gitattributes in a non-interactive run", function (): void {
+    [$project] = makeConsumer(['app' => false, 'testbench' => true]);
+    file_put_contents($project . '/.gitattributes', "/tests export-ignore\n");
+
+    $output = publishIn($project);
+
+    expect(file_get_contents($project . '/.gitattributes'))->toBe("/tests export-ignore\n")
+        ->and($output)->toContain('.gitattributes (locally modified, no sync marker)')
+        ->and(file_get_contents($project . '/artisan'))->toBe(shimSource());
+
+    removeTempDir($project);
+});
+
+it('names the artisan install as the next step when a package composes nothing', function (): void {
     [$project] = makeConsumer(['app' => false, 'testbench' => true, 'boost' => COMPOSES_NOTHING]);
 
     $output = publishIn($project);
 
-    expect($output)->toContain('Run "APP_BASE_PATH=. APP_ENV=local php -d variables_order=EGPCS vendor/bin/testbench boost:install" once to choose them.')
-        ->and($output)->toContain('Run "APP_BASE_PATH=. APP_ENV=local php -d variables_order=EGPCS vendor/bin/testbench boost:install" and choose your agents.')
-        ->and($output)->not->toContain('php artisan');
-
-    removeTempDir($project);
-});
-
-it('names the rooted Testbench install when Boost fails in a package, and not the APP_ENV hint', function (): void {
-    [$project] = makeConsumer(['app' => false, 'testbench' => true, 'boost' => EXITS_WITH_ERROR]);
-
-    $output = publishIn($project);
-
-    expect($output)->toContain('... failed')
-        ->and($output)->toContain('Laravel Boost exited with an error. Run "APP_BASE_PATH=. APP_ENV=local php -d variables_order=EGPCS vendor/bin/testbench boost:install" to see why.')
-        ->and($output)->not->toContain('Boost registers its commands only when');
-
-    removeTempDir($project);
-});
-
-it('does not run Boost in a package when Testbench cannot get its directories, and says why', function (): void {
-    [$project] = makeConsumer(['app' => false, 'testbench' => true]);
-    file_put_contents($project . '/bootstrap', "not a directory\n");
-
-    $output = publishIn($project);
-
-    expect(boostRan($project))->toBeFalse()
-        ->and($output)->toContain('Composing Laravel Boost guidelines and skills... failed')
-        ->and($output)->toContain('Laravel Boost was not run: Testbench cannot boot without its directories. Could not create')
-        ->and($output)->not->toContain('exited with an error')
-        ->and($output)->not->toContain('done');
+    expect($output)->toContain('Run "php artisan boost:install" once to choose them.')
+        ->and($output)->toContain('Run "php artisan boost:install" and choose your agents.');
 
     removeTempDir($project);
 });
@@ -310,16 +409,18 @@ it('does not warn about agents when boost.json names them', function (): void {
     removeTempDir($project);
 });
 
-it('neither registers nor composes in a package without Testbench, and says what is missing', function (): void {
+it('neither writes the shim, registers nor composes in a package without Testbench, and says what is missing', function (): void {
     [$project] = makeConsumer(['app' => false]);
 
     $output = publishIn($project);
 
     expect(file_exists($project . '/boost.json'))->toBeFalse()
+        ->and(file_exists($project . '/artisan'))->toBeFalse()
+        ->and(file_exists($project . '/.gitattributes'))->toBeFalse()
         ->and(boostRan($project))->toBeFalse()
         ->and($output)->not->toContain('registered with Boost')
         ->and($output)->not->toContain('Composing Laravel Boost')
-        ->and($output)->toContain('This repository has no artisan and no vendor/bin/testbench, so Laravel Boost was not run. Require orchestra/testbench as a dev dependency');
+        ->and($output)->toContain('This repository has no artisan of its own and no vendor/bin/testbench, so Laravel Boost was not run. Require orchestra/testbench as a dev dependency');
 
     removeTempDir($project);
 });
@@ -747,64 +848,10 @@ it('does not touch a .gitignore holding the sync marker twice, and says why', fu
     removeTempDir($project);
 });
 
-it('captures before an update, publishes after install and update, then routes MCP after the root scripts', function (): void {
+it('captures before an update and publishes after install and update', function (): void {
     expect(ComposerPlugin::getSubscribedEvents())->toBe([
         'pre-update-cmd' => 'captureBeforeUpdate',
-        'post-install-cmd' => [['publish', 0], ['routeMcpThroughTestbench', -1]],
-        'post-update-cmd' => [['publish', 0], ['routeMcpThroughTestbench', -1]],
+        'post-install-cmd' => 'publish',
+        'post-update-cmd' => 'publish',
     ]);
-});
-
-function boostMcpEntry(string $project): array
-{
-    return json_decode((string) file_get_contents($project . '/.mcp.json'), associative: true)['mcpServers']['laravel-boost'];
-}
-
-it('routes the Boost MCP server through Testbench in a package, and says so', function (): void {
-    [$project] = makeConsumer(['app' => false]);
-    file_put_contents($project . '/.mcp.json', json_encode(['mcpServers' => ['laravel-boost' => ['command' => 'php', 'args' => ['artisan', 'boost:mcp']]]]));
-
-    $output = publishIn($project, 'doRouteMcpThroughTestbench');
-
-    expect(boostMcpEntry($project)['args'])->toBe(['vendor/bin/testbench', 'boost:mcp'])
-        ->and($output)->toContain('.mcp.json now runs the Boost MCP server through vendor/bin/testbench.');
-
-    removeTempDir($project);
-});
-
-it('leaves the Boost MCP server of an app, which has artisan, as Boost wrote it', function (): void {
-    [$project] = makeConsumer();
-    $content = json_encode(['mcpServers' => ['laravel-boost' => ['command' => 'php', 'args' => ['artisan', 'boost:mcp']]]]);
-    file_put_contents($project . '/.mcp.json', $content);
-
-    $output = publishIn($project, 'doRouteMcpThroughTestbench');
-
-    expect(file_get_contents($project . '/.mcp.json'))->toBe($content)
-        ->and($output)->toBe('');
-
-    removeTempDir($project);
-});
-
-it('names a config it could not route through Testbench, and why', function (): void {
-    [$project] = makeConsumer(['app' => false]);
-    mkdir($project . '/.zed');
-    file_put_contents($project . '/.zed/settings.json', "{\n  // mine\n  \"context_servers\": {\"laravel-boost\": {\"command\": \"php\", \"args\": [\"artisan\", \"boost:mcp\"]}},\n}\n");
-
-    $output = publishIn($project, 'doRouteMcpThroughTestbench');
-
-    expect($output)->toContain('.zed/settings.json holds a Boost MCP entry that was not pointed at vendor/bin/testbench: it is not plain JSON');
-
-    removeTempDir($project);
-});
-
-it('routes nothing when this package is not installed, as in its own repository', function (): void {
-    $project = makeTempDir('devset-publish-');
-    $content = json_encode(['mcpServers' => ['laravel-boost' => ['command' => 'php', 'args' => ['artisan', 'boost:mcp']]]]);
-    file_put_contents($project . '/.mcp.json', $content);
-
-    publishIn($project, 'doRouteMcpThroughTestbench');
-
-    expect(file_get_contents($project . '/.mcp.json'))->toBe($content);
-
-    removeTempDir($project);
 });

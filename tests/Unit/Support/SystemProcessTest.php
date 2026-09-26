@@ -26,17 +26,12 @@ it('answers only the exit code through run()', function (): void {
         ->and($process->run(phpCommand('exit(3);')))->toBe(3);
 });
 
-it('runs in the working directory and passes extra environment variables to the command only', function (): void {
+it('runs in the working directory', function (): void {
     $directory = makeTempDir();
 
-    $result = (new SystemProcess)->capture(
-        phpCommand('echo getcwd(), "|", getenv("DEVSET_PROBE");'),
-        $directory,
-        ['DEVSET_PROBE' => 'reached'],
-    );
+    $result = (new SystemProcess)->capture(phpCommand('echo getcwd();'), $directory);
 
-    expect($result->output)->toBe(realpath($directory) . '|reached')
-        ->and(getenv('DEVSET_PROBE'))->toBeFalse();
+    expect($result->output)->toBe(realpath($directory));
 
     removeTempDir($directory);
 });

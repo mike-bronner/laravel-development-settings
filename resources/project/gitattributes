@@ -1,0 +1,3 @@
+# The artisan shim runs this repository's development tools, so it stays out of
+# the Composer dist archive.
+/artisan export-ignore

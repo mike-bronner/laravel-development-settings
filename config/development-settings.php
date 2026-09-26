@@ -19,25 +19,15 @@ return [
         'remove' => [],
     ],
 
-    // Boost composition commands. `command` runs in full Laravel apps, through
-    // their own artisan. `package_command` runs in a repository with no
-    // artisan, through Orchestra Testbench, and only when vendor/bin/testbench
-    // is installed.
+    // Boost composition command. It runs wherever the project has an artisan:
+    // a full Laravel app's own, or, in a package repository, the shim listed
+    // under `package` below, which boots Orchestra Testbench rooted at the
+    // repository. Either way Boost reads the project's composer files and
+    // writes boost.json, the skills, the agent files and its MCP entries into
+    // the project.
     //
-    // The package command is rooted at the repository for this one run, so
-    // Boost reads the repository's composer files and writes boost.json and the
-    // skills there instead of into vendor's Testbench skeleton. The plugin sets
-    // APP_BASE_PATH (the repository) and APP_ENV=local on the command only:
-    // Testbench reads APP_BASE_PATH from $_ENV alone, hence the
-    // variables_order flag, and a rooted Testbench boots as production, where
-    // Boost registers no commands. No testbench.yaml is shipped for this: it
-    // would root every Testbench run, and a rooted boost:mcp cannot run a
-    // single tool, because Boost runs them through the base path's artisan.
-    // In a package the plugin then points Boost's MCP entries at an unrooted
-    // vendor/bin/testbench.
-    //
-    // The plugin appends --guidelines --skills --mcp to both commands, so every
-    // project gets all three Boost features, whatever its boost.json says.
+    // The plugin appends --guidelines --skills --mcp, so every project gets
+    // all three Boost features, whatever its boost.json says.
     //
     // `boost:install`, not `boost:update`: `boost.json` is gitignored, so a
     // fresh clone has none, and `boost:update` composes nothing from a config
@@ -46,7 +36,6 @@ return [
     // any, and otherwise from what Boost detects on the machine.
     'hooks' => [
         'command' => 'php artisan boost:install --no-interaction',
-        'package_command' => 'php -d variables_order=EGPCS vendor/bin/testbench boost:install --no-interaction',
         'description' => 'Composing Laravel Boost...',
     ],
 
@@ -59,6 +48,28 @@ return [
     // package's own resources/boost files for this package's orphans.
     'capture' => [
         'resources/boost',
+    ],
+
+    // Files synced only into a package repository: one with no artisan of its
+    // own and with vendor/bin/testbench installed. They follow the rules of
+    // `paths` below, with their own checksums in package-manifest.json. They
+    // stay out of `paths` and manifest.json because an app holds its own
+    // artisan, and copy-sync would report it as locally modified while orphan
+    // cleanup offered to delete it.
+    //
+    // The artisan shim roots Testbench at the repository, so Boost, its MCP
+    // server and every other Artisan command work there as in an app. The
+    // repository commits it, and the managed .gitattributes keeps it out of
+    // the package's dist archive. Its marker line tells it from an app's
+    // artisan, which is never touched.
+    'package' => [
+        'files' => [
+            'resources/project/artisan' => 'artisan',
+            'resources/project/gitattributes' => '.gitattributes',
+        ],
+        'managed' => [
+            '.gitattributes',
+        ],
     ],
 
     // Tracked paths are copied into the consuming project. A plain entry names

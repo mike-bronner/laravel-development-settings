@@ -9,5 +9,5 @@ namespace MikeBronner\DevelopmentSettings\Support;
 // that must show why a command failed uses SystemProcess::capture() instead.
 interface Process
 {
-    public function run(string $command, ?string $workingDirectory = null, array $environment = []): int;
+    public function run(string $command, ?string $workingDirectory = null): int;
 }

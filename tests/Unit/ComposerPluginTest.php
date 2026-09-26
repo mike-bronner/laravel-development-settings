@@ -103,7 +103,7 @@ it('tells a project with neither artisan nor Testbench why Boost did not run', f
     $project = makeComposableProject('# CLAUDE.md');
     unlink($project . '/artisan');
 
-    expect(runBoostOn($project)->getOutput())->toContain('no artisan and no vendor/bin/testbench, so Laravel Boost was not run')
+    expect(runBoostOn($project)->getOutput())->toContain('no artisan of its own and no vendor/bin/testbench, so Laravel Boost was not run')
         ->and(composed($project))->toBeFalse();
 
     removeTempDir($project);

@@ -4,16 +4,14 @@ declare(strict_types=1);
 
 namespace MikeBronner\DevelopmentSettings\Support;
 
-// Extra environment variables reach the command only. They are never set on
-// the Composer process itself, so nothing that runs after it inherits them.
 final class SystemProcess implements Process
 {
-    public function run(string $command, ?string $workingDirectory = null, array $environment = []): int
+    public function run(string $command, ?string $workingDirectory = null): int
     {
-        return $this->capture($command, $workingDirectory, $environment)->exitCode;
+        return $this->capture($command, $workingDirectory)->exitCode;
     }
 
-    public function capture(string $command, ?string $workingDirectory = null, array $environment = []): ProcessResult
+    public function capture(string $command, ?string $workingDirectory = null): ProcessResult
     {
         // Stderr is redirected into the stdout pipe, so the output keeps the
         // order it was written in, and there is only one pipe to drain. Two
@@ -28,7 +26,6 @@ final class SystemProcess implements Process
             ],
             $pipes,
             $workingDirectory ?? getcwd(),
-            $environment === [] ? null : [...getenv(), ...$environment],
         );
 
         if (! is_resource($process)) {

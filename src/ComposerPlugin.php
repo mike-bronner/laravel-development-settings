@@ -16,7 +16,6 @@ use function Laravel\Prompts\multiselect;
 
 use Laravel\Prompts\Prompt;
 use MikeBronner\DevelopmentSettings\Support\BoostRegistrar;
-use MikeBronner\DevelopmentSettings\Support\CheckedFile;
 use MikeBronner\DevelopmentSettings\Support\ContributionDetector;
 use MikeBronner\DevelopmentSettings\Support\Contributor;
 use MikeBronner\DevelopmentSettings\Support\FileDiscovery;
@@ -25,9 +24,9 @@ use MikeBronner\DevelopmentSettings\Support\GuidelineGuard;
 use MikeBronner\DevelopmentSettings\Support\LegacyFingerprint;
 use MikeBronner\DevelopmentSettings\Support\LegacySymlink;
 use MikeBronner\DevelopmentSettings\Support\Manifest;
+use MikeBronner\DevelopmentSettings\Support\PackageRepository;
 use MikeBronner\DevelopmentSettings\Support\ProcessResult;
 use MikeBronner\DevelopmentSettings\Support\SystemProcess;
-use MikeBronner\DevelopmentSettings\Support\TestbenchMcp;
 use RuntimeException;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
@@ -43,15 +42,8 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     private const LEGACY_PACKAGE_NAME = 'mikebronner/development-settings';
     private const MANIFEST_FILE = 'manifest.json';
     private const BOX_WIDTH = 80;
-    private const AFTER_ROOT_SCRIPTS = -1;
 
     private const BOOST_FEATURES = ' --guidelines --skills --mcp';
-    private const PACKAGE_COMMAND = 'php -d variables_order=EGPCS ' . TestbenchMcp::TESTBENCH . ' boost:install --no-interaction';
-    private const PACKAGE_BOOST_INSTALL = 'APP_BASE_PATH=. APP_ENV=local php -d variables_order=EGPCS ' . TestbenchMcp::TESTBENCH . ' boost:install';
-
-    // Without the views directory a rooted Testbench exits successfully having
-    // composed no guidelines.
-    private const TESTBENCH_DIRECTORIES = ['bootstrap/cache', 'storage/framework/views'];
 
     private static bool $dependenciesInjected = false;
 
@@ -65,14 +57,9 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     {
         return [
             ScriptEvents::PRE_UPDATE_CMD => 'captureBeforeUpdate',
-            ScriptEvents::POST_INSTALL_CMD => [['publish', 0], ['routeMcpThroughTestbench', self::AFTER_ROOT_SCRIPTS]],
-            ScriptEvents::POST_UPDATE_CMD => [['publish', 0], ['routeMcpThroughTestbench', self::AFTER_ROOT_SCRIPTS]],
+            ScriptEvents::POST_INSTALL_CMD => 'publish',
+            ScriptEvents::POST_UPDATE_CMD => 'publish',
         ];
-    }
-
-    public function routeMcpThroughTestbench(Event $event): void
-    {
-        $this->doRouteMcpThroughTestbench($event->getIO());
     }
 
     public function publish(Event $event): void
@@ -139,30 +126,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             : '<error>  ' . $result['message'] . '</error>');
     }
 
-    private function doRouteMcpThroughTestbench(IOInterface $io): void
-    {
-        $projectDir = (string) getcwd();
-
-        if (! $this->getPackageDir() || $this->isApp($projectDir)) {
-            return;
-        }
-
-        $result = (new TestbenchMcp)->rewrite($projectDir);
-
-        foreach ($result['rewritten'] as $path) {
-            $io->write(sprintf('<info>  ↻ %s now runs the Boost MCP server through %s.</info>', $path, TestbenchMcp::TESTBENCH));
-        }
-
-        foreach ($result['skipped'] as $path => $reason) {
-            $io->writeError(sprintf(
-                '<comment>  %s holds a Boost MCP entry that was not pointed at %s: %s.</comment>',
-                $path,
-                TestbenchMcp::TESTBENCH,
-                rtrim($reason, '.'),
-            ));
-        }
-    }
-
     private function contributionBranch(string $projectDir): string
     {
         $slug = preg_replace('/[^a-z0-9._-]+/i', '-', basename($projectDir)) ?? 'project';
@@ -187,11 +150,21 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $config = require $packageDir . '/config/development-settings.php';
         $manifest = Manifest::load($packageDir . '/' . self::MANIFEST_FILE);
 
-        $filesToPublish = (new FileDiscovery)->discover(
-            packageDir: $packageDir,
-            paths: $config['paths'],
-            ignore: $config['paths']['ignore'] ?? FileDiscovery::DEFAULT_IGNORE,
-        );
+        $ignore = $config['paths']['ignore'] ?? FileDiscovery::DEFAULT_IGNORE;
+        $managed = $config['paths']['managed'] ?? [];
+        $filesToPublish = (new FileDiscovery)->discover(packageDir: $packageDir, paths: $config['paths'], ignore: $ignore);
+
+        // A package repository also receives the artisan shim and the files
+        // that go with it. Their checksums join the manifest only here, so an
+        // app's own artisan never meets copy-sync or orphan cleanup.
+        if (PackageRepository::receivesShim($projectDir)) {
+            $filesToPublish += (new FileDiscovery)->discover(packageDir: $packageDir, paths: $config['package'] ?? [], ignore: $ignore);
+            $managed = [...$managed, ...$config['package']['managed'] ?? []];
+            $manifest = new Manifest([
+                ...$manifest->toArray(),
+                ...Manifest::load($packageDir . '/' . PackageRepository::MANIFEST_FILE)->toArray(),
+            ]);
+        }
 
         // Remove the legacy `.ai` link before anything inspects the project
         // tree: while it stands, every `.ai/…` manifest path resolves into
@@ -203,14 +176,14 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         );
         $removedFingerprint = (new LegacyFingerprint)->remove($projectDir);
 
-        $fileSync = new FileSync($manifest, managed: $config['paths']['managed'] ?? []);
+        $fileSync = new FileSync($manifest, managed: $managed);
         $scan = $fileSync->classify($projectDir, $filesToPublish);
         $safeOrphans = $fileSync->safeOrphans($projectDir, $filesToPublish);
         $protectedOrphans = $fileSync->protectedOrphans($projectDir, $filesToPublish);
 
-        // Only where Boost can actually compose. A package without Testbench has
-        // no way to run Boost, so registering there would write a config file
-        // nothing ever reads.
+        // Only where Boost can actually compose: an app, or a package whose
+        // artisan shim has a Testbench to boot. Anywhere else, registering
+        // would write a config file nothing ever reads.
         $registration = $this->composesBoost($projectDir)
             ? (new BoostRegistrar)->register(
                 projectDir: $projectDir,
@@ -651,13 +624,8 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 
     /**
      * Install Laravel Boost's guidelines, skills and MCP entries, whatever
-     * `boost.json` says.
-     *
-     * A full Laravel app is composed through its own `artisan`. A repository
-     * with no `artisan` is composed through Orchestra Testbench, rooted at the
-     * repository for this one command, and only when Testbench is installed.
-     * The Boost MCP entries that run writes still name `artisan`; the
-     * `routeMcpThroughTestbench` listener points them at Testbench afterwards.
+     * `boost.json` says, through the project's `artisan`: an app's own, or
+     * the shim a package repository receives.
      *
      * Boost composes from this package's `resources/boost` in vendor *and* from
      * the project's own `.ai`, so the run is unconditional: the package sources
@@ -679,15 +647,19 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             return;
         }
 
-        $isApp = $this->isApp($projectDir);
-        $installCommand = $isApp ? 'php artisan boost:install' : self::PACKAGE_BOOST_INSTALL;
+        $installCommand = 'php artisan boost:install';
 
         if (! $this->composesBoost($projectDir)) {
             $io->writeError(sprintf(
-                '<comment>  This repository has no artisan and no %s, so Laravel Boost was not run. Require orchestra/testbench as a dev dependency to compose its guidelines and skills.</comment>',
-                TestbenchMcp::TESTBENCH,
+                '<comment>  This repository has no artisan of its own and no %s, so Laravel Boost was not run. Require orchestra/testbench as a dev dependency to compose its guidelines and skills.</comment>',
+                PackageRepository::TESTBENCH,
             ));
 
+            return;
+        }
+
+        // A shim that could not be written was reported with its cause.
+        if (! file_exists($projectDir . '/' . PackageRepository::ARTISAN)) {
             return;
         }
 
@@ -718,20 +690,13 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         // Every feature is passed explicitly, so a leftover boost.json setting
         // can never turn one off: Boost ignores boost.json once a flag is given.
         $startedAt = time();
-        $result = $isApp
-            ? $this->executeCommand(($config['hooks']['command'] ?? 'php artisan boost:install --no-interaction') . self::BOOST_FEATURES)
-            : $this->composePackage($io, $projectDir, ($config['hooks']['package_command'] ?? self::PACKAGE_COMMAND) . self::BOOST_FEATURES);
-
-        if ($result === null) {
-            return;
-        }
+        $result = $this->executeCommand(($config['hooks']['command'] ?? 'php artisan boost:install --no-interaction') . self::BOOST_FEATURES);
 
         if ($result->failed()) {
             $io->write('<error>failed</error>');
             $io->writeError(sprintf(
-                '<error>  Laravel Boost exited with an error. Run "%s" to see why.%s</error>',
+                '<error>  Laravel Boost exited with an error. Run "%s" to see why. Boost registers its commands only when APP_ENV is local or APP_DEBUG is true.</error>',
                 $installCommand,
-                $isApp ? ' Boost registers its commands only when APP_ENV is local or APP_DEBUG is true.' : '',
             ));
             $this->writeFailureOutput($io, $result);
 
@@ -774,45 +739,16 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $io->writeError('<comment>  Edit the file yourself, then run the Composer command again. This package will not repair it: where your own text ends cannot be read from the file.</comment>');
     }
 
-    private function composePackage(IOInterface $io, string $projectDir, string $command): ?ProcessResult
-    {
-        try {
-            foreach (self::TESTBENCH_DIRECTORIES as $directory) {
-                CheckedFile::ensureDirectory($projectDir . '/' . $directory);
-            }
-        } catch (RuntimeException $exception) {
-            $io->write('<error>failed</error>');
-            $io->writeError(sprintf(
-                '<error>  Laravel Boost was not run: Testbench cannot boot without its directories. %s</error>',
-                rtrim($exception->getMessage(), '.') . '.',
-            ));
-
-            return null;
-        }
-
-        // The root is set on this one command, never on the Composer process:
-        // a rooted `testbench boost:mcp` cannot run a single tool, because
-        // Boost runs each one through the base path's `artisan`.
-        return $this->executeCommand($command, ['APP_BASE_PATH' => $projectDir, 'APP_ENV' => 'local']);
-    }
-
-    private function isApp(string $projectDir): bool
-    {
-        return file_exists($projectDir . '/artisan');
-    }
-
-    /**
-     * Whether Boost can run here at all: through `artisan` in an app, through
-     * Testbench in a repository with none.
-     */
+    // Whether Boost can run here at all: through an app's artisan, or through
+    // the shim in a package repository with Testbench installed.
     private function composesBoost(string $projectDir): bool
     {
-        return $this->isApp($projectDir) || is_file($projectDir . '/' . TestbenchMcp::TESTBENCH);
+        return PackageRepository::isApp($projectDir) || PackageRepository::hasTestbench($projectDir);
     }
 
-    private function executeCommand(string $command, array $environment = []): ProcessResult
+    private function executeCommand(string $command): ProcessResult
     {
-        return (new SystemProcess)->capture(command: $command, environment: $environment);
+        return (new SystemProcess)->capture(command: $command);
     }
 
     // Only a failure shows the command's output: a successful run stays one

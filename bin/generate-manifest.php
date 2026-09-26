@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 use MikeBronner\DevelopmentSettings\Support\ContributionDetector;
 use MikeBronner\DevelopmentSettings\Support\ManifestGenerator;
+use MikeBronner\DevelopmentSettings\Support\PackageRepository;
 
 $packageDir = dirname(__DIR__);
 
@@ -18,6 +19,9 @@ $manifests = [
     'manifest.json' => $config,
     ContributionDetector::MANIFEST_FILE => [
         'paths' => ['directories' => $config['capture'] ?? [], 'files' => [], 'ignore' => $ignore],
+    ],
+    PackageRepository::MANIFEST_FILE => [
+        'paths' => ['directories' => [], 'files' => $config['package']['files'] ?? [], 'ignore' => $ignore],
     ],
 ];
 
@@ -49,7 +53,7 @@ if ($stale !== []) {
 }
 
 if ($check) {
-    fwrite(STDOUT, "manifest.json and " . ContributionDetector::MANIFEST_FILE . " are up to date.\n");
+    fwrite(STDOUT, implode(', ', array_keys($manifests)) . " are up to date.\n");
 }
 
 exit(0);
