@@ -250,7 +250,8 @@
     ],
     "phpcs.xml": [
         "992e3c5d1d7863fcf21d73374254a46a",
-        "9bf0a70ded72dd725a68407c309cb349"
+        "9bf0a70ded72dd725a68407c309cb349",
+        "ecebb3f4500837d493676f0b6a4f711f"
     ],
     "phpmd.xml": [
         "a2d80f6b94db829aa45205ea0f42ce5e",

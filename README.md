@@ -14,7 +14,7 @@ That's it. The package automatically syncs files and manages dependencies on eve
 
 This package is a Composer plugin that hooks into Composer's pre-update, post-install and post-update events. Before an update, it offers to contribute any edits you made to its installed guidelines and skills (see "Contributing edits made in vendor" below). After an install or update, it:
 
-1. **Syncs tracked config files** (`pint.json`, `phpmd.xml`, …) from the package into your project
+1. **Syncs tracked config files** (`pint.json`, `phpmd.xml`, `phpcs.xml`, …) from the package into your project
 2. **Registers itself with Laravel Boost** by adding its name to the `packages` list in your `boost.json` (applications only — a package has no `artisan` and composes nothing)
 3. **Installs or removes dev dependencies** as defined in the package config
 4. **Preserves local modifications** — changed files aren't overwritten, and removed-upstream files you customized aren't deleted without asking
@@ -118,6 +118,24 @@ The package owns everything above that line and replaces it on every sync. Every
 - If the package stops shipping a file with a marker, it is removed only when the part above the marker is a version this package shipped and nothing sits below it. With your own rules below the marker, it is kept, and an interactive `composer update` asks whether to delete it.
 
 Which files work this way is set by `paths.managed` in the package config.
+
+### PHP_CodeSniffer
+
+The package ships `phpcs.xml`, which runs the `CleanCode` standard from `mike-bronner/clean-code` over the whole project. It skips `bootstrap/cache`, `node_modules`, `public`, `storage` and `vendor` at the project root. So `vendor/bin/phpcs` needs no arguments, in an application and in a package alike. Paths given on the command line replace the project root for that run.
+
+`phpcs.xml` is a synced file like `pint.json`. An edited copy is kept as a local modification, and the upstream workflow proposes the edit to this package.
+
+Releases before 0.3.3 shipped `phpcs.xml` pointing at `.php-codesniffer/MikeBronner/ruleset.xml`, and 0.3.3 removed both. An unmodified old `phpcs.xml` is a known version, so the next update replaces it. The old ruleset is still removed when unmodified.
+
+`CleanCode` is found by name only when the PHP_CodeSniffer installer plugin has run. Composer refuses to install this package until your `composer.json` decides on that plugin, and `false` leaves `CleanCode` unregistered. Allow it:
+
+```json
+"config": {
+    "allow-plugins": {
+        "dealerdirect/phpcodesniffer-composer-installer": true
+    }
+}
+```
 
 ## ⚙️  Configuration
 
