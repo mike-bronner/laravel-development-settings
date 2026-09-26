@@ -38,9 +38,9 @@ function boostStandIn(string $behaviour, string $runner): string
     $record = 'file_put_contents("boost.ran", json_encode(["runner" => ' . var_export($runner, true) . ', "APP_BASE_PATH" => getenv("APP_BASE_PATH"), "APP_ENV" => getenv("APP_ENV"), "directories" => is_dir("bootstrap/cache") && is_dir("storage/framework/views"), "flags" => array_slice($argv, 1)]));';
 
     $script = $record . match ($behaviour) {
-        COMPOSES => ' file_put_contents("AGENTS.md", ' . var_export($block, true) . ');',
-        COMPOSES_NOTHING => '',
-        EXITS_WITH_ERROR => ' exit(1);',
+        COMPOSES => ' file_put_contents("AGENTS.md", ' . var_export($block, true) . '); echo "Boost stand-in composed AGENTS.md\n";',
+        COMPOSES_NOTHING => ' echo "Boost stand-in found no agent\n";',
+        EXITS_WITH_ERROR => ' fwrite(STDERR, "Boost stand-in: <error>command \"boost:install\"</error> is not defined\n"); exit(1);',
     };
 
     // The trailing `--` hands an appended flag to the script, not to PHP.
@@ -151,7 +151,9 @@ it('registers the package and composes in a fresh clone that has no boost.json',
         ->and($output)->toContain('boost.json (registered with Boost)')
         ->and($output)->toContain('1 new')
         ->and(boostRan($project))->toBeTrue()
-        ->and($output)->toContain('Composing Laravel Boost guidelines and skills... done');
+        ->and($output)->toContain('Composing Laravel Boost guidelines and skills... done')
+        // A successful run stays one summary line: Boost's own output is not shown.
+        ->and($output)->not->toContain('Boost stand-in');
 
     removeTempDir($project);
 });
@@ -253,6 +255,7 @@ it('fails loudly when Boost exits cleanly on a registrar-created boost.json but 
         ->and($output)->toContain('names no agents')
         ->and($output)->toContain('Composing Laravel Boost guidelines and skills... failed')
         ->and($output)->toContain('composed no agent file')
+        ->and($output)->toContain('│ Boost stand-in found no agent')
         ->and($output)->not->toContain('done');
 
     removeTempDir($project);
@@ -281,9 +284,11 @@ it('reports a Boost error as a failure with the next step', function (): void {
 
     $output = publishIn($project);
 
+    // Boost's own words are shown, escaped, so the tag it printed survives.
     expect(boostRan($project))->toBeTrue()
         ->and($output)->toContain('... failed')
         ->and($output)->toContain('Laravel Boost exited with an error')
+        ->and($output)->toContain('│ Boost stand-in: <error>command "boost:install"</error> is not defined')
         ->and($output)->not->toContain('composed no agent file');
 
     removeTempDir($project);

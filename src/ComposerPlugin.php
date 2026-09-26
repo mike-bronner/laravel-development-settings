@@ -25,9 +25,11 @@ use MikeBronner\DevelopmentSettings\Support\GuidelineGuard;
 use MikeBronner\DevelopmentSettings\Support\LegacyFingerprint;
 use MikeBronner\DevelopmentSettings\Support\LegacySymlink;
 use MikeBronner\DevelopmentSettings\Support\Manifest;
+use MikeBronner\DevelopmentSettings\Support\ProcessResult;
 use MikeBronner\DevelopmentSettings\Support\SystemProcess;
 use MikeBronner\DevelopmentSettings\Support\TestbenchMcp;
 use RuntimeException;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 {
@@ -593,10 +595,11 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $packageNames = implode(' ', array_keys($packages));
         $result = $this->executeCommand("composer update {$packageNames} --dev --no-interaction");
 
-        if ($result === 0) {
-            $io->write('<info>  + Dev dependencies installed successfully.</info>');
-        } else {
+        if ($result->failed()) {
             $io->writeError('<error>  + Failed to install dev dependencies. Run "composer update" manually.</error>');
+            $this->writeFailureOutput($io, $result);
+        } else {
+            $io->write('<info>  + Dev dependencies installed successfully.</info>');
         }
 
         $io->write('');
@@ -611,10 +614,11 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $packageNames = implode(' ', $packages);
         $result = $this->executeCommand("composer remove {$packageNames} --dev --no-interaction");
 
-        if ($result === 0) {
-            $io->write('<fg=magenta>  - Dev dependencies removed successfully.</>');
-        } else {
+        if ($result->failed()) {
             $io->writeError('<error>  - Failed to remove dev dependencies. Run "composer remove" manually.</error>');
+            $this->writeFailureOutput($io, $result);
+        } else {
+            $io->write('<fg=magenta>  - Dev dependencies removed successfully.</>');
         }
 
         $io->write('');
@@ -722,13 +726,14 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             return;
         }
 
-        if ($result !== 0) {
+        if ($result->failed()) {
             $io->write('<error>failed</error>');
             $io->writeError(sprintf(
                 '<error>  Laravel Boost exited with an error. Run "%s" to see why.%s</error>',
                 $installCommand,
                 $isApp ? ' Boost registers its commands only when APP_ENV is local or APP_DEBUG is true.' : '',
             ));
+            $this->writeFailureOutput($io, $result);
 
             return;
         }
@@ -741,6 +746,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
                 '<error>  Laravel Boost ran but composed no agent file: it found no agent to compose for. Run "%s" and choose your agents.</error>',
                 $installCommand,
             ));
+            $this->writeFailureOutput($io, $result);
 
             return;
         }
@@ -768,7 +774,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $io->writeError('<comment>  Edit the file yourself, then run the Composer command again. This package will not repair it: where your own text ends cannot be read from the file.</comment>');
     }
 
-    private function composePackage(IOInterface $io, string $projectDir, string $command): ?int
+    private function composePackage(IOInterface $io, string $projectDir, string $command): ?ProcessResult
     {
         try {
             foreach (self::TESTBENCH_DIRECTORIES as $directory) {
@@ -804,9 +810,18 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         return $this->isApp($projectDir) || is_file($projectDir . '/' . TestbenchMcp::TESTBENCH);
     }
 
-    private function executeCommand(string $command, array $environment = []): int
+    private function executeCommand(string $command, array $environment = []): ProcessResult
     {
-        return (new SystemProcess)->run(command: $command, environment: $environment);
+        return (new SystemProcess)->capture(command: $command, environment: $environment);
+    }
+
+    // Only a failure shows the command's output: a successful run stays one
+    // summary line. The output is escaped, so a tag it prints is not styled.
+    private function writeFailureOutput(IOInterface $io, ProcessResult $result): void
+    {
+        foreach ($result->tail() as $line) {
+            $io->writeError('<comment>    │ ' . OutputFormatter::escape($line) . '</comment>');
+        }
     }
 
     /**
