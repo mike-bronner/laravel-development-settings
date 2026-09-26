@@ -12,12 +12,11 @@ return [
             'laravel/boost' => '^2.9',
             'laravel/pint' => '^1.24',
         ],
-        // PHP_CodeSniffer belongs to mike-bronner/phpcs-rules, not this
-        // package. A project that also requires phpcs-rules keeps slevomat as
-        // its transitive dependency.
-        'remove' => [
-            'slevomat/coding-standard',
-        ],
+        // Packages named here are dropped from a project's require-dev. The
+        // list is empty on purpose: slevomat/coding-standard is not removed,
+        // because mike-bronner/clean-code requires it, so `composer remove`
+        // could never succeed and every project would report a failure.
+        'remove' => [],
     ],
 
     // Boost composition commands. `command` runs in full Laravel apps, through
