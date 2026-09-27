@@ -48,5 +48,10 @@ jobs:
       - name: Lint (Pint)
         run: ./vendor/bin/pint --test
 
+      # The phpcs.xml this package ships, run on the package itself: the
+      # repository meets the standard it hands every consuming project.
+      - name: Lint (PHP_CodeSniffer)
+        run: ./vendor/bin/phpcs
+
       - name: Tests (Pest)
         run: composer test
