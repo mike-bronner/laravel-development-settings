@@ -15,12 +15,12 @@
     "require": {
         "php": "^8.3",
         "composer-plugin-api": "^2.0",
+        "laravel/boost": "*",
+        "laravel/pint": "*",
         "laravel/prompts": "^0.3",
-        "mike-bronner/clean-code": "^0.1"
+        "mike-bronner/clean-code": "*"
     },
     "require-dev": {
-        "laravel/boost": "^2.9",
-        "laravel/pint": "^1.24",
         "nunomaduro/collision": "^8.6",
         "pestphp/pest": "^3.0",
         "composer/composer": "^2.0"
