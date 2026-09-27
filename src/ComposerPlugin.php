@@ -45,8 +45,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 
     private const BOOST_FEATURES = ' --guidelines --skills --mcp';
 
-    private static bool $dependenciesInjected = false;
-
     /**
      * Composer builds the plugin with no arguments, so the terminal is
      * detected. A test passes it, because the suite's own terminal is not the
@@ -199,12 +197,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             )
             : null;
 
-        $composerConfig = $config['composer'] ?? [];
-        $dependencyResult = $this->prepareComposerDependencies(
-            install: $composerConfig['install'] ?? [],
-            remove: $composerConfig['remove'] ?? [],
-        );
-
         // New and known-version files need no answer from the user, so they are
         // written before the summary lists them: a write that fails is listed
         // as failed, never as created or updated. As with a failed Boost run,
@@ -254,14 +246,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 
         foreach ($protectedOrphans as $path) {
             $io->write($this->formatOutputLine(type: 'orphan_protected', path: $path));
-        }
-
-        foreach (array_keys($dependencyResult['toInstall']) as $package) {
-            $io->write($this->formatOutputLine(type: 'dep_added', path: $package));
-        }
-
-        foreach ($dependencyResult['toRemove'] as $package) {
-            $io->write($this->formatOutputLine(type: 'dep_removed', path: $package));
         }
 
         foreach ($removedLinks as $linkPath) {
@@ -399,9 +383,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         }
 
         $stats['removed'] += count($removedLinks) + (int) $removedFingerprint;
-        $stats['new'] += count($dependencyResult['toInstall']);
-        $stats['removed'] += count($dependencyResult['toRemove']);
-        $stats['unchanged'] += count($dependencyResult['unchanged']);
 
         match ($registration) {
             BoostRegistrar::REGISTERED => $stats['new']++,
@@ -423,9 +404,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         } else {
             $this->runBoost($io, $projectDir, $config);
         }
-
-        $this->installDevDependencies($io, $dependencyResult['toInstall']);
-        $this->removeDevDependencies($io, $dependencyResult['toRemove']);
     }
 
     private function writeBoxHeader(IOInterface $io): void
@@ -486,8 +464,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             'stale_fingerprint' => ['icon' => '-', 'style' => 'fg=magenta', 'suffix' => ' (stale Boost fingerprint)'],
             'registered' => ['icon' => '+', 'style' => 'info', 'suffix' => ' (registered with Boost)'],
             'removed' => ['icon' => '-', 'style' => 'fg=magenta'],
-            'dep_added' => ['icon' => '+', 'style' => 'info', 'suffix' => ' (composer)'],
-            'dep_removed' => ['icon' => '-', 'style' => 'fg=magenta', 'suffix' => ' (composer)'],
         ];
 
         $format = $formats[$type] ?? ['icon' => ' ', 'style' => null, 'suffix' => ''];
@@ -516,92 +492,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $padding = max(1, self::BOX_WIDTH - 6 - $visibleLength);
 
         return '<fg=gray>│</>  ' . $prefix . '  ' . $displayPath . str_repeat(' ', $padding) . '  <fg=gray>│</>';
-    }
-
-    private function prepareComposerDependencies(array $install, array $remove): array
-    {
-        if (self::$dependenciesInjected) {
-            return ['toInstall' => [], 'unchanged' => [], 'toRemove' => []];
-        }
-
-        $composerFile = getcwd() . '/composer.json';
-        $composerJson = json_decode(file_get_contents($composerFile), associative: true);
-        $requireDev = $composerJson['require-dev'] ?? [];
-
-        $packagesToInstall = [];
-        $packagesUnchanged = [];
-        $packagesToRemove = [];
-
-        foreach ($install as $package => $version) {
-            if (isset($requireDev[$package])) {
-                $packagesUnchanged[$package] = $version;
-
-                continue;
-            }
-
-            $packagesToInstall[$package] = $version;
-            $requireDev[$package] = $version;
-        }
-
-        foreach ($remove as $package) {
-            if (! isset($requireDev[$package])) {
-                continue;
-            }
-
-            $packagesToRemove[] = $package;
-            unset($requireDev[$package]);
-        }
-
-        if ($packagesToInstall !== [] || $packagesToRemove !== []) {
-            self::$dependenciesInjected = true;
-
-            ksort($requireDev);
-            $composerJson['require-dev'] = $requireDev;
-            file_put_contents(
-                $composerFile,
-                json_encode($composerJson, flags: JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n",
-            );
-        }
-
-        return ['toInstall' => $packagesToInstall, 'unchanged' => $packagesUnchanged, 'toRemove' => $packagesToRemove];
-    }
-
-    private function installDevDependencies(IOInterface $io, array $packages): void
-    {
-        if ($packages === []) {
-            return;
-        }
-
-        $packageNames = implode(' ', array_keys($packages));
-        $result = $this->executeCommand("composer update {$packageNames} --dev --no-interaction");
-
-        if ($result->failed()) {
-            $io->writeError('<error>  + Failed to install dev dependencies. Run "composer update" manually.</error>');
-            $this->writeFailureOutput($io, $result);
-        } else {
-            $io->write('<info>  + Dev dependencies installed successfully.</info>');
-        }
-
-        $io->write('');
-    }
-
-    private function removeDevDependencies(IOInterface $io, array $packages): void
-    {
-        if ($packages === []) {
-            return;
-        }
-
-        $packageNames = implode(' ', $packages);
-        $result = $this->executeCommand("composer remove {$packageNames} --dev --no-interaction");
-
-        if ($result->failed()) {
-            $io->writeError('<error>  - Failed to remove dev dependencies. Run "composer remove" manually.</error>');
-            $this->writeFailureOutput($io, $result);
-        } else {
-            $io->write('<fg=magenta>  - Dev dependencies removed successfully.</>');
-        }
-
-        $io->write('');
     }
 
     private function deleteOrphan(string $projectDir, string $orphanPath): void
@@ -647,19 +537,11 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
      */
     private function runBoost(IOInterface $io, string $projectDir, array $config): void
     {
-        // On a first install Boost is still queued in `composer.install` below,
-        // so there is no Boost command to call yet. Staying quiet beats a red
-        // "failed": installing the dev dependencies runs this plugin again, and
-        // that run composes.
-        if (! is_dir($projectDir . '/vendor/laravel/boost')) {
-            return;
-        }
-
         $installCommand = 'php artisan boost:install';
 
         if (! $this->composesBoost($projectDir)) {
             $io->writeError(sprintf(
-                '<comment>  This repository has no artisan of its own and no %s, so Laravel Boost was not run. Require orchestra/testbench as a dev dependency to compose its guidelines and skills.</comment>',
+                '<comment>  This repository has no artisan of its own and no %s, so Laravel Boost was not run. orchestra/testbench comes with this package: run "composer install" to restore it. A custom Composer bin-dir is not supported.</comment>',
                 PackageRepository::TESTBENCH,
             ));
 

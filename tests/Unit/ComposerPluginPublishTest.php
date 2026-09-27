@@ -18,8 +18,7 @@ use Symfony\Component\Console\Output\ConsoleOutput;
 /*
  * These tests drive `doPublish()`, the whole Composer hook, against a consuming
  * project on disk. The package it installs from is a real directory under
- * `vendor/mike-bronner/laravel-development-settings` whose config names no dependencies
- * (so no `composer update` is ever spawned) and whose Boost command is a stand-in.
+ * `vendor/mike-bronner/laravel-development-settings` whose Boost command is a stand-in.
  * It ships this repository's own artisan shim and .gitattributes sources.
  */
 
@@ -67,7 +66,6 @@ function makeConsumer(array $options = []): array
     file_put_contents($project . '/composer.json', json_encode(['require-dev' => new stdClass]) . "\n");
 
     $config = [
-        'composer' => ['install' => [], 'remove' => []],
         'hooks' => [
             'command' => $options['command'] ?? boostStandIn($options['boost'] ?? COMPOSES, $options['silent'] ?? false),
             'interactive_command' => $options['interactiveCommand'] ?? boostStandIn($options['boost'] ?? COMPOSES, $options['silent'] ?? false) . ' interactive',
@@ -107,10 +105,6 @@ function makeConsumer(array $options = []): array
 
     if ($options['app'] ?? true) {
         file_put_contents($project . '/artisan', "#!/usr/bin/env php\n");
-    }
-
-    if ($options['boostInstalled'] ?? true) {
-        mkdir($project . '/vendor/laravel/boost', 0755, true);
     }
 
     if ($options['testbench'] ?? false) {
@@ -543,18 +537,7 @@ it('neither writes the shim, registers nor composes in a package without Testben
         ->and(boostRan($project))->toBeFalse()
         ->and($output)->not->toContain('registered with Boost')
         ->and($output)->not->toContain('Composing Laravel Boost')
-        ->and($output)->toContain('This repository has no artisan of its own and no vendor/bin/testbench, so Laravel Boost was not run. Require orchestra/testbench as a dev dependency');
-
-    removeTempDir($project);
-});
-
-it('stays quiet in a package without Testbench while Boost is still queued for installation', function (): void {
-    [$project] = makeConsumer(['app' => false, 'boostInstalled' => false]);
-
-    $output = publishIn($project);
-
-    expect(boostRan($project))->toBeFalse()
-        ->and($output)->not->toContain('Laravel Boost');
+        ->and($output)->toContain('This repository has no artisan of its own and no vendor/bin/testbench, so Laravel Boost was not run. orchestra/testbench comes with this package: run "composer install" to restore it.');
 
     removeTempDir($project);
 });
@@ -575,14 +558,32 @@ it('does not run Boost over a boost.json it cannot read, and says so', function 
     removeTempDir($project);
 });
 
-it('stays quiet about Boost while it is still queued for installation, but still registers', function (): void {
-    [$project] = makeConsumer(['boostInstalled' => false]);
+// The tooling comes from this package's own requirements, so the plugin has
+// no reason to write the project's composer.json or to run Composer itself.
+it("leaves the project's composer.json exactly as it found it", function (): void {
+    [$project] = makeConsumer();
+    $composerJson = json_encode(['require-dev' => ['laravel/pint' => '^1.0']], JSON_PRETTY_PRINT) . "\n";
+    file_put_contents($project . '/composer.json', $composerJson);
 
     $output = publishIn($project);
 
-    expect(boostConfigIn($project))->toBe(['packages' => ['mike-bronner/laravel-development-settings']])
-        ->and(boostRan($project))->toBeFalse()
-        ->and($output)->not->toContain('Composing Laravel Boost');
+    expect(file_get_contents($project . '/composer.json'))->toBe($composerJson)
+        ->and($output)->not->toContain('(composer)')
+        ->and($output)->not->toContain('Dev dependencies')
+        ->and(require dirname(__DIR__, 2) . '/config/development-settings.php')->not->toHaveKey('composer');
+
+    removeTempDir($project);
+});
+
+it('shows only the one summary line when a captured Boost run succeeds', function (): void {
+    [$project] = makeConsumer();
+
+    $output = publishIn($project);
+
+    expect(boostRan($project))->toBeTrue()
+        ->and($output)->toContain('... done')
+        ->and($output)->not->toContain('Boost stand-in composed AGENTS.md')
+        ->and($output)->not->toContain('    │ ');
 
     removeTempDir($project);
 });

@@ -3,21 +3,10 @@
 declare(strict_types=1);
 
 return [
-    'composer' => [
-        'install' => [
-            'larastan/larastan' => '^3.5',
-            // 2.9 is the floor: earlier releases keyed third-party guidelines
-            // by package name inside the per-file loop, so only the last of the
-            // shipped guideline files survived composition.
-            'laravel/boost' => '^2.9',
-            'laravel/pint' => '^1.24',
-        ],
-        // Packages named here are dropped from a project's require-dev. The
-        // list is empty on purpose: slevomat/coding-standard is not removed,
-        // because mike-bronner/clean-code requires it, so `composer remove`
-        // could never succeed and every project would report a failure.
-        'remove' => [],
-    ],
+    // The tooling (Boost, Pint, Larastan, clean-code, Testbench) is not
+    // configured here: this package requires it in its own composer.json, so
+    // Composer installs it with the package. The plugin never edits a
+    // project's composer.json and never runs Composer itself.
 
     // Boost composition command. It runs wherever the project has an artisan:
     // a full Laravel app's own, or, in a package repository, the shim listed

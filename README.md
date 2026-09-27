@@ -8,7 +8,9 @@ Shared developer settings, tooling configuration, and AI guidelines for Insight 
 composer require mike-bronner/laravel-development-settings
 ```
 
-That's it. The package automatically syncs files and manages dependencies on every `composer install` and `composer update`.
+That's it. The package automatically syncs files on every `composer install` and `composer update`.
+
+It also brings the shared tooling with it, as its own Composer requirements: Laravel Boost, Laravel Pint, Larastan, `mike-bronner/clean-code` and Orchestra Testbench. Composer installs them with the package, so you do not require them yourself. The plugin never edits your `composer.json` and never runs Composer. A project that an earlier release gave these packages as dev dependencies keeps them: nothing is removed.
 
 ## 🔧 How It Works
 
@@ -16,10 +18,9 @@ This package is a Composer plugin that hooks into Composer's pre-update, post-in
 
 1. **Syncs tracked config files** (`pint.json`, `phpmd.xml`, …) from the package into your project
 2. **Registers itself with Laravel Boost** by adding its name to the `packages` list in your `boost.json` (wherever Boost can run: an application, or a package with Orchestra Testbench installed). In a package it also writes an `artisan` shim and a managed `.gitattributes` (see "Packages" below)
-3. **Installs or removes dev dependencies** as defined in the package config
-4. **Preserves local modifications** — changed files aren't overwritten, and removed-upstream files you customized aren't deleted without asking
-5. **Composes Laravel Boost** — an interactive `composer` run on a terminal runs `php artisan boost:install` on that terminal: Boost's own prompts choose the features, packages and agents, you see its output, and Boost saves your agents to `boost.json`. Any other run, CI and `--no-interaction` included, runs `php artisan boost:install --no-interaction` with `--guidelines --skills --mcp`, whatever your `boost.json` says, and shows only a one-line result; packages run the same command through the `artisan` shim (see "Packages" below). Composition is refused, by file and with the reason, when it would overwrite hand-written content (see "Why a run can refuse to compose" below). A run that composes nothing is reported as failed (see "Choosing your agents" below)
-6. **Removes the legacy `.ai` symlink and `.dev-settings-boost` file** left by releases before the move to `resources/boost` (see "Upgrading" below)
+3. **Preserves local modifications** — changed files aren't overwritten, and removed-upstream files you customized aren't deleted without asking
+4. **Composes Laravel Boost** — an interactive `composer` run on a terminal runs `php artisan boost:install` on that terminal: Boost's own prompts choose the features, packages and agents, you see its output, and Boost saves your agents to `boost.json`. Any other run, CI and `--no-interaction` included, runs `php artisan boost:install --no-interaction` with `--guidelines --skills --mcp`, whatever your `boost.json` says, and shows only a one-line result; packages run the same command through the `artisan` shim (see "Packages" below). Composition is refused, by file and with the reason, when it would overwrite hand-written content (see "Why a run can refuse to compose" below). A run that composes nothing is reported as failed (see "Choosing your agents" below)
+5. **Removes the legacy `.ai` symlink and `.dev-settings-boost` file** left by releases before the move to `resources/boost` (see "Upgrading" below)
 
 ### How the AI guidelines and skills reach your project
 
@@ -42,7 +43,7 @@ The shim must not reach the people who install your package, so the plugin also 
 
 `php artisan test` runs your suite rooted at the repository, like every Artisan command. `vendor/bin/phpunit` is unaffected.
 
-A package without `orchestra/testbench` gets no shim and is not composed, and the run says so.
+Testbench comes with this package, so every package repository has it. A repository missing `vendor/bin/testbench` all the same (an incomplete install, or a custom Composer `bin-dir`) gets no shim and is not composed, and the run says so.
 
 ### Choosing your agents
 
@@ -135,8 +136,6 @@ Which files work this way is set by `paths.managed` in the package config.
 
 All behavior is driven by `config/development-settings.php` within the package. It defines:
 
-- **`composer.install`** — dev dependencies to add to consuming projects
-- **`composer.remove`** — deprecated dependencies to remove
 - **`paths.directories`** — directories to sync (recursively)
 - **`paths.files`** — individual files to sync
 - **`paths.managed`** — tracked files the project shares with the package at one marker line (`.gitignore`)
@@ -177,7 +176,7 @@ Changes flow both directions between this package and consuming repositories.
 
 1. Changes are merged to this repo and a new version is tagged
 2. Consumer repos run `composer update`
-3. The plugin syncs files and dependencies automatically
+3. The plugin syncs files automatically, and Composer installs the tooling this package requires
 
 ### Upstream (Repos → Package)
 
