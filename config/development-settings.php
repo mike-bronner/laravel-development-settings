@@ -3,37 +3,41 @@
 declare(strict_types=1);
 
 return [
-    'composer' => [
-        'install' => [
-            'larastan/larastan' => '^3.5',
-            // 2.9 is the floor: earlier releases keyed third-party guidelines
-            // by package name inside the per-file loop, so only the last of the
-            // shipped guideline files survived composition.
-            'laravel/boost' => '^2.9',
-            'laravel/pint' => '^1.24',
-        ],
-        // The PHP_CodeSniffer rules belong to mike-bronner/clean-code, which
-        // this package requires, so slevomat stays installed as its transitive
-        // dependency.
-        'remove' => [
-            'slevomat/coding-standard',
-        ],
-    ],
+    // The tooling (Boost, Pint, Larastan, clean-code, Testbench) is not
+    // configured here: this package requires it in its own composer.json, so
+    // Composer installs it with the package. The plugin never edits a
+    // project's composer.json and never runs Composer itself.
 
-    // Boost composition command, run in full Laravel apps (which have artisan).
-    // Packages have no artisan and no console entry point of their own, so they
-    // compose nothing — their agent files come from the application consuming
-    // them, or are read straight out of resources/boost.
+    // Boost composition command. It runs wherever the project has an artisan:
+    // a full Laravel app's own, or, in a package repository, the shim listed
+    // under `package` below, which boots Orchestra Testbench rooted at the
+    // repository. Either way Boost reads the project's composer files and
+    // writes boost.json, the skills, the agent files and its MCP entries into
+    // the project.
+    //
+    // On the captured `command` the plugin appends --guidelines --skills --mcp,
+    // so every project gets all three Boost features, whatever its boost.json
+    // says.
     //
     // `boost:install`, not `boost:update`: `boost.json` is gitignored, so a
     // fresh clone has none, and `boost:update` composes nothing from a config
     // that enables no guidelines or skills. `install` is the command that
-    // writes the config it needs. The flags make it non-interactive and pin the
-    // two features this package ships; agents come from `boost.json` when it
-    // names any, and otherwise from what Boost detects on the machine.
+    // writes the config it needs. Agents come from `boost.json` when it names
+    // any, and otherwise from what Boost detects on the machine.
+    //
+    // `command` runs captured, without prompts: in CI, under --no-interaction,
+    // and whenever Composer has no terminal. `interactive_command` runs, as
+    // written and with no feature flags, when Composer is interactive on a
+    // terminal. It gets the terminal, as a Composer script does, so Boost's
+    // own prompts choose the features, packages and agents, and Boost saves
+    // the agents to boost.json. With a feature flag it would ask for agents
+    // and not save them. They are two keys, not one with the flag added in
+    // code, so a plugin still running from before an update keeps
+    // `--no-interaction`.
     'hooks' => [
-        'command' => 'php artisan boost:install --guidelines --skills --no-interaction',
-        'description' => 'Composing Laravel Boost guidelines and skills...',
+        'command' => 'php artisan boost:install --no-interaction',
+        'interactive_command' => 'php artisan boost:install',
+        'description' => 'Composing Laravel Boost...',
     ],
 
     // Package sources a consuming project may edit in place, inside vendor.
@@ -45,6 +49,28 @@ return [
     // package's own resources/boost files for this package's orphans.
     'capture' => [
         'resources/boost',
+    ],
+
+    // Files synced only into a package repository: one with no artisan of its
+    // own and with vendor/bin/testbench installed. They follow the rules of
+    // `paths` below, with their own checksums in package-manifest.json. They
+    // stay out of `paths` and manifest.json because an app holds its own
+    // artisan, and copy-sync would report it as locally modified while orphan
+    // cleanup offered to delete it.
+    //
+    // The artisan shim roots Testbench at the repository, so Boost, its MCP
+    // server and every other Artisan command work there as in an app. The
+    // repository commits it, and the managed .gitattributes keeps it out of
+    // the package's dist archive. Its marker line tells it from an app's
+    // artisan, which is never touched.
+    'package' => [
+        'files' => [
+            'resources/project/artisan' => 'artisan',
+            'resources/project/gitattributes' => '.gitattributes',
+        ],
+        'managed' => [
+            '.gitattributes',
+        ],
     ],
 
     // Tracked paths are copied into the consuming project. A plain entry names

@@ -1,0 +1,22 @@
+#!/usr/bin/env php
+<?php
+
+// Written by mike-bronner/laravel-development-settings: runs Artisan through Orchestra Testbench, rooted at this repository.
+
+declare(strict_types=1);
+
+if (! is_file(__DIR__ . '/vendor/bin/testbench')) {
+    fwrite(STDERR, "This artisan runs through Orchestra Testbench, which is not installed. Run composer install, or require orchestra/testbench as a dev dependency.\n");
+
+    exit(1);
+}
+
+$_ENV['APP_BASE_PATH'] = __DIR__;
+$_ENV['APP_ENV'] = getenv('APP_ENV') ?: 'local';
+putenv('TESTBENCH_WORKING_PATH=' . __DIR__);
+
+foreach (['bootstrap/cache', 'storage/framework/views'] as $directory) {
+    is_dir(__DIR__ . "/{$directory}") || mkdir(directory: __DIR__ . "/{$directory}", permissions: 0755, recursive: true);
+}
+
+require __DIR__ . '/vendor/bin/testbench';

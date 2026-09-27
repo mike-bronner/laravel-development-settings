@@ -39,7 +39,7 @@ final class CheckedFile
         self::attempt(fn (): bool => copy($source, $destination), "Could not copy {$source} to {$destination}");
     }
 
-    private static function ensureDirectory(string $directory): void
+    public static function ensureDirectory(string $directory): void
     {
         if (is_dir($directory)) {
             return;
