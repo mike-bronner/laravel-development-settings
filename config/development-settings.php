@@ -26,16 +26,28 @@ return [
     // writes boost.json, the skills, the agent files and its MCP entries into
     // the project.
     //
-    // The plugin appends --guidelines --skills --mcp, so every project gets
-    // all three Boost features, whatever its boost.json says.
+    // On the captured `command` the plugin appends --guidelines --skills --mcp,
+    // so every project gets all three Boost features, whatever its boost.json
+    // says.
     //
     // `boost:install`, not `boost:update`: `boost.json` is gitignored, so a
     // fresh clone has none, and `boost:update` composes nothing from a config
     // that enables no guidelines or skills. `install` is the command that
     // writes the config it needs. Agents come from `boost.json` when it names
     // any, and otherwise from what Boost detects on the machine.
+    //
+    // `command` runs captured, without prompts: in CI, under --no-interaction,
+    // and whenever Composer has no terminal. `interactive_command` runs, as
+    // written and with no feature flags, when Composer is interactive on a
+    // terminal. It gets the terminal, as a Composer script does, so Boost's
+    // own prompts choose the features, packages and agents, and Boost saves
+    // the agents to boost.json. With a feature flag it would ask for agents
+    // and not save them. They are two keys, not one with the flag added in
+    // code, so a plugin still running from before an update keeps
+    // `--no-interaction`.
     'hooks' => [
         'command' => 'php artisan boost:install --no-interaction',
+        'interactive_command' => 'php artisan boost:install',
         'description' => 'Composing Laravel Boost...',
     ],
 

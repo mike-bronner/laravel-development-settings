@@ -28,31 +28,36 @@ const COMPOSES_NOTHING = 'composes nothing';
 const EXITS_WITH_ERROR = 'exits with an error';
 
 // The Boost command stand-in, as PHP code. It records having run, the rooting
-// it saw and the arguments it was given, then does what Boost does in the
-// named case: write a composed block into `AGENTS.md`, write nothing and exit
-// 0 (no agent found), or exit non-zero.
-function boostScript(string $behaviour): string
+// it saw, the arguments it was given and the stdout it was handed, then does
+// what Boost does in the named case: write a composed block into `AGENTS.md`,
+// write nothing and exit 0 (no agent found), or exit non-zero. A silent
+// stand-in prints nothing: an attached run writes to the suite's own output.
+function boostScript(string $behaviour, bool $silent = false): string
 {
     $block = GuidelineGuard::OPENING_TAG . "\n=== rules ===\n" . GuidelineGuard::CLOSING_TAG . "\n";
-    $record = 'file_put_contents("boost.ran", json_encode(["APP_BASE_PATH" => $_ENV["APP_BASE_PATH"] ?? null, "APP_ENV" => $_ENV["APP_ENV"] ?? null, "TESTBENCH_WORKING_PATH" => getenv("TESTBENCH_WORKING_PATH"), "directories" => is_dir("bootstrap/cache") && is_dir("storage/framework/views"), "arguments" => array_slice($argv, 1)]));';
+    $record = 'file_put_contents("boost.ran", json_encode(["APP_BASE_PATH" => $_ENV["APP_BASE_PATH"] ?? null, "APP_ENV" => $_ENV["APP_ENV"] ?? null, "TESTBENCH_WORKING_PATH" => getenv("TESTBENCH_WORKING_PATH"), "directories" => is_dir("bootstrap/cache") && is_dir("storage/framework/views"), "arguments" => array_slice($argv, 1)]));'
+        . ' file_put_contents("boost.stdout", fstat(STDOUT)["dev"] . ":" . fstat(STDOUT)["ino"]);';
+
+    $say = fn (string $statement): string => $silent ? '' : ' ' . $statement;
 
     return $record . match ($behaviour) {
-        COMPOSES => ' file_put_contents("AGENTS.md", ' . var_export($block, true) . '); echo "Boost stand-in composed AGENTS.md\n";',
-        COMPOSES_NOTHING => ' echo "Boost stand-in found no agent\n";',
-        EXITS_WITH_ERROR => ' fwrite(STDERR, "Boost stand-in: <error>command \\"boost:install\\"</error> is not defined\n"); exit(1);',
+        COMPOSES => ' file_put_contents("AGENTS.md", ' . var_export($block, true) . ');' . $say('echo "Boost stand-in composed AGENTS.md\n";'),
+        COMPOSES_NOTHING => $say('echo "Boost stand-in found no agent\n";'),
+        EXITS_WITH_ERROR => $say('fwrite(STDERR, "Boost stand-in: <error>command \\"boost:install\\"</error> is not defined\n");') . ' exit(1);',
     };
 }
 
 // The Boost command, run straight through PHP. The trailing `--` hands an
 // appended flag to the script, not to PHP.
-function boostStandIn(string $behaviour): string
+function boostStandIn(string $behaviour, bool $silent = false): string
 {
-    return escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg(boostScript($behaviour)) . ' --';
+    return escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg(boostScript($behaviour, $silent)) . ' --';
 }
 
-// A consuming project with the package installed in vendor. `command`
-// replaces the Boost command, `packageManifest` the shipped package-manifest.json,
-// and `testbench` installs a Testbench that runs the Boost stand-in.
+// A consuming project with the package installed in vendor. `command` and
+// `interactiveCommand` replace the two Boost commands, `packageManifest` the
+// shipped package-manifest.json, and `testbench` installs a Testbench that
+// runs the Boost stand-in. `silent` makes every stand-in print nothing.
 function makeConsumer(array $options = []): array
 {
     $project = makeTempDir('devset-publish-');
@@ -64,7 +69,8 @@ function makeConsumer(array $options = []): array
     $config = [
         'composer' => ['install' => [], 'remove' => []],
         'hooks' => [
-            'command' => $options['command'] ?? boostStandIn($options['boost'] ?? COMPOSES),
+            'command' => $options['command'] ?? boostStandIn($options['boost'] ?? COMPOSES, $options['silent'] ?? false),
+            'interactive_command' => $options['interactiveCommand'] ?? boostStandIn($options['boost'] ?? COMPOSES, $options['silent'] ?? false) . ' interactive',
             'description' => 'Composing Laravel Boost guidelines and skills...',
         ],
         'package' => (require dirname(__DIR__, 2) . '/config/development-settings.php')['package'],
@@ -109,13 +115,15 @@ function makeConsumer(array $options = []): array
 
     if ($options['testbench'] ?? false) {
         mkdir($project . '/vendor/bin', 0755, true);
-        file_put_contents($project . '/' . PackageRepository::TESTBENCH, "<?php\n" . boostScript($options['boost'] ?? COMPOSES) . "\n");
+        file_put_contents($project . '/' . PackageRepository::TESTBENCH, "<?php\n" . boostScript($options['boost'] ?? COMPOSES, $options['silent'] ?? false) . "\n");
     }
 
     return [$project, $package];
 }
 
-function publishIn(string $project, string $hook = 'doPublish', bool $interactive = false): string
+// `terminal` stands in for the terminal a real Composer run detects. Left
+// null, the plugin asks the suite's own process, whatever that is.
+function publishIn(string $project, string $hook = 'doPublish', bool $interactive = false, ?bool $terminal = false): string
 {
     $io = new BufferIO;
 
@@ -128,7 +136,7 @@ function publishIn(string $project, string $hook = 'doPublish', bool $interactiv
     chdir($project);
 
     try {
-        (new ReflectionMethod(ComposerPlugin::class, $hook))->invoke(new ComposerPlugin, $io);
+        (new ReflectionMethod(ComposerPlugin::class, $hook))->invoke(new ComposerPlugin(hasTerminal: $terminal), $io);
     } finally {
         chdir($cwd);
     }
@@ -155,6 +163,15 @@ function boostRan(string $project): bool
 function boostRun(string $project): array
 {
     return json_decode((string) file_get_contents($project . '/boost.ran'), associative: true);
+}
+
+// Whether Boost wrote to this process's own stdout, which is what an attached
+// run hands it. A captured run writes to a pipe instead.
+function boostSharedOurStdout(string $project): bool
+{
+    $stdout = fstat(STDOUT);
+
+    return file_get_contents($project . '/boost.stdout') === $stdout['dev'] . ':' . $stdout['ino'];
 }
 
 function boostConfigIn(string $project): array
@@ -389,6 +406,112 @@ it('reports a Boost error as a failure with the next step', function (): void {
         ->and($output)->toContain('Laravel Boost exited with an error')
         ->and($output)->toContain('│ Boost stand-in: <error>command "boost:install"</error> is not defined')
         ->and($output)->not->toContain('composed no agent file');
+
+    removeTempDir($project);
+});
+
+it('runs Boost captured and without prompts unless Composer is interactive on a terminal', function (bool $interactive, ?bool $terminal): void {
+    [$project] = makeConsumer();
+
+    $output = publishIn($project, interactive: $interactive, terminal: $terminal);
+
+    expect(boostRun($project)['arguments'])->toBe(['--guidelines', '--skills', '--mcp'])
+        ->and(boostSharedOurStdout($project))->toBeFalse()
+        ->and($output)->toContain('names no agents')
+        ->and($output)->toContain('Composing Laravel Boost guidelines and skills... done')
+        ->and($output)->not->toContain('Boost stand-in');
+
+    removeTempDir($project);
+})->with([
+    'non-interactive, on a terminal' => [false, true],
+    'interactive, no terminal' => [true, false],
+]);
+
+it('keeps --no-interaction on the captured command and leaves it off the attached one', function (): void {
+    $hooks = (require dirname(__DIR__, 2) . '/config/development-settings.php')['hooks'];
+
+    expect($hooks['command'])->toBe('php artisan boost:install --no-interaction')
+        ->and($hooks['interactive_command'])->toBe('php artisan boost:install');
+});
+
+// No feature flags on the terminal: with any of them, Boost asks for agents
+// and does not save the answer to boost.json.
+it('hands Boost the terminal, with no feature flags, when Composer is interactive on one', function (): void {
+    [$project] = makeConsumer(['silent' => true]);
+
+    $output = publishIn($project, interactive: true, terminal: true);
+
+    expect(boostRun($project)['arguments'])->toBe(['interactive'])
+        ->and(boostSharedOurStdout($project))->toBeTrue()
+        ->and($output)->not->toContain('names no agents')
+        ->and($output)->toContain("Composing Laravel Boost guidelines and skills...\n")
+        ->and($output)->toContain('Laravel Boost done');
+
+    removeTempDir($project);
+});
+
+it('runs the attached command through the shim in a package, rooted at the repository', function (): void {
+    [$project] = makeConsumer([
+        'app' => false,
+        'testbench' => true,
+        'silent' => true,
+        'interactiveCommand' => escapeshellarg(PHP_BINARY) . ' artisan boost:install',
+    ]);
+
+    $output = publishIn($project, interactive: true, terminal: true);
+
+    expect(boostRun($project))->toMatchArray([
+        'APP_BASE_PATH' => realpath($project),
+        'arguments' => ['boost:install'],
+    ])
+        ->and(boostSharedOurStdout($project))->toBeTrue()
+        ->and($output)->toContain('Laravel Boost done');
+
+    removeTempDir($project);
+});
+
+it('reports an attached Boost error, pointing at the output above', function (): void {
+    [$project] = makeConsumer(['silent' => true, 'boost' => EXITS_WITH_ERROR]);
+
+    $output = publishIn($project, interactive: true, terminal: true);
+
+    expect(boostRan($project))->toBeTrue()
+        ->and($output)->toContain('Laravel Boost failed')
+        ->and($output)->toContain('Laravel Boost exited with an error. Its output is above.')
+        ->and($output)->not->toContain('to see why')
+        ->and($output)->not->toContain('composed no agent file');
+
+    removeTempDir($project);
+});
+
+it('fails an attached run that composes nothing, pointing at the output above', function (): void {
+    [$project] = makeConsumer(['silent' => true, 'boost' => COMPOSES_NOTHING]);
+
+    $output = publishIn($project, interactive: true, terminal: true);
+
+    // Boost asks for the agents on the terminal and saves them, so the
+    // warning a captured run gives would be wrong here.
+    expect(boostRan($project))->toBeTrue()
+        ->and($output)->not->toContain('names no agents')
+        ->and($output)->toContain('Laravel Boost failed')
+        ->and($output)->toContain('composed no agent file. Its output is above. Run "php artisan boost:install" and choose at least one agent and the AI Guidelines feature.')
+        ->and($output)->not->toContain('done');
+
+    removeTempDir($project);
+});
+
+it('refuses to hand Boost the terminal when composing would damage an agent file', function (): void {
+    [$project] = makeConsumer(['silent' => true]);
+    file_put_contents(
+        $project . '/CLAUDE.md',
+        'Prose naming ' . GuidelineGuard::OPENING_TAG . " here.\n\n" . GuidelineGuard::OPENING_TAG . "\n=== rules ===\n" . GuidelineGuard::CLOSING_TAG . "\n",
+    );
+
+    $output = publishIn($project, interactive: true, terminal: true);
+
+    expect(boostRan($project))->toBeFalse()
+        ->and($output)->toContain('overwrite hand-written content')
+        ->and($output)->not->toContain('Composing Laravel Boost');
 
     removeTempDir($project);
 });

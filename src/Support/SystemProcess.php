@@ -38,4 +38,25 @@ final class SystemProcess implements Process
 
         return new ProcessResult(exitCode: proc_close($process), output: $output);
     }
+
+    /**
+     * Run a command on this process's own stdin, stdout and stderr, and answer
+     * its exit code. Where those are a terminal, the command gets the terminal
+     * and can prompt. Nothing is captured: the output goes straight to the user.
+     */
+    public function passthru(string $command, ?string $workingDirectory = null): int
+    {
+        $process = proc_open($command, [0 => STDIN, 1 => STDOUT, 2 => STDERR], $pipes, $workingDirectory ?? getcwd());
+
+        return is_resource($process) ? proc_close($process) : 1;
+    }
+
+    /**
+     * Whether this process reads from and writes to a terminal, the same test
+     * Composer makes before it gives a script the TTY.
+     */
+    public static function hasTerminal(): bool
+    {
+        return stream_isatty(STDIN) && stream_isatty(STDOUT);
+    }
 }

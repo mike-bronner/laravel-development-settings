@@ -47,6 +47,13 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 
     private static bool $dependenciesInjected = false;
 
+    /**
+     * Composer builds the plugin with no arguments, so the terminal is
+     * detected. A test passes it, because the suite's own terminal is not the
+     * one a real Composer run has.
+     */
+    public function __construct(private readonly ?bool $hasTerminal = null) {}
+
     public function activate(Composer $composer, IOInterface $io): void {}
 
     public function deactivate(Composer $composer, IOInterface $io): void {}
@@ -623,9 +630,10 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     }
 
     /**
-     * Install Laravel Boost's guidelines, skills and MCP entries, whatever
-     * `boost.json` says, through the project's `artisan`: an app's own, or
-     * the shim a package repository receives.
+     * Install Laravel Boost through the project's `artisan`: an app's own, or
+     * the shim a package repository receives. A captured run installs the
+     * guidelines, skills and MCP entries whatever `boost.json` says. A run on
+     * the terminal lets Boost's own prompts choose, and saves the choice.
      *
      * Boost composes from this package's `resources/boost` in vendor *and* from
      * the project's own `.ai`, so the run is unconditional: the package sources
@@ -672,11 +680,17 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             return;
         }
 
+        // An interactive Composer run on a terminal hands Boost the terminal,
+        // as Composer does for a script. Its output then goes to the user, not
+        // to the plugin. Anything else, CI included, runs captured and never
+        // prompts.
+        $attached = $io->isInteractive() && ($this->hasTerminal ?? SystemProcess::hasTerminal());
+
         // A fresh clone has no `boost.json` agents: the file is gitignored, and
-        // a non-interactive install never records the agents it picks. Boost
-        // then composes for whatever it detects on this machine, which may be
-        // nothing at all.
-        if (! (new BoostRegistrar)->hasAgents($projectDir)) {
+        // a captured install never records the agents it picks. Boost then
+        // composes for whatever it detects on this machine, which may be
+        // nothing at all. An attached install asks for them and saves them.
+        if (! $attached && ! (new BoostRegistrar)->hasAgents($projectDir)) {
             $io->writeError(sprintf(
                 '<comment>  %s names no agents, so Laravel Boost composes for the agents it detects on this machine. Run "%s" once to choose them.</comment>',
                 BoostRegistrar::FILE,
@@ -685,18 +699,34 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         }
 
         $description = $config['hooks']['description'] ?? 'Composing Laravel Boost...';
-        $io->write("  <info>{$description}</info> ", false);
-
-        // Every feature is passed explicitly, so a leftover boost.json setting
-        // can never turn one off: Boost ignores boost.json once a flag is given.
         $startedAt = time();
-        $result = $this->executeCommand(($config['hooks']['command'] ?? 'php artisan boost:install --no-interaction') . self::BOOST_FEATURES);
+
+        if ($attached) {
+            // No feature flags: with any of them, Boost asks for agents but
+            // does not save the answer. Without them its own prompts choose
+            // the features and packages, and the agents land in `boost.json`.
+            $io->write("  <info>{$description}</info>");
+            $result = new ProcessResult(
+                exitCode: (new SystemProcess)->passthru($config['hooks']['interactive_command'] ?? $installCommand),
+                output: '',
+            );
+            $io->write('  Laravel Boost ', false);
+        } else {
+            // Every feature is passed explicitly, so a leftover boost.json
+            // setting can never turn one off: Boost ignores boost.json once a
+            // flag is given.
+            $io->write("  <info>{$description}</info> ", false);
+            $result = $this->executeCommand(($config['hooks']['command'] ?? $installCommand . ' --no-interaction') . self::BOOST_FEATURES);
+        }
+
+        // The user watched an attached run, so its output is already on screen.
+        $nextStep = $attached ? 'Its output is above.' : sprintf('Run "%s" to see why.', $installCommand);
 
         if ($result->failed()) {
             $io->write('<error>failed</error>');
             $io->writeError(sprintf(
-                '<error>  Laravel Boost exited with an error. Run "%s" to see why. Boost registers its commands only when APP_ENV is local or APP_DEBUG is true.</error>',
-                $installCommand,
+                '<error>  Laravel Boost exited with an error. %s Boost registers its commands only when APP_ENV is local or APP_DEBUG is true.</error>',
+                $nextStep,
             ));
             $this->writeFailureOutput($io, $result);
 
@@ -708,7 +738,9 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         if (! $guard->composedSince($projectDir, $startedAt)) {
             $io->write('<error>failed</error>');
             $io->writeError(sprintf(
-                '<error>  Laravel Boost ran but composed no agent file: it found no agent to compose for. Run "%s" and choose your agents.</error>',
+                $attached
+                    ? '<error>  Laravel Boost ran but composed no agent file. Its output is above. Run "%s" and choose at least one agent and the AI Guidelines feature.</error>'
+                    : '<error>  Laravel Boost ran but composed no agent file: it found no agent to compose for. Run "%s" and choose your agents.</error>',
                 $installCommand,
             ));
             $this->writeFailureOutput($io, $result);

@@ -65,3 +65,37 @@ it('drains a child that writes more to stderr than a pipe buffer holds, without 
         ->and(strlen($result->output))->toBe(1_048_576 + 4)
         ->and($result->output)->toEndWith('done');
 });
+
+it('runs a passthru command on this process\'s own stdin, stdout and stderr, and answers its exit code', function (): void {
+    // The child exits 0 only when each of its three streams is the very file
+    // this process holds, so a command given pipes instead fails the test.
+    $identity = fn ($stream): string => fstat($stream)['dev'] . ':' . fstat($stream)['ino'];
+    $expected = implode(',', [$identity(STDIN), $identity(STDOUT), $identity(STDERR)]);
+    $script = '$id = fn ($s) => fstat($s)["dev"] . ":" . fstat($s)["ino"];'
+        . ' exit(implode(",", [$id(STDIN), $id(STDOUT), $id(STDERR)]) === ' . var_export($expected, true) . ' ? 0 : 5);';
+
+    $process = new SystemProcess;
+
+    expect($process->passthru(phpCommand($script)))->toBe(0)
+        ->and($process->passthru(phpCommand('exit(3);')))->toBe(3);
+});
+
+it('runs a passthru command in the working directory', function (): void {
+    $directory = makeTempDir();
+
+    $exitCode = (new SystemProcess)->passthru(phpCommand('exit(getcwd() === ' . var_export(realpath($directory), true) . ' ? 0 : 6);'), $directory);
+
+    expect($exitCode)->toBe(0);
+
+    removeTempDir($directory);
+});
+
+it('says there is no terminal when its streams are pipes', function (): void {
+    $autoload = var_export(dirname(__DIR__, 3) . '/vendor/autoload.php', true);
+
+    $result = (new SystemProcess)->capture(phpCommand(
+        'require ' . $autoload . '; var_export(MikeBronner\DevelopmentSettings\Support\SystemProcess::hasTerminal());',
+    ));
+
+    expect($result->output)->toBe('false');
+});

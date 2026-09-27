@@ -18,7 +18,7 @@ This package is a Composer plugin that hooks into Composer's pre-update, post-in
 2. **Registers itself with Laravel Boost** by adding its name to the `packages` list in your `boost.json` (wherever Boost can run: an application, or a package with Orchestra Testbench installed). In a package it also writes an `artisan` shim and a managed `.gitattributes` (see "Packages" below)
 3. **Installs or removes dev dependencies** as defined in the package config
 4. **Preserves local modifications** — changed files aren't overwritten, and removed-upstream files you customized aren't deleted without asking
-5. **Composes Laravel Boost** — apps run `php artisan boost:install --no-interaction` with `--guidelines --skills --mcp`, whatever your `boost.json` says; packages run the same command through the `artisan` shim (see "Packages" below). Composition is refused, by file and with the reason, when it would overwrite hand-written content (see "Why a run can refuse to compose" below). A run that composes nothing is reported as failed (see "Choosing your agents" below)
+5. **Composes Laravel Boost** — an interactive `composer` run on a terminal runs `php artisan boost:install` on that terminal: Boost's own prompts choose the features, packages and agents, you see its output, and Boost saves your agents to `boost.json`. Any other run, CI and `--no-interaction` included, runs `php artisan boost:install --no-interaction` with `--guidelines --skills --mcp`, whatever your `boost.json` says, and shows only a one-line result; packages run the same command through the `artisan` shim (see "Packages" below). Composition is refused, by file and with the reason, when it would overwrite hand-written content (see "Why a run can refuse to compose" below). A run that composes nothing is reported as failed (see "Choosing your agents" below)
 6. **Removes the legacy `.ai` symlink and `.dev-settings-boost` file** left by releases before the move to `resources/boost` (see "Upgrading" below)
 
 ### How the AI guidelines and skills reach your project
@@ -48,11 +48,13 @@ A package without `orchestra/testbench` gets no shim and is not composed, and th
 
 `boost.json` is gitignored, so a fresh clone has none. The plugin runs `boost:install` rather than `boost:update` for that reason: `install` writes the config it needs, where `update` finds guidelines and skills disabled and composes nothing.
 
-Run non-interactively, `boost:install` composes for the agents `boost.json` names. When it names none, Boost picks the agents it detects on the machine (an agent's CLI on the `PATH`, its app installed) and in the project (its config directory or guideline file). It does not record that pick, so the plugin warns on every run until you choose:
+Run non-interactively, `boost:install` composes for the agents `boost.json` names. When it names none, Boost picks the agents it detects on the machine (an agent's CLI on the `PATH`, its app installed) and in the project (its config directory or guideline file). It does not record that pick, so a non-interactive run warns every time until you choose. An interactive `composer install` or `composer update` on a terminal asks you and saves the answer. So does running Boost yourself:
 
 ```bash
 php artisan boost:install
 ```
+
+An interactive run also shows Boost's list of third-party packages. If you untick this package there, Boost composes none of its guidelines or skills for that run, and the next `composer` run adds it back to `boost.json`.
 
 When Boost detects no agent at all, it exits successfully having written nothing. The plugin checks for a freshly composed agent file after the run, and reports the run as failed when there is none, rather than printing "done".
 
