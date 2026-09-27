@@ -28,23 +28,34 @@ use RuntimeException;
  * package checkout that holds a write token. So a path reached through a
  * symlink is never selected.
  *
+ * An empty manifest is refused: `ManifestReader::read()` returns one for a
+ * missing, unparseable or `{}` file, and with it every tracked file would look
+ * modified. Both public methods throw before they select anything.
+ *
  * The workflow runs against a package checkout with no Composer install, so
  * this class and its collaborators are required file by file. Keep it free of
- * dependencies beyond `CheckedFile`, `FileDiscovery`, `Manifest` and
- * `ManagedSection`.
+ * dependencies beyond `CheckedFile`, `FileDiscovery`, `Manifest`,
+ * `ManifestReader` and `ManagedSection`.
+ *
+ * @phpstan-type Paths array{
+ *     directories?: array<array-key, string>,
+ *     files?: array<array-key, string>,
+ *     managed?: list<string>,
+ * }
+ * @phpstan-type Changes array<string, array{package: string, proposal: string}>
  */
 final class ReverseSync
 {
-    /**
-     * An empty manifest is refused: `Manifest::load()` returns one for a
-     * missing, unparseable or `{}` file, and with it every tracked file would
-     * look modified.
-     */
-    public function __construct(private Manifest $manifest)
-    {
-        if ($manifest->paths() === []) {
-            throw new RuntimeException('The manifest records no paths. Refusing to treat every tracked file as modified.');
-        }
+    private const NO_PATHS = ['directories' => [], 'files' => [], 'managed' => []];
+
+    private const EMPTY_MANIFEST = 'The manifest records no paths.'
+        . ' Refusing to treat every tracked file as modified.';
+
+    public function __construct(
+        private Manifest $manifest,
+        private CheckedFile $file = new CheckedFile(),
+        private ManagedSection $section = new ManagedSection(),
+    ) {
     }
 
     /**
@@ -54,12 +65,12 @@ final class ReverseSync
      * checksum. A tracked path missing from the project, or reached through a
      * symlink anywhere along it, is skipped.
      *
-     * @param  array{directories?: array<array-key, string>, files?: array<array-key, string>, managed?: list<string>}  $paths
+     * @param  Paths  $paths
      * @return array<string, string> projectPath => packagePath, both relative
      */
     public function changedFiles(string $projectDir, array $paths): array
     {
-        return array_map(fn (array $change): string => $change['package'], $this->changes($projectDir, $paths));
+        return $this->packagePaths($this->changes($projectDir, $paths));
     }
 
     /**
@@ -75,74 +86,148 @@ final class ReverseSync
      * workflow job. Carrying on would drop the proposal while the job stays
      * green, because the next step only sees the files that were written.
      *
-     * @param  array{directories?: array<array-key, string>, files?: array<array-key, string>, managed?: list<string>}  $paths
+     * @param  Paths  $paths
      * @return array<string, string> projectPath => packagePath, both relative
      */
     public function export(string $projectDir, string $packageDir, array $paths): array
     {
         $changes = $this->changes($projectDir, $paths);
+        $file = $this->file;
 
-        foreach ($changes as $change) {
-            CheckedFile::write($packageDir . '/' . $change['package'], $change['proposal']);
+        foreach ($changes as ['package' => $packagePath, 'proposal' => $proposal]) {
+            $file->write("{$packageDir}/{$packagePath}", $proposal);
         }
 
-        return array_map(fn (array $change): string => $change['package'], $changes);
+        return $this->packagePaths($changes);
     }
 
     /**
      * Every changed file, with the package path it maps to and what it
      * proposes, read once.
      *
-     * @param  array{directories?: array<array-key, string>, files?: array<array-key, string>, managed?: list<string>}  $paths
-     * @return array<string, array{package: string, proposal: string}>
+     * @param  Paths  $paths
+     * @return Changes
      */
     private function changes(string $projectDir, array $paths): array
     {
-        $root = realpath($projectDir);
-
-        if ($root === false) {
-            throw new RuntimeException("Project directory {$projectDir} does not exist.");
-        }
-
-        $candidates = FileDiscovery::trackedPaths($paths['files'] ?? []);
-
-        foreach (FileDiscovery::trackedPaths($paths['directories'] ?? []) as $targetDir => $sourceDir) {
-            $candidates += $this->filesIn($root, $targetDir, $sourceDir);
-        }
-
+        $root = $this->root($projectDir);
+        $paths += self::NO_PATHS;
+        ['managed' => $managed] = $paths;
         $changed = [];
 
-        foreach ($candidates as $projectPath => $packagePath) {
-            $file = $root . '/' . $projectPath;
-
-            if (! is_file($file) || realpath($file) !== $file) {
-                continue;
-            }
-
-            $proposal = $this->proposal($file, in_array($projectPath, $paths['managed'] ?? [], strict: true));
-
-            if ($proposal === null || $this->manifest->isKnown($projectPath, md5($proposal))) {
-                continue;
-            }
-
-            $changed[$projectPath] = ['package' => $packagePath, 'proposal' => $proposal];
+        foreach ($this->candidates($root, $paths) as $projectPath => $packagePath) {
+            $changed += $this->change($root, $projectPath, $packagePath, $managed);
         }
 
         return $changed;
     }
 
     /**
-     * What the file would propose upstream, or null when it proposes nothing.
+     * Every tracked file the project could hold, directories expanded.
+     *
+     * @param  array{
+     *     directories: array<array-key, string>,
+     *     files: array<array-key, string>,
+     * }  $paths
+     * @return array<string, string> projectPath => packagePath
      */
-    private function proposal(string $file, bool $managed): ?string
+    private function candidates(string $root, array $paths): array
     {
-        $contents = CheckedFile::read($file);
+        ['directories' => $directories, 'files' => $files] = $paths;
+        $discovery = new FileDiscovery();
+        $candidates = $discovery->trackedPaths($files);
 
-        if (! $managed) {
-            return $contents;
+        foreach ($discovery->trackedPaths($directories) as $targetDir => $sourceDir) {
+            $candidates += $this->filesIn($root, $targetDir, $sourceDir);
         }
 
-        return ManagedSection::split($contents)['managed'] ?? null;
+        return $candidates;
+    }
+
+    /**
+     * The resolved project directory, once the manifest is known to record
+     * something to compare against.
+     */
+    private function root(string $projectDir): string
+    {
+        $recorded = $this->manifest
+            ->paths();
+        $root = realpath($projectDir);
+        $missing = "Project directory {$projectDir} does not exist.";
+
+        return match (true) {
+            $recorded === [] => throw new RuntimeException(self::EMPTY_MANIFEST),
+            $root === false => throw new RuntimeException($missing),
+            default => $root,
+        };
+    }
+
+    /**
+     * The one changed file at this path, or nothing when it is missing, is
+     * reached through a symlink, proposes nothing, or is a known version.
+     *
+     * @param  list<string>  $managed
+     * @return Changes
+     */
+    private function change(
+        string $root,
+        string $projectPath,
+        string $packagePath,
+        array $managed,
+    ): array {
+        $file = "{$root}/{$projectPath}";
+
+        return match (true) {
+            ! is_file($file),
+            realpath($file) !== $file => [],
+            default => $this->unknown(
+                $projectPath,
+                $packagePath,
+                $this->proposal($file, $projectPath, $managed),
+            ),
+        };
+    }
+
+    /**
+     * @return Changes
+     */
+    private function unknown(string $projectPath, string $packagePath, ?string $proposal): array
+    {
+        $manifest = $this->manifest;
+
+        return match (true) {
+            $proposal === null,
+            $manifest->isKnown($projectPath, md5($proposal)) => [],
+            default => [$projectPath => ['package' => $packagePath, 'proposal' => $proposal]],
+        };
+    }
+
+    /**
+     * What the file would propose upstream, or null when it proposes nothing:
+     * a managed target proposes the part above its marker, any other file the
+     * whole file.
+     *
+     * @param  list<string>  $managed
+     */
+    private function proposal(string $file, string $projectPath, array $managed): ?string
+    {
+        $contents = $this->file
+            ->read($file);
+        $section = $this->section;
+
+        return match (in_array($projectPath, $managed, strict: true)) {
+            true => $section->managedPart($contents),
+            false => $contents,
+        };
+    }
+
+    /**
+     * @param  Changes  $changes
+     * @return array<string, string> projectPath => packagePath
+     */
+    private function packagePaths(array $changes): array
+    {
+        return array_combine(array_keys($changes), array_column($changes, 'package'));
     }
 
     /**
@@ -150,12 +235,19 @@ final class ReverseSync
      */
     private function filesIn(string $root, string $targetDir, string $sourceDir): array
     {
-        $dir = $root . '/' . $targetDir;
+        $dir = "{$root}/{$targetDir}";
 
-        if (! is_dir($dir)) {
-            return [];
-        }
+        return match (is_dir($dir)) {
+            true => $this->walk($dir, $targetDir, $sourceDir),
+            false => [],
+        };
+    }
 
+    /**
+     * @return array<string, string> projectPath => packagePath
+     */
+    private function walk(string $dir, string $targetDir, string $sourceDir): array
+    {
         $iterator = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
             RecursiveIteratorIterator::LEAVES_ONLY,
@@ -165,7 +257,7 @@ final class ReverseSync
 
         foreach ($iterator as $file) {
             $descendant = substr($file->getPathname(), strlen($dir) + 1);
-            $files[$targetDir . '/' . $descendant] = $sourceDir . '/' . $descendant;
+            $files["{$targetDir}/{$descendant}"] = "{$sourceDir}/{$descendant}";
         }
 
         return $files;

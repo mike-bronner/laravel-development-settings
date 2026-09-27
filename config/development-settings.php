@@ -68,9 +68,7 @@ return [
             'resources/project/artisan' => 'artisan',
             'resources/project/gitattributes' => '.gitattributes',
         ],
-        'managed' => [
-            '.gitattributes',
-        ],
+        'managed' => ['.gitattributes'],
     ],
 
     // Tracked paths are copied into the consuming project. A plain entry names

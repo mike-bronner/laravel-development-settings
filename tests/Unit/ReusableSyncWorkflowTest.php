@@ -1,7 +1,21 @@
 <?php
 
 declare(strict_types=1);
-use MikeBronner\DevelopmentSettings\Support\ManagedSection;
+
+use MikeBronner\DevelopmentSettings\Support\InstalledPackage;
+use MikeBronner\DevelopmentSettings\Support\SystemProcess;
+
+const SELF_CALL_GUARD = <<<REGEX
+    /^  sync:\n(?:    #.*\n)*    if: github\.repository != '([^']+)'\n/m
+    REGEX;
+
+const MIN_FENCE = 3;
+
+const CLOSING_FENCE = '/^ {0,3}`{%d,}[ \t]*$/';
+
+afterEach(function (): void {
+    removeTempDir($this->project);
+});
 
 /*
  * The package ships the calling workflow, so it runs the reverse sync on
@@ -10,178 +24,68 @@ use MikeBronner\DevelopmentSettings\Support\ManagedSection;
  * sits on the job, directly under its key, so every step is skipped.
  */
 it('skips the reverse sync when the package itself is the caller', function (): void {
-    $workflow = file_get_contents(dirname(__DIR__, 2) . '/.github/workflows/reusable-sync.yml');
+    $this->project = makeTempDir();
 
-    expect($workflow)->toMatch(
-        "/^  sync:\n(?:    #.*\n)*    if: github\.repository != 'mike-bronner\/laravel-development-settings'\n/m",
-    );
+    preg_match(SELF_CALL_GUARD, (string) file_get_contents(REUSABLE_SYNC), $guard);
+
+    expect(data_get($guard, 1))->toBe(InstalledPackage::NAME);
 });
 
 /*
- * Runs the workflow's own PHP step, as written in the YAML, in a project
- * beside a package checkout built from this repository's sources. It proves
- * the step requires every class it uses and writes only the managed section.
+ * The workflow's PHP step requires every class it uses, from the package
+ * checkout, and writes only the managed section.
  */
+it('copies only the managed section of the .gitignore into the package', function (): void {
+    [$this->project, $package, $shipped] = syncFixture();
 
-/**
- * A project whose `.gitignore` carries an edit above the marker, beside a
- * package checkout.
- *
- * @return array{0: string, 1: string, 2: string} project dir, package dir, shipped stub
- */
-function syncFixture(): array
-{
-    $root = dirname(__DIR__, 2);
-    $project = makeTempDir('devset-sync-');
-    $package = $project . '/_laravel-development-settings';
+    $result = runSyncStep($this->project);
 
-    mkdir($package . '/src', 0755, true);
-    mkdir($package . '/config');
-    mkdir($package . '/resources/project', 0755, true);
-    exec('cp -R ' . escapeshellarg($root . '/src/Support') . ' ' . escapeshellarg($package . '/src/Support'));
-    copy($root . '/config/development-settings.php', $package . '/config/development-settings.php');
-    copy($root . '/manifest.json', $package . '/manifest.json');
+    expect($result->exitCode())->toBe(0, $result->output());
+    expect(file_get_contents("{$package}/resources/project/gitignore"))
+        ->toBe("{$shipped}/edited\n");
+    $proposed = json_encode('.gitignore') . ' -> ' . json_encode('resources/project/gitignore');
 
-    $shipped = (string) file_get_contents($root . '/resources/project/gitignore');
-    copy($root . '/resources/project/gitignore', $package . '/resources/project/gitignore');
-    file_put_contents($project . '/.gitignore', $shipped . "/storage/edited\n" . ManagedSection::MARKER . "\n!AGENTS.md\n");
-
-    return [$project, $package, $shipped];
-}
-
-/**
- * @return array{0: int, 1: string} exit code, output
- */
-function runSyncStep(string $project): array
-{
-    $workflow = (string) file_get_contents(dirname(__DIR__, 2) . '/.github/workflows/reusable-sync.yml');
-
-    expect(preg_match("/^          php -r '\n(.*?)\n          '\n/ms", $workflow, $match))->toBe(1);
-
-    $command = 'cd ' . escapeshellarg($project) . ' && ' . escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg($match[1]) . ' 2>&1';
-    exec($command, $output, $exitCode);
-
-    return [$exitCode, implode("\n", $output)];
-}
-
-it('copies only the managed section of the project .gitignore into the package checkout', function (): void {
-    [$project, $package, $shipped] = syncFixture();
-
-    [$exitCode, $output] = runSyncStep($project);
-
-    expect($exitCode)->toBe(0, $output)
-        ->and(file_get_contents($package . '/resources/project/gitignore'))->toBe($shipped . "/storage/edited\n")
-        ->and($output)->toContain('".gitignore" -> "resources\/project\/gitignore"');
-
-    removeTempDir($project);
+    expect($result->output())->toContain($proposed);
 });
 
-it('fails the step when a changed file cannot be written to the package checkout', function (): void {
-    [$project, $package, $shipped] = syncFixture();
-    chmod($package . '/resources/project/gitignore', 0444);
+it('fails the step when a changed file cannot be written to the package', function (): void {
+    [$this->project, $package, $shipped] = syncFixture();
+    chmod("{$package}/resources/project/gitignore", MODE_READ_ONLY);
 
-    [$exitCode, $output] = runSyncStep($project);
+    $result = runSyncStep($this->project);
+    chmod("{$package}/resources/project/gitignore", MODE_WRITABLE);
 
-    chmod($package . '/resources/project/gitignore', 0644);
-
-    expect($exitCode)->toBe(1, $output)
-        ->and($output)->toContain('Could not write _laravel-development-settings/resources/project/gitignore: ')
-        ->and($output)->not->toContain('->')
-        ->and(file_get_contents($package . '/resources/project/gitignore'))->toBe($shipped);
-
-    removeTempDir($project);
+    expect($result->exitCode())->toBe(1, $result->output());
+    expect($result->output())
+        ->toContain('Could not write _laravel-development-settings/resources/project/gitignore: ');
+    expect(str_contains($result->output(), '->'))->toBeFalse();
+    expect(file_get_contents("{$package}/resources/project/gitignore"))->toBe($shipped);
 });
 
 /*
- * Runs the workflow's change detection, as written in the YAML, on a package
- * checkout holding changed files, and renders the PR body from its outputs.
- * File names are project input, so each one must stay inside the fence.
+ * File names are project input, so each changed one must stay inside the
+ * code fence of the PR body the change detection feeds.
  */
-
-/**
- * @return array<string, string> the step outputs, by name
- */
-function runDetectStep(string $project): array
-{
-    $workflow = (string) file_get_contents(dirname(__DIR__, 2) . '/.github/workflows/reusable-sync.yml');
-
-    expect(preg_match("/^      - name: Detect changes\n.*?^        run: \|\n(.*?)\n\n      - name:/ms", $workflow, $match))->toBe(1);
-
-    $script = (string) preg_replace('/^ {10}/m', '', $match[1]);
-    $outputFile = $project . '/github-output';
-    touch($outputFile);
-
-    $command = 'cd ' . escapeshellarg($project) . ' && GITHUB_OUTPUT=' . escapeshellarg($outputFile) . ' bash -e -c ' . escapeshellarg($script) . ' 2>&1';
-    exec($command, $output, $exitCode);
-
-    expect($exitCode)->toBe(0, implode("\n", $output));
-
-    $lines = explode("\n", (string) file_get_contents($outputFile));
-    $outputs = [];
-
-    while (($line = array_shift($lines)) !== null) {
-        if (preg_match('/^(\w+)<<(\S+)$/', $line, $heredoc) === 1) {
-            $value = [];
-
-            while (($next = array_shift($lines)) !== null && $next !== $heredoc[2]) {
-                $value[] = $next;
-            }
-
-            $outputs[$heredoc[1]] = implode("\n", $value);
-        } elseif (preg_match('/^(\w+)=(.*)$/', $line, $pair) === 1) {
-            $outputs[$pair[1]] = $pair[2];
-        }
-    }
-
-    return $outputs;
-}
-
-/**
- * The PR body as the workflow writes it, with the step outputs filled in.
- *
- * @param  array<string, string>  $outputs
- */
-function renderPullRequestBody(array $outputs): string
-{
-    $workflow = (string) file_get_contents(dirname(__DIR__, 2) . '/.github/workflows/reusable-sync.yml');
-
-    expect(preg_match("/^          body: \|\n(.*?)\n          commit-message:/ms", $workflow, $match))->toBe(1);
-
-    $body = (string) preg_replace('/^ {12}/m', '', $match[1]);
-    $body = (string) preg_replace_callback(
-        '/\$\{\{ steps\.changes\.outputs\.(\w+) \}\}/',
-        fn (array $name): string => $outputs[$name[1]] ?? '',
-        $body,
-    );
-
-    return (string) preg_replace('/\$\{\{ [^}]+ \}\}/', 'owner/project', $body);
-}
-
 it('keeps every changed file name inside the code fence of the PR body', function (): void {
-    $project = makeTempDir('devset-detect-');
-    $package = $project . '/_laravel-development-settings';
+    $this->project = makeTempDir('devset-detect-');
+    $package = "{$this->project}/_laravel-development-settings";
+    $backticks = str_repeat('`', MIN_FENCE);
+    seedFiles($package, ['pint.json' => 'shipped']);
+    (new SystemProcess())->run('git init -q && git add pint.json', $package);
+    seedFiles($package, [
+        'pint.json' => 'edited',
+        "a{$backticks}b.txt" => 'x',
+        "{$backticks}`" => 'x',
+    ]);
 
-    // pint.json is staged, then edited, so `git diff` reports it. The other
-    // two are untracked.
-    mkdir($package);
-    file_put_contents($package . '/pint.json', 'shipped');
-    exec('cd ' . escapeshellarg($package) . ' && git init -q && git add pint.json');
-    file_put_contents($package . '/pint.json', 'edited');
-    file_put_contents($package . '/a```b.txt', 'x');
-    file_put_contents($package . '/````', 'x');
-
-    $lines = explode("\n", renderPullRequestBody(runDetectStep($project)));
+    $lines = explode("\n", renderPullRequestBody(runDetectStep($this->project)));
     $open = (int) array_search('**Changed files:**', $lines, strict: true) + 1;
-    $fence = $lines[$open];
-    $closing = '/^ {0,3}`{' . strlen($fence) . ',}[ \t]*$/';
-    $length = 0;
+    $fence = (string) data_get($lines, $open);
+    $closing = sprintf(CLOSING_FENCE, strlen($fence));
+    $fenced = collect(array_slice($lines, $open + 1))
+        ->takeUntil(fn (string $line): bool => preg_match($closing, $line) === 1)
+        ->all();
 
-    while (preg_match($closing, $lines[$open + 1 + $length]) !== 1) {
-        $length++;
-    }
-
-    expect($fence)->toMatch('/^`{3,}$/')
-        ->and(array_slice($lines, $open + 1, $length))->toBe(['````', 'a```b.txt', 'pint.json']);
-
-    removeTempDir($project);
+    expect($fence)->toMatch('/^`{3,}$/');
+    expect($fenced)->toBe(["{$backticks}`", "a{$backticks}b.txt", 'pint.json']);
 });

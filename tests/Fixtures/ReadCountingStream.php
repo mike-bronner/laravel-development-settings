@@ -5,50 +5,41 @@ declare(strict_types=1);
 namespace MikeBronner\DevelopmentSettings\Tests\Fixtures;
 
 /**
- * Stands in for PHP's `file://` stream wrapper while an operation runs, and
- * counts how often each path is opened for reading. Every call is passed on to
- * the native wrapper, so the operation behaves exactly as it would without it.
+ * Stands in for PHP's `file://` stream wrapper while `ReadCounter` watches an
+ * operation, and tells the counter each time a path is opened for reading.
+ * Every call is passed on to the native wrapper, so the operation behaves
+ * exactly as it would without it.
  *
- * Only the calls the reverse sync makes are implemented. Load every class the
- * operation needs before watching it: an autoloaded include would be counted
- * too, and runs through calls this class does not implement.
+ * PHP names these methods and passes their arguments, so their names are the
+ * stream wrapper protocol's own. Only the calls the reverse sync makes are
+ * implemented.
  */
 final class ReadCountingStream
 {
-    /** @var resource|null */
+    /**
+     * @var resource|null
+     */
     public $context;
 
-    /** @var array<string, int> */
-    private static array $reads = [];
-
-    /** @var resource|false */
+    /**
+     * @var resource|false
+     */
     private $handle = false;
 
-    /**
-     * @param  callable(): mixed  $operation
-     * @return array<string, int> path => times opened for reading
-     */
-    public static function watch(callable $operation): array
+    // PHP calls a stream wrapper's methods by these fixed names, so they cannot be camel case.
+    // phpcs:disable PSR1.Methods.CamelCapsMethodName
+
+    public function stream_open(string $path, string $mode): bool
     {
-        self::$reads = [];
-        self::install();
+        $isRead = str_starts_with($mode, 'r') && ! str_contains($mode, '+');
 
-        try {
-            $operation();
-        } finally {
-            stream_wrapper_restore('file');
-        }
+        match ($isRead) {
+            true => $this->counter()
+                ?->count($path),
+            false => null,
+        };
 
-        return self::$reads;
-    }
-
-    public function stream_open(string $path, string $mode, int $options, ?string &$openedPath): bool
-    {
-        if (str_starts_with($mode, 'r') && ! str_contains($mode, '+')) {
-            self::$reads[$path] = (self::$reads[$path] ?? 0) + 1;
-        }
-
-        $this->handle = self::native(fn (): mixed => fopen($path, $mode));
+        $this->handle = $this->native(static fn (): mixed => fopen($path, $mode));
 
         return $this->handle !== false;
     }
@@ -90,7 +81,11 @@ final class ReadCountingStream
         fclose($this->handle);
     }
 
-    public function stream_set_option(int $option, int $arg1, ?int $arg2): bool
+    /**
+     * No option is supported. PHP warns about a wrapper without this method
+     * when it sets the buffer of a stream.
+     */
+    public function stream_set_option(): bool
     {
         return false;
     }
@@ -103,37 +98,58 @@ final class ReadCountingStream
      */
     public function url_stat(string $path, int $flags): array|false
     {
-        return self::native(fn (): array|false => match (true) {
-            ($flags & STREAM_URL_STAT_LINK) !== 0 => is_link($path) || file_exists($path) ? lstat($path) : false,
-            default => file_exists($path) ? stat($path) : false,
+        $ofLink = ($flags & STREAM_URL_STAT_LINK) !== 0;
+
+        return $this->native(static fn (): array|false => match (true) {
+            $ofLink && (is_link($path) || file_exists($path)) => lstat($path),
+            ! $ofLink && file_exists($path) => stat($path),
+            default => false,
         });
     }
 
+    // phpcs:enable PSR1.Methods.CamelCapsMethodName
+
     public function mkdir(string $path, int $mode, int $options): bool
     {
-        return self::native(fn (): bool => mkdir($path, $mode, ($options & STREAM_MKDIR_RECURSIVE) !== 0));
-    }
+        $recursive = ($options & STREAM_MKDIR_RECURSIVE) !== 0;
 
-    private static function install(): void
-    {
-        stream_wrapper_unregister('file');
-        stream_wrapper_register('file', self::class);
+        return $this->native(static fn (): bool => mkdir($path, $mode, $recursive));
     }
 
     /**
+     * The counter watching this operation, from the stream context. An include
+     * opens its file with no context, so it is never counted. Nothing here may
+     * autoload a class: the load would open its file through this wrapper.
+     */
+    private function counter(): ?ReadCounter
+    {
+        $options = match ($this->context) {
+            null => [],
+            default => stream_context_get_options($this->context),
+        };
+        ['file' => $fileOptions] = $options + ['file' => []];
+        [ReadCounter::OPTION => $counter] = $fileOptions + [ReadCounter::OPTION => null];
+
+        return $counter;
+    }
+
+    /**
+     * Run the call with the native wrapper in place, then put this one back.
+     *
      * @template T
      *
      * @param  callable(): T  $call
      * @return T
      */
-    private static function native(callable $call): mixed
+    private function native(callable $call): mixed
     {
         stream_wrapper_restore('file');
 
         try {
             return $call();
         } finally {
-            self::install();
+            stream_wrapper_unregister('file');
+            stream_wrapper_register('file', self::class);
         }
     }
 }

@@ -4,62 +4,21 @@ declare(strict_types=1);
 
 /*
 |--------------------------------------------------------------------------
-| Test Case
-|--------------------------------------------------------------------------
-|
-| Pest binds a base test case to the test files in the directories listed
-| below. These classes are plain PHPUnit test cases — this package is a
-| Composer plugin, not a Laravel application, so there is no framework
-| TestCase to extend.
-|
-*/
-
-uses()->in('Unit', 'Feature');
-
-/*
-|--------------------------------------------------------------------------
 | Helpers
 |--------------------------------------------------------------------------
 |
-| Create a unique temporary directory for filesystem-centric tests and
-| return its absolute path. Callers are responsible for cleanup, or may
-| rely on the `tempDir()` helper's registered shutdown removal.
+| The suite runs on plain PHPUnit test cases: this package is a Composer
+| plugin, not a Laravel application, so there is no framework TestCase to
+| bind. The helper files hold declarations only, so every test file can use
+| them without declaring functions of its own.
 |
 */
 
-function makeTempDir(string $prefix = 'devset-test-'): string
-{
-    $base = sys_get_temp_dir() . '/' . $prefix . bin2hex(random_bytes(6));
-
-    mkdir(directory: $base, permissions: 0755, recursive: true);
-
-    return $base;
-}
-
-function removeTempDir(string $path): void
-{
-    // Symlinks are unlinked, never followed (so we don't recurse into vendor).
-    if (is_link($path)) {
-        unlink($path);
-
-        return;
-    }
-
-    if (! is_dir($path)) {
-        if (file_exists($path)) {
-            unlink($path);
-        }
-
-        return;
-    }
-
-    foreach (scandir($path) ?: [] as $entry) {
-        if ($entry === '.' || $entry === '..') {
-            continue;
-        }
-
-        removeTempDir($path . '/' . $entry);
-    }
-
-    rmdir($path);
-}
+require_once __DIR__ . '/Helpers/filesystem.php';
+require_once __DIR__ . '/Helpers/managed.php';
+require_once __DIR__ . '/Helpers/agents.php';
+require_once __DIR__ . '/Helpers/process.php';
+require_once __DIR__ . '/Helpers/consumer.php';
+require_once __DIR__ . '/Helpers/shipped.php';
+require_once __DIR__ . '/Helpers/phpcs.php';
+require_once __DIR__ . '/Helpers/workflow.php';

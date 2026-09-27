@@ -2,10 +2,11 @@
 
 declare(strict_types=1);
 
-use MikeBronner\DevelopmentSettings\Support\FileDiscovery;
+use Illuminate\Support\Str;
+use MikeBronner\DevelopmentSettings\Support\ContributionDetector;
 use MikeBronner\DevelopmentSettings\Support\ManagedSection;
-use MikeBronner\DevelopmentSettings\Support\Manifest;
-use MikeBronner\DevelopmentSettings\Support\PackageRepository;
+use MikeBronner\DevelopmentSettings\Support\PackageConfig;
+use MikeBronner\DevelopmentSettings\Support\ProjectKind;
 
 /*
  * Versions shipped at release tags before manifest.json recorded them. The
@@ -13,58 +14,47 @@ use MikeBronner\DevelopmentSettings\Support\PackageRepository;
  * the plugin protected them as locally modified. They are the tag backfill's
  * regression guard: each was an untouched copy of a released file.
  */
-it('knows the versions older release tags shipped', function (string $path, string $checksum): void {
-    $manifest = Manifest::load(dirname(__DIR__, 2) . '/manifest.json');
-
-    expect($manifest->isKnown($path, $checksum))->toBeTrue();
+it('knows the versions older tags shipped', function (string $path, string $checksum): void {
+    expect(shippedManifest()->isKnown($path, $checksum))->toBeTrue();
 })->with([
     '.gitignore' => ['.gitignore', '91990d02db276ed5bd7a21f2780db4e3'],
-    'sync workflow' => ['.github/workflows/sync-developer-settings.yml', '96799ee1dfa802002dd95c4b5203002d'],
+    'sync workflow' => [
+        '.github/workflows/sync-developer-settings.yml',
+        '96799ee1dfa802002dd95c4b5203002d',
+    ],
 ]);
 
 /*
- * A managed target is written as its source plus the marker line, so it has to
- * be a tracked file, and its source must end with a newline or the marker
- * would land on the source's last line.
+ * A managed target is written as its source plus the marker line, so it has
+ * to be a tracked file, its source must end with a newline, or the marker
+ * would land on its last line, and must not hold the marker itself, or every
+ * project would get two and refuse the file from then on.
  */
-it('ships every managed target as a tracked file whose source ends with a newline', function (string $group): void {
-    $root = dirname(__DIR__, 2);
-    $paths = (require $root . '/config/development-settings.php')[$group];
-    $files = FileDiscovery::trackedPaths($paths['files']);
+it('ships every managed target as a source the marker can follow', function (string $group): void {
+    $managed = match ($group) {
+        'package' => shippedConfig()->entries(PackageConfig::PACKAGE_MANAGED),
+        default => shippedConfig()->entries(PackageConfig::MANAGED),
+    };
+    $sources = collect(shippedFiles($group))
+        ->only($managed)
+        ->map(fn (string $source): string => shippedSource($source));
 
-    expect($paths['managed'])->not->toBe([]);
+    expect($managed)->not
+        ->toBe([]);
+    expect($sources->keys()->all())->toBe($managed);
+    expect($sources->reject(fn (string $contents): bool => str_ends_with($contents, "\n"))->all())
+        ->toBe([]);
+    $section = new ManagedSection();
 
-    foreach ($paths['managed'] as $target) {
-        expect($files)->toHaveKey($target)
-            ->and(file_get_contents($root . '/' . $files[$target]))->toEndWith("\n");
-    }
-})->with(['paths', 'package']);
-
-/*
- * The sync writes a managed source above the marker. A source that held the
- * marker itself would give every project two, and every run after that would
- * refuse the file.
- */
-it('ships no managed source that holds the sync marker', function (string $group): void {
-    $root = dirname(__DIR__, 2);
-    $paths = (require $root . '/config/development-settings.php')[$group];
-    $files = FileDiscovery::trackedPaths($paths['files']);
-
-    expect($paths['managed'])->not->toBe([]);
-
-    foreach ($paths['managed'] as $target) {
-        expect($files)->toHaveKey($target)
-            ->and(ManagedSection::markers((string) file_get_contents($root . '/' . $files[$target])))->toBe(0, $target);
-    }
+    expect($sources->map(fn (string $contents): int => $section->markers($contents))->sum())
+        ->toBe(0);
 })->with(['paths', 'package']);
 
 it('ships no testbench.yaml, because the artisan shim does the rooting', function (): void {
-    $root = dirname(__DIR__, 2);
-    $files = FileDiscovery::trackedPaths((require $root . '/config/development-settings.php')['paths']['files']);
-    $manifest = json_decode((string) file_get_contents($root . '/manifest.json'), associative: true);
-
-    expect($files)->not->toHaveKey('testbench.yaml')
-        ->and($manifest)->not->toHaveKey('testbench.yaml');
+    expect(shippedFiles('paths'))->not
+        ->toHaveKey('testbench.yaml');
+    expect(shippedManifest()->paths())->not
+        ->toContain('testbench.yaml');
 });
 
 /*
@@ -73,21 +63,34 @@ it('ships no testbench.yaml, because the artisan shim does the rooting', functio
  * modified, and orphan cleanup would offer to delete it.
  */
 it('keeps the package files out of the tracked files and out of manifest.json', function (): void {
-    $root = dirname(__DIR__, 2);
-    $config = require $root . '/config/development-settings.php';
-    $targets = array_keys(FileDiscovery::trackedPaths($config['package']['files']));
-    $manifest = json_decode((string) file_get_contents($root . '/manifest.json'), associative: true);
-    $packageManifest = json_decode((string) file_get_contents($root . '/' . PackageRepository::MANIFEST_FILE), associative: true);
+    $targets = array_keys(shippedFiles('package'));
 
-    expect($targets)->toContain(PackageRepository::ARTISAN)
-        ->and(array_keys($packageManifest))->toEqualCanonicalizing($targets)
-        ->and(array_intersect($targets, array_keys(FileDiscovery::trackedPaths($config['paths']['files']))))->toBe([])
-        ->and(array_intersect($targets, array_keys($manifest)))->toBe([]);
+    expect($targets)->toContain(ProjectKind::ARTISAN);
+    expect(shippedManifest(ProjectKind::MANIFEST_FILE)->paths())->toEqualCanonicalizing($targets);
+    expect(array_intersect($targets, array_keys(shippedFiles('paths'))))->toBe([]);
+    expect(array_intersect($targets, shippedManifest()->paths()))->toBe([]);
 });
 
 it('ships a shim that carries its marker', function (): void {
-    $root = dirname(__DIR__, 2);
-    $source = array_search(PackageRepository::ARTISAN, (require $root . '/config/development-settings.php')['package']['files'], strict: true);
+    $source = (string) data_get(shippedFiles('package'), ProjectKind::ARTISAN);
 
-    expect(PackageRepository::isShim((string) file_get_contents($root . '/' . $source)))->toBeTrue();
+    expect((new ProjectKind())->isShim(shippedSource($source)))->toBeTrue();
+});
+
+/*
+ * Copy-sync and orphan cleanup read manifest.json on project paths. A
+ * resources/boost key there would let cleanup delete a consuming package's
+ * own resources/boost files.
+ */
+it('keeps capture checksums out of the manifest copy-sync reads', function (): void {
+    $prefixes = collect(shippedConfig()->entries(PackageConfig::CAPTURE))
+        ->map(fn (string $directory): string => "{$directory}/")
+        ->all();
+    $captured = fn (string $path): bool => Str::startsWith($path, $prefixes);
+    $capture = collect(shippedManifest(ContributionDetector::MANIFEST_FILE)->paths());
+
+    expect(collect(shippedManifest()->paths())->filter($captured)->all())->toBe([]);
+    expect($capture->all())->not
+        ->toBe([]);
+    expect($capture->reject($captured)->all())->toBe([]);
 });

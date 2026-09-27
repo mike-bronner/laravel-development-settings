@@ -18,6 +18,9 @@ use RecursiveIteratorIterator;
  * have to use for its own copy. Results are keyed by the **target**, so the
  * manifest, the classifier and the orphan cleanup all keep speaking in
  * project-relative paths no matter where a source moves.
+ *
+ * The reverse sync workflow requires this file directly, with no Composer
+ * install, so it stays free of dependencies.
  */
 final class FileDiscovery
 {
@@ -26,96 +29,137 @@ final class FileDiscovery
      */
     public const DEFAULT_IGNORE = ['.DS_Store', '.git', 'Thumbs.db'];
 
+    private const NO_PATHS = ['directories' => [], 'files' => []];
+
     /**
      * Resolve one configured group of entries to targetPath => sourcePath.
      *
      * A list entry (`'pint.json'`) means the package path and the project path
-     * are the same. A keyed entry (`'resources/project/gitignore' => '.gitignore'`)
-     * reads source-to-target, matching how Laravel itself spells a publish map.
+     * are the same. A keyed entry
+     * (`'resources/project/gitignore' => '.gitignore'`) reads source-to-target,
+     * matching how Laravel itself spells a publish map.
      *
      * @param  array<array-key, string>  $entries
      * @return array<string, string> targetPath => sourcePath
      */
-    public static function trackedPaths(array $entries): array
+    public function trackedPaths(array $entries): array
     {
         $tracked = [];
 
         foreach ($entries as $source => $target) {
-            $tracked[$target] = is_string($source) ? $source : $target;
+            $tracked[$target] = match (is_string($source)) {
+                true => $source,
+                false => $target,
+            };
         }
 
         return $tracked;
     }
 
     /**
-     * @param  array{directories?: array<array-key, string>, files?: array<array-key, string>}  $paths
+     * @param  array{
+     *     directories?: array<array-key, string>,
+     *     files?: array<array-key, string>,
+     * }  $paths
      * @param  list<string>  $ignore
      * @return array<string, string> targetPath => absoluteSourcePath
      */
-    public function discover(string $packageDir, array $paths, array $ignore = self::DEFAULT_IGNORE): array
+    public function discover(
+        string $packageDir,
+        array $paths,
+        array $ignore = self::DEFAULT_IGNORE,
+    ): array {
+        ['directories' => $directories, 'files' => $files] = $paths + self::NO_PATHS;
+
+        return array_replace(
+            $this->shipped($packageDir, $this->directoryFiles($packageDir, $directories), $ignore),
+            $this->shipped($packageDir, $this->trackedPaths($files), $ignore),
+        );
+    }
+
+    /**
+     * Every file under the tracked directories the package ships.
+     *
+     * @param  array<array-key, string>  $directories
+     * @return array<string, string> targetPath => sourcePath
+     */
+    private function directoryFiles(string $packageDir, array $directories): array
     {
         $files = [];
 
-        foreach (self::trackedPaths($paths['directories'] ?? []) as $targetDir => $sourceDir) {
-            $sourcePath = $packageDir . '/' . $sourceDir;
-
-            if (! is_dir($sourcePath)) {
-                continue;
-            }
-
-            $iterator = new RecursiveIteratorIterator(
-                new RecursiveDirectoryIterator($sourcePath, RecursiveDirectoryIterator::SKIP_DOTS),
-                RecursiveIteratorIterator::LEAVES_ONLY,
-            );
-
-            foreach ($iterator as $file) {
-                $descendant = substr($file->getPathname(), strlen($sourcePath) + 1);
-
-                if ($this->isIgnored($sourceDir . '/' . $descendant, $ignore)
-                    || $this->isIgnored($targetDir . '/' . $descendant, $ignore)) {
-                    continue;
-                }
-
-                $files[$targetDir . '/' . $descendant] = $file->getPathname();
-            }
-        }
-
-        foreach (self::trackedPaths($paths['files'] ?? []) as $targetFile => $sourceFile) {
-            if ($this->isIgnored($sourceFile, $ignore) || $this->isIgnored($targetFile, $ignore)) {
-                continue;
-            }
-
-            $sourcePath = $packageDir . '/' . $sourceFile;
-
-            if (! file_exists($sourcePath)) {
-                continue;
-            }
-
-            $files[$targetFile] = $sourcePath;
+        foreach ($this->trackedPaths($directories) as $targetDir => $sourceDir) {
+            $files = array_replace($files, $this->filesIn($packageDir, $targetDir, $sourceDir));
         }
 
         return $files;
     }
 
     /**
+     * @return array<string, string> targetPath => sourcePath
+     */
+    private function filesIn(string $packageDir, string $targetDir, string $sourceDir): array
+    {
+        $sourcePath = "{$packageDir}/{$sourceDir}";
+
+        return match (is_dir($sourcePath)) {
+            true => $this->walk($sourcePath, $targetDir, $sourceDir),
+            false => [],
+        };
+    }
+
+    /**
+     * @return array<string, string> targetPath => sourcePath
+     */
+    private function walk(string $sourcePath, string $targetDir, string $sourceDir): array
+    {
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($sourcePath, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::LEAVES_ONLY,
+        );
+
+        $files = [];
+
+        foreach ($iterator as $file) {
+            $descendant = substr($file->getPathname(), strlen($sourcePath) + 1);
+            $files["{$targetDir}/{$descendant}"] = "{$sourceDir}/{$descendant}";
+        }
+
+        return $files;
+    }
+
+    /**
+     * The candidates the package ships and nobody ignores, with their sources
+     * made absolute.
+     *
+     * @param  array<string, string>  $candidates  targetPath => sourcePath
+     * @param  list<string>  $ignore
+     * @return array<string, string> targetPath => absoluteSourcePath
+     */
+    private function shipped(string $packageDir, array $candidates, array $ignore): array
+    {
+        $shipped = [];
+
+        foreach ($candidates as $target => $source) {
+            $shipped = array_replace($shipped, match (true) {
+                $this->isIgnored($source, $ignore),
+                $this->isIgnored($target, $ignore),
+                ! file_exists("{$packageDir}/{$source}") => [],
+                default => [$target => "{$packageDir}/{$source}"],
+            });
+        }
+
+        return $shipped;
+    }
+
+    /**
+     * Whether any segment of the path is ignored: a junk file by its basename
+     * anywhere in the tree (".DS_Store"), or a junk directory anywhere along
+     * the path (".git").
+     *
      * @param  list<string>  $ignore
      */
     private function isIgnored(string $relativePath, array $ignore): bool
     {
-        $segments = explode('/', $relativePath);
-
-        foreach ($ignore as $needle) {
-            // Junk file by basename anywhere in the tree (e.g. ".DS_Store").
-            if (basename($relativePath) === $needle) {
-                return true;
-            }
-
-            // Junk directory segment anywhere in the path (e.g. ".git").
-            if (in_array($needle, $segments, strict: true)) {
-                return true;
-            }
-        }
-
-        return false;
+        return array_intersect($ignore, explode('/', $relativePath)) !== [];
     }
 }

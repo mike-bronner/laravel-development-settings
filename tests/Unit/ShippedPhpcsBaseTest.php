@@ -2,110 +2,52 @@
 
 declare(strict_types=1);
 
-use MikeBronner\DevelopmentSettings\Support\FileDiscovery;
 use MikeBronner\DevelopmentSettings\Support\FileSync;
-use MikeBronner\DevelopmentSettings\Support\Manifest;
 
-const PHPCS_ELSE_SNIFF = 'CleanCode.Conditionals.DisallowElse.Found';
-
-const PHPCS_ELSE_SOURCE = <<<'PHP'
-    <?php
-
-    declare(strict_types=1);
-
-    if (true) {
-        echo 'a';
-    } else {
-        echo 'b';
-    }
-
-    PHP;
-
-function phpcsProject(array $relativePaths): string
-{
-    $project = makeTempDir('devset-phpcs-');
-
-    copy(dirname(__DIR__, 2) . '/phpcs.xml', $project . '/phpcs.xml');
-
-    foreach ($relativePaths as $relativePath) {
-        $directory = dirname($project . '/' . $relativePath);
-
-        if (! is_dir($directory)) {
-            mkdir(directory: $directory, recursive: true);
-        }
-
-        file_put_contents($project . '/' . $relativePath, PHPCS_ELSE_SOURCE);
-    }
-
-    return $project;
-}
-
-// Runs PHP_CodeSniffer the way a developer does, with no arguments, so it
-// finds its ruleset and its paths on its own. Returns each checked file,
-// relative to the project, with the sniff codes reported against it.
-function runPhpcs(string $project): array
-{
-    $command = [PHP_BINARY, dirname(__DIR__, 2) . '/vendor/bin/phpcs', '-q', '--report=json'];
-    $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $project);
-    $output = (string) stream_get_contents($pipes[1]);
-    $errors = (string) stream_get_contents($pipes[2]);
-    proc_close($process);
-
-    $report = json_decode($output, associative: true);
-
-    expect($report)->toBeArray("PHP_CodeSniffer printed no report: {$output}{$errors}");
-
-    $files = [];
-
-    foreach ($report['files'] as $path => $file) {
-        $relativePath = substr(realpath($path), strlen(realpath($project)) + 1);
-        $files[$relativePath] = array_values(array_unique(array_column($file['messages'], 'source')));
-    }
-
-    ksort($files);
-
-    return $files;
-}
-
-it('ships phpcs.xml and never a ruleset copy', function (): void {
-    $root = dirname(__DIR__, 2);
-    $paths = (require $root . '/config/development-settings.php')['paths'];
-    $targets = [
-        ...array_keys(FileDiscovery::trackedPaths($paths['files'])),
-        ...array_keys(FileDiscovery::trackedPaths($paths['directories'])),
-    ];
-
-    expect($targets)->toContain('phpcs.xml')
-        ->not->toContain('phpcs.xml.dist')
-        ->and(array_filter($targets, fn (string $target): bool => str_starts_with($target, '.php-codesniffer')))->toBe([]);
+afterEach(function (): void {
+    removeTempDir($this->project);
 });
 
-it('checks every project file with CleanCode and skips the generated directories', function (array $shipped, array $skipped): void {
-    $project = phpcsProject([...$shipped, ...$skipped]);
+it('ships phpcs.xml and never a ruleset copy', function (): void {
+    $this->project = makeTempDir();
+    $targets = array_keys(shippedFiles('paths'));
 
-    $checked = runPhpcs($project);
+    expect($targets)->toContain('phpcs.xml')
+        ->not
+        ->toContain('phpcs.xml.dist');
+    $rulesetCopies = collect($targets)
+        ->filter(fn (string $path): bool => str_starts_with($path, '.php-codesniffer'));
 
-    removeTempDir($project);
+    expect($rulesetCopies)->toBeEmpty();
+});
 
-    sort($shipped);
+it('checks each project file with CleanCode, but not the generated directories', function (
+    array $shipped,
+    array $skipped,
+): void {
+    $this->project = phpcsProject([...$shipped, ...$skipped]);
 
-    expect(array_keys($checked))->toBe($shipped);
+    $checked = runPhpcs($this->project);
 
-    foreach ($checked as $sources) {
-        expect($sources)->toContain(PHPCS_ELSE_SNIFF);
-    }
+    expect(array_keys($checked))->toBe(collect($shipped)->sort()->values()->all());
+    expect(collect($checked)->reject(fn (array $sources): bool => in_array(
+        PHPCS_ELSE_SNIFF,
+        $sources,
+        strict: true,
+    ))->all())->toBe([]);
 })->with([
     'application' => [
-        ['app/Models/User.php', 'config/app.php', 'database/seeders/DatabaseSeeder.php', 'resources/views/home.blade.php', 'routes/web.php', 'tests/Feature/HomeTest.php'],
-        ['bootstrap/cache/services.php', 'node_modules/tool/index.php', 'public/index.php', 'storage/framework/views/compiled.php', 'vendor/acme/lib/Lib.php'],
+        [
+            'app/Models/User.php', 'config/app.php', 'database/seeders/DatabaseSeeder.php',
+            'resources/views/home.blade.php', 'routes/web.php', 'tests/Feature/HomeTest.php',
+        ],
+        [
+            'bootstrap/cache/services.php', 'node_modules/tool/index.php', 'public/index.php',
+            'storage/framework/views/compiled.php', 'vendor/acme/lib/Lib.php',
+        ],
     ],
-    'package' => [
-        ['src/Service.php', 'tests/Unit/ServiceTest.php'],
-        ['vendor/acme/lib/Lib.php'],
-    ],
-    // The exclusions anchor on the project root, so a nested directory that
-    // shares a name with one of them is still the project's own code.
-    'nested names' => [
+    'package' => [['src/Service.php', 'tests/Unit/ServiceTest.php'], ['vendor/acme/lib/Lib.php']],
+    'nested names, anchored on the project root' => [
         ['app/Http/public/Page.php', 'src/storage/Disk.php', 'src/vendor/Vendor.php'],
         [],
     ],
@@ -117,9 +59,8 @@ it('checks every project file with CleanCode and skips the generated directories
  * with the current file instead of keeping them as local edits.
  */
 it('replaces an unmodified phpcs.xml from an older release', function (): void {
-    $root = dirname(__DIR__, 2);
-    $project = makeTempDir();
-    file_put_contents($project . '/phpcs.xml', <<<'XML'
+    $this->project = makeTempDir();
+    file_put_contents("{$this->project}/phpcs.xml", <<<XML
         <?xml version="1.0"?>
         <ruleset>
             <rule ref="./.php-codesniffer/MikeBronner/ruleset.xml" />
@@ -127,15 +68,14 @@ it('replaces an unmodified phpcs.xml from an older release', function (): void {
 
         XML);
 
-    $scan = (new FileSync(Manifest::load($root . '/manifest.json')))->classify($project, ['phpcs.xml' => $root . '/phpcs.xml']);
+    $scan = (new FileSync(shippedManifest()))
+        ->classify($this->project, ['phpcs.xml' => REPOSITORY_ROOT . '/phpcs.xml']);
 
-    removeTempDir($project);
-
-    expect(array_keys($scan['updatable']))->toBe(['phpcs.xml']);
+    expect(array_keys(data_get($scan, 'updatable')))->toBe(['phpcs.xml']);
 });
 
 it('still knows the first phpcs.xml version the manifest recorded', function (): void {
-    $manifest = Manifest::load(dirname(__DIR__, 2) . '/manifest.json');
+    $this->project = makeTempDir();
 
-    expect($manifest->isKnown('phpcs.xml', '992e3c5d1d7863fcf21d73374254a46a'))->toBeTrue();
+    expect(shippedManifest()->isKnown('phpcs.xml', '992e3c5d1d7863fcf21d73374254a46a'))->toBeTrue();
 });

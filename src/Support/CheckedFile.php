@@ -17,55 +17,78 @@ use RuntimeException;
  */
 final class CheckedFile
 {
-    public static function read(string $path): string
-    {
-        $contents = self::attempt(fn (): string|false => file_get_contents($path), "Could not read {$path}");
+    private const DIRECTORY_PERMISSIONS = 0755;
 
-        return (string) $contents;
+    private ?string $reason = null;
+
+    public function read(string $path): string
+    {
+        return (string) $this->attempt(
+            static fn (): string|false => file_get_contents($path),
+            "Could not read {$path}",
+        );
     }
 
-    public static function write(string $path, string $contents): void
+    public function write(string $path, string $contents): void
     {
-        self::ensureDirectory(dirname($path));
-        self::attempt(
-            fn (): bool => file_put_contents($path, $contents) === strlen($contents),
+        $this->ensureDirectory(dirname($path));
+        $this->attempt(
+            static fn (): bool => file_put_contents($path, $contents) === strlen($contents),
             "Could not write {$path}",
         );
     }
 
-    public static function copy(string $source, string $destination): void
+    public function copy(string $source, string $destination): void
     {
-        self::ensureDirectory(dirname($destination));
-        self::attempt(fn (): bool => copy($source, $destination), "Could not copy {$source} to {$destination}");
+        $this->ensureDirectory(dirname($destination));
+        $this->attempt(
+            static fn (): bool => copy($source, $destination),
+            "Could not copy {$source} to {$destination}",
+        );
     }
 
-    public static function ensureDirectory(string $directory): void
+    /**
+     * Delete a file, and throw when it stays.
+     */
+    public function unlink(string $path): void
     {
-        if (is_dir($directory)) {
-            return;
-        }
+        $this->attempt(static fn (): bool => unlink($path), "Could not delete {$path}");
+    }
 
-        self::attempt(
-            fn (): bool => mkdir(directory: $directory, permissions: 0755, recursive: true) || is_dir($directory),
+    public function ensureDirectory(string $directory): void
+    {
+        $this->attempt(
+            fn (): bool => is_dir($directory) || $this->createDirectory($directory),
             "Could not create {$directory}",
         );
     }
 
     /**
+     * A directory another process created meanwhile counts as created.
+     */
+    private function createDirectory(string $directory): bool
+    {
+        return mkdir(
+            directory: $directory,
+            permissions: self::DIRECTORY_PERMISSIONS,
+            recursive: true,
+        ) || is_dir($directory);
+    }
+
+    /**
+     * Run the operation with PHP's warning captured, and throw with its reason
+     * when the operation answers false.
+     *
      * @template T
      *
      * @param  callable(): T  $operation  answers false on failure
      * @return T
      */
-    private static function attempt(callable $operation, string $failure): mixed
+    private function attempt(callable $operation, string $failure): mixed
     {
-        $reason = null;
+        $this->reason = null;
 
-        set_error_handler(function (int $level, string $message) use (&$reason): bool {
-            $reason = $message;
-
-            return true;
-        });
+        set_error_handler($this->keepReason(...));
 
         try {
             $result = $operation();
@@ -73,10 +96,28 @@ final class CheckedFile
             restore_error_handler();
         }
 
-        if ($result === false) {
-            throw new RuntimeException($failure . ($reason === null ? '.' : ": {$reason}"));
-        }
+        return match ($result) {
+            false => throw new RuntimeException($this->failure($failure)),
+            default => $result,
+        };
+    }
 
-        return $result;
+    /**
+     * The error handler: PHP passes the error details in its own order, and
+     * only the message, the second of them, is kept.
+     */
+    private function keepReason(mixed ...$error): true
+    {
+        [, $this->reason] = $error;
+
+        return true;
+    }
+
+    private function failure(string $failure): string
+    {
+        return match ($this->reason) {
+            null => "{$failure}.",
+            default => "{$failure}: {$this->reason}",
+        };
     }
 }

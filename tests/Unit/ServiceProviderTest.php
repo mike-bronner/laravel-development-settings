@@ -13,10 +13,16 @@ declare(strict_types=1);
  * raises a deprecation on PHP 8.5, and the suite runs clean without it.
  */
 it('ships no Laravel service provider', function (): void {
-    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(dirname(__DIR__, 2) . '/src', RecursiveDirectoryIterator::SKIP_DOTS));
+    $sources = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator(REPOSITORY_ROOT . '/src', FilesystemIterator::SKIP_DOTS),
+    );
+    $providers = collect(iterator_to_array($sources))
+        ->keys()
+        ->filter(fn (string $path): bool => str_contains(
+            (string) file_get_contents($path),
+            'Illuminate\Support\ServiceProvider',
+        ))
+        ->all();
 
-    foreach ($files as $file) {
-        expect(str_contains((string) file_get_contents($file->getPathname()), 'Illuminate\Support\ServiceProvider'))
-            ->toBeFalse($file->getPathname());
-    }
+    expect($providers)->toBe([]);
 });

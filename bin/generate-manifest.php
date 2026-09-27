@@ -3,57 +3,20 @@
 
 declare(strict_types=1);
 
-use MikeBronner\DevelopmentSettings\Support\ContributionDetector;
-use MikeBronner\DevelopmentSettings\Support\ManifestGenerator;
-use MikeBronner\DevelopmentSettings\Support\PackageRepository;
+/*
+ * Regenerates the three shipped manifests from the current sources, or, with
+ * `--check`, fails when any of them is out of date.
+ */
+
+use MikeBronner\DevelopmentSettings\Support\ManifestFiles;
 
 $packageDir = dirname(__DIR__);
 
-require $packageDir . '/vendor/autoload.php';
+require "{$packageDir}/vendor/autoload.php";
 
-$config = require $packageDir . '/config/development-settings.php';
-$ignore = $config['paths']['ignore'] ?? [];
-$check = in_array('--check', $argv, true);
+$manifests = new ManifestFiles($packageDir, STDOUT, STDERR);
 
-$manifests = [
-    'manifest.json' => $config,
-    ContributionDetector::MANIFEST_FILE => [
-        'paths' => ['directories' => $config['capture'] ?? [], 'files' => [], 'ignore' => $ignore],
-    ],
-    PackageRepository::MANIFEST_FILE => [
-        'paths' => ['directories' => [], 'files' => $config['package']['files'] ?? [], 'ignore' => $ignore],
-    ],
-];
-
-$stale = [];
-
-foreach ($manifests as $file => $sources) {
-    $path = $packageDir . '/' . $file;
-    $manifest = (new ManifestGenerator)->generate($packageDir, $sources, $path);
-
-    if ($check) {
-        $current = file_exists($path) ? (string) file_get_contents($path) : '';
-
-        if ($current !== $manifest->toJson()) {
-            $stale[] = $file;
-        }
-
-        continue;
-    }
-
-    $manifest->dump($path);
-
-    fwrite(STDOUT, sprintf("%s regenerated (%d paths).\n", $file, count($manifest->paths())));
-}
-
-if ($stale !== []) {
-    fwrite(STDERR, implode(', ', $stale) . " out of date. Run: composer dev-settings:manifest\n");
-
-    exit(1);
-}
-
-if ($check) {
-    fwrite(STDOUT, implode(', ', array_keys($manifests)) . " are up to date.\n");
-}
-
-exit(0);
+exit(match (in_array('--check', $argv, strict: true)) {
+    true => $manifests->check(),
+    false => $manifests->regenerate(),
+});

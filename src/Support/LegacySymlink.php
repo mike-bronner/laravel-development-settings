@@ -14,49 +14,61 @@ namespace MikeBronner\DevelopmentSettings\Support;
  * directory and — once the release drops the link target — leaves a dangling
  * path that breaks composition outright.
  *
- * Only a link resolving inside one of the given package directories is
- * removed. The caller passes the current vendor directory and the one the
- * package used before its rename: Composer deletes the old one, so a link into
- * it dangles and would never match the current directory. A real directory is
- * never touched: after the upgrade `.ai` belongs to the consuming project.
+ * Only a link resolving inside one of the package directories is removed. The
+ * caller passes the current vendor directory and the one the package used
+ * before its rename: Composer deletes the old one, so a link into it dangles
+ * and would never match the current directory. A real directory is never
+ * touched: after the upgrade `.ai` belongs to the consuming project.
  */
 final class LegacySymlink
 {
     /**
-     * @param  list<string>  $packageDirs  directories this package lives or lived in; they need not exist
-     * @param  list<string>  $linkPaths  project-relative link paths to clean up
-     * @return list<string> the link paths that were removed
+     * @param  list<string>  $packageDirs  directories this package lives or lived in, which
+     *                                     need not exist
      */
-    public function remove(string $projectDir, array $packageDirs, array $linkPaths): array
-    {
-        $removed = [];
-
-        foreach ($linkPaths as $linkPath) {
-            $link = $projectDir . '/' . $linkPath;
-
-            if (! is_link($link) || ! $this->pointsIntoAny($link, $packageDirs)) {
-                continue;
-            }
-
-            unlink($link);
-            $removed[] = $linkPath;
-        }
-
-        return $removed;
+    public function __construct(
+        private array $packageDirs,
+        private CheckedFile $file = new CheckedFile(),
+    ) {
     }
 
     /**
-     * @param  list<string>  $packageDirs
+     * The link paths that are links into one of the package directories.
+     *
+     * @param  list<string>  $linkPaths  project-relative link paths to clean up
+     * @return list<string>
      */
-    private function pointsIntoAny(string $link, array $packageDirs): bool
+    public function stale(string $projectDir, array $linkPaths): array
     {
-        foreach ($packageDirs as $packageDir) {
-            if ($this->pointsInto($link, $packageDir)) {
-                return true;
-            }
-        }
+        return collect($linkPaths)
+            ->filter(fn (string $linkPath): bool => $this->isStale("{$projectDir}/{$linkPath}"))
+            ->values()
+            ->all();
+    }
 
-        return false;
+    /**
+     * Remove every stale link among the link paths, and throw when one stays.
+     *
+     * @param  list<string>  $linkPaths  project-relative link paths to clean up
+     */
+    public function remove(string $projectDir, array $linkPaths): void
+    {
+        $file = $this->file;
+
+        foreach ($this->stale($projectDir, $linkPaths) as $linkPath) {
+            $file->unlink("{$projectDir}/{$linkPath}");
+        }
+    }
+
+    private function isStale(string $link): bool
+    {
+        return is_link($link) && $this->pointsIntoAny($link);
+    }
+
+    private function pointsIntoAny(string $link): bool
+    {
+        return collect($this->packageDirs)
+            ->contains(fn (string $packageDir): bool => $this->pointsInto($link, $packageDir));
     }
 
     /**
@@ -66,15 +78,22 @@ final class LegacySymlink
     private function pointsInto(string $link, string $packageDir): bool
     {
         $target = (string) readlink($link);
-
-        if ($target === '') {
-            return false;
-        }
-
-        $resolved = $this->resolve(str_starts_with($target, '/') ? $target : dirname($link) . '/' . $target);
+        $resolved = $this->resolve($this->absolute($target, dirname($link)));
         $root = $this->resolve($packageDir);
 
-        return $resolved === $root || str_starts_with($resolved, $root . '/');
+        return $target !== ''
+            && ($resolved === $root || str_starts_with($resolved, "{$root}/"));
+    }
+
+    /**
+     * A relative link target is relative to the directory holding the link.
+     */
+    private function absolute(string $target, string $linkDir): string
+    {
+        return match (str_starts_with($target, '/')) {
+            true => $target,
+            false => "{$linkDir}/{$target}",
+        };
     }
 
     /**
@@ -89,24 +108,38 @@ final class LegacySymlink
      */
     private function resolve(string $path): string
     {
-        $path = $this->normalize($path);
-        $head = $path;
-        $tail = [];
+        $normalized = $this->normalize($path);
 
-        while (($real = realpath($head)) === false) {
-            $parent = dirname($head);
+        return $this->resolveFrom($normalized, [], $normalized);
+    }
 
-            if ($parent === $head) {
-                return $path;
-            }
+    /**
+     * Walk up from `$head` until an ancestor resolves, collecting the missing
+     * tail on the way. A path with no ancestor that resolves stays as it was.
+     *
+     * @param  list<string>  $tail
+     */
+    private function resolveFrom(string $head, array $tail, string $path): string
+    {
+        $real = realpath($head);
+        $parent = dirname($head);
 
-            array_unshift($tail, basename($head));
-            $head = $parent;
-        }
+        return match (true) {
+            $real !== false => $this->append($real, $tail),
+            $parent === $head => $path,
+            default => $this->resolveFrom($parent, [basename($head), ...$tail], $path),
+        };
+    }
 
-        return $tail === []
-            ? $real
-            : rtrim($real, '/') . '/' . implode('/', $tail);
+    /**
+     * @param  list<string>  $tail
+     */
+    private function append(string $real, array $tail): string
+    {
+        return match ($tail) {
+            [] => $real,
+            default => rtrim($real, '/') . '/' . implode('/', $tail),
+        };
     }
 
     /**
@@ -117,19 +150,18 @@ final class LegacySymlink
         $segments = [];
 
         foreach (explode('/', $path) as $segment) {
-            if ($segment === '' || $segment === '.') {
-                continue;
-            }
-
-            if ($segment === '..') {
-                array_pop($segments);
-
-                continue;
-            }
-
-            $segments[] = $segment;
+            $segments = match ($segment) {
+                '', '.' => $segments,
+                '..' => array_slice($segments, 0, -1),
+                default => [...$segments, $segment],
+            };
         }
 
-        return (str_starts_with($path, '/') ? '/' : '') . implode('/', $segments);
+        $root = match (str_starts_with($path, '/')) {
+            true => '/',
+            false => '',
+        };
+
+        return $root . implode('/', $segments);
     }
 }
