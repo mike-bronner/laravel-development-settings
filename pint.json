@@ -25,7 +25,8 @@
         },
         "no_unused_imports": true,
         "ordered_imports": {
-            "sort_algorithm": "alpha"
+            "sort_algorithm": "alpha",
+            "imports_order": ["class", "function", "const"]
         },
         "binary_operator_spaces": {
             "default": "single_space"
@@ -40,9 +41,14 @@
             "on_multiline": "ensure_fully_multiline"
         },
         "class_definition": {
-            "multi_line_extends_each_single_line": true
+            "multi_line_extends_each_single_line": true,
+            "space_before_parenthesis": true
         },
-        "single_line_empty_body": true,
+        "new_with_parentheses": {
+            "named_class": true,
+            "anonymous_class": true
+        },
+        "single_line_empty_body": false,
         "method_chaining_indentation": true,
         "array_indentation": false,
         "indentation_type": false,

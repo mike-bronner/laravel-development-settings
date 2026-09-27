@@ -138,6 +138,8 @@ The package ships `phpcs.xml`, which runs the `CleanCode` standard from `mike-br
 
 `phpcs.xml` is a synced file like `pint.json`. An edited copy is kept as a local modification, and the upstream workflow proposes the edit to this package.
 
+The shipped `pint.json` writes what `phpcs.xml` asks for, so the two never undo each other: `new Foo()` always carries its parentheses (`new class () …` for an anonymous class), an empty body opens and closes on lines of its own, and imports are grouped as classes, then functions, then constants. Where the two disagreed, `phpcs.xml` won.
+
 Releases before 0.3.3 shipped `phpcs.xml` pointing at `.php-codesniffer/MikeBronner/ruleset.xml`, and 0.3.3 removed both. An unmodified old `phpcs.xml` is a known version, so the next update replaces it. The old ruleset is still removed when unmodified.
 
 `CleanCode` is found by name only when the PHP_CodeSniffer installer plugin has run. Composer refuses to install this package until your `composer.json` decides on that plugin, and `false` leaves `CleanCode` unregistered. Allow it:
