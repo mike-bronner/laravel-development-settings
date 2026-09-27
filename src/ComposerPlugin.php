@@ -24,8 +24,11 @@ use MikeBronner\DevelopmentSettings\Support\GuidelineGuard;
 use MikeBronner\DevelopmentSettings\Support\LegacyFingerprint;
 use MikeBronner\DevelopmentSettings\Support\LegacySymlink;
 use MikeBronner\DevelopmentSettings\Support\Manifest;
+use MikeBronner\DevelopmentSettings\Support\PackageRepository;
+use MikeBronner\DevelopmentSettings\Support\ProcessResult;
 use MikeBronner\DevelopmentSettings\Support\SystemProcess;
 use RuntimeException;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 {
@@ -40,13 +43,16 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     private const MANIFEST_FILE = 'manifest.json';
     private const BOX_WIDTH = 80;
 
-    private static bool $dependenciesInjected = false;
-    private IOInterface $io;
+    private const BOOST_FEATURES = ' --guidelines --skills --mcp';
 
-    public function activate(Composer $composer, IOInterface $io): void
-    {
-        $this->io = $io;
-    }
+    /**
+     * Composer builds the plugin with no arguments, so the terminal is
+     * detected. A test passes it, because the suite's own terminal is not the
+     * one a real Composer run has.
+     */
+    public function __construct(private readonly ?bool $hasTerminal = null) {}
+
+    public function activate(Composer $composer, IOInterface $io): void {}
 
     public function deactivate(Composer $composer, IOInterface $io): void {}
 
@@ -149,11 +155,21 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $config = require $packageDir . '/config/development-settings.php';
         $manifest = Manifest::load($packageDir . '/' . self::MANIFEST_FILE);
 
-        $filesToPublish = (new FileDiscovery)->discover(
-            packageDir: $packageDir,
-            paths: $config['paths'],
-            ignore: $config['paths']['ignore'] ?? FileDiscovery::DEFAULT_IGNORE,
-        );
+        $ignore = $config['paths']['ignore'] ?? FileDiscovery::DEFAULT_IGNORE;
+        $managed = $config['paths']['managed'] ?? [];
+        $filesToPublish = (new FileDiscovery)->discover(packageDir: $packageDir, paths: $config['paths'], ignore: $ignore);
+
+        // A package repository also receives the artisan shim and the files
+        // that go with it. Their checksums join the manifest only here, so an
+        // app's own artisan never meets copy-sync or orphan cleanup.
+        if (PackageRepository::receivesShim($projectDir)) {
+            $filesToPublish += (new FileDiscovery)->discover(packageDir: $packageDir, paths: $config['package'] ?? [], ignore: $ignore);
+            $managed = [...$managed, ...$config['package']['managed'] ?? []];
+            $manifest = new Manifest([
+                ...$manifest->toArray(),
+                ...Manifest::load($packageDir . '/' . PackageRepository::MANIFEST_FILE)->toArray(),
+            ]);
+        }
 
         // Remove the legacy `.ai` link before anything inspects the project
         // tree: while it stands, every `.ai/…` manifest path resolves into
@@ -165,13 +181,14 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         );
         $removedFingerprint = (new LegacyFingerprint)->remove($projectDir);
 
-        $fileSync = new FileSync($manifest, managed: $config['paths']['managed'] ?? []);
+        $fileSync = new FileSync($manifest, managed: $managed);
         $scan = $fileSync->classify($projectDir, $filesToPublish);
         $safeOrphans = $fileSync->safeOrphans($projectDir, $filesToPublish);
         $protectedOrphans = $fileSync->protectedOrphans($projectDir, $filesToPublish);
 
-        // Only where Boost can actually compose. A package has no artisan, so
-        // registering it there would write a config file nothing ever reads.
+        // Only where Boost can actually compose: an app, or a package whose
+        // artisan shim has a Testbench to boot. Anywhere else, registering
+        // would write a config file nothing ever reads.
         $registration = $this->composesBoost($projectDir)
             ? (new BoostRegistrar)->register(
                 projectDir: $projectDir,
@@ -179,12 +196,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
                 replaces: [self::LEGACY_PACKAGE_NAME],
             )
             : null;
-
-        $composerConfig = $config['composer'] ?? [];
-        $dependencyResult = $this->prepareComposerDependencies(
-            install: $composerConfig['install'] ?? [],
-            remove: $composerConfig['remove'] ?? [],
-        );
 
         // New and known-version files need no answer from the user, so they are
         // written before the summary lists them: a write that fails is listed
@@ -235,14 +246,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 
         foreach ($protectedOrphans as $path) {
             $io->write($this->formatOutputLine(type: 'orphan_protected', path: $path));
-        }
-
-        foreach (array_keys($dependencyResult['toInstall']) as $package) {
-            $io->write($this->formatOutputLine(type: 'dep_added', path: $package));
-        }
-
-        foreach ($dependencyResult['toRemove'] as $package) {
-            $io->write($this->formatOutputLine(type: 'dep_removed', path: $package));
         }
 
         foreach ($removedLinks as $linkPath) {
@@ -380,9 +383,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         }
 
         $stats['removed'] += count($removedLinks) + (int) $removedFingerprint;
-        $stats['new'] += count($dependencyResult['toInstall']);
-        $stats['removed'] += count($dependencyResult['toRemove']);
-        $stats['unchanged'] += count($dependencyResult['unchanged']);
 
         match ($registration) {
             BoostRegistrar::REGISTERED => $stats['new']++,
@@ -404,9 +404,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         } else {
             $this->runBoost($io, $projectDir, $config);
         }
-
-        $this->installDevDependencies($io, $dependencyResult['toInstall']);
-        $this->removeDevDependencies($io, $dependencyResult['toRemove']);
     }
 
     private function writeBoxHeader(IOInterface $io): void
@@ -467,8 +464,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             'stale_fingerprint' => ['icon' => '-', 'style' => 'fg=magenta', 'suffix' => ' (stale Boost fingerprint)'],
             'registered' => ['icon' => '+', 'style' => 'info', 'suffix' => ' (registered with Boost)'],
             'removed' => ['icon' => '-', 'style' => 'fg=magenta'],
-            'dep_added' => ['icon' => '+', 'style' => 'info', 'suffix' => ' (composer)'],
-            'dep_removed' => ['icon' => '-', 'style' => 'fg=magenta', 'suffix' => ' (composer)'],
         ];
 
         $format = $formats[$type] ?? ['icon' => ' ', 'style' => null, 'suffix' => ''];
@@ -499,90 +494,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         return '<fg=gray>│</>  ' . $prefix . '  ' . $displayPath . str_repeat(' ', $padding) . '  <fg=gray>│</>';
     }
 
-    private function prepareComposerDependencies(array $install, array $remove): array
-    {
-        if (self::$dependenciesInjected) {
-            return ['toInstall' => [], 'unchanged' => [], 'toRemove' => []];
-        }
-
-        $composerFile = getcwd() . '/composer.json';
-        $composerJson = json_decode(file_get_contents($composerFile), associative: true);
-        $requireDev = $composerJson['require-dev'] ?? [];
-
-        $packagesToInstall = [];
-        $packagesUnchanged = [];
-        $packagesToRemove = [];
-
-        foreach ($install as $package => $version) {
-            if (isset($requireDev[$package])) {
-                $packagesUnchanged[$package] = $version;
-
-                continue;
-            }
-
-            $packagesToInstall[$package] = $version;
-            $requireDev[$package] = $version;
-        }
-
-        foreach ($remove as $package) {
-            if (! isset($requireDev[$package])) {
-                continue;
-            }
-
-            $packagesToRemove[] = $package;
-            unset($requireDev[$package]);
-        }
-
-        if ($packagesToInstall !== [] || $packagesToRemove !== []) {
-            self::$dependenciesInjected = true;
-
-            ksort($requireDev);
-            $composerJson['require-dev'] = $requireDev;
-            file_put_contents(
-                $composerFile,
-                json_encode($composerJson, flags: JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n",
-            );
-        }
-
-        return ['toInstall' => $packagesToInstall, 'unchanged' => $packagesUnchanged, 'toRemove' => $packagesToRemove];
-    }
-
-    private function installDevDependencies(IOInterface $io, array $packages): void
-    {
-        if ($packages === []) {
-            return;
-        }
-
-        $packageNames = implode(' ', array_keys($packages));
-        $result = $this->executeCommand("composer update {$packageNames} --dev --no-interaction");
-
-        if ($result === 0) {
-            $io->write('<info>  + Dev dependencies installed successfully.</info>');
-        } else {
-            $io->writeError('<error>  + Failed to install dev dependencies. Run "composer update" manually.</error>');
-        }
-
-        $io->write('');
-    }
-
-    private function removeDevDependencies(IOInterface $io, array $packages): void
-    {
-        if ($packages === []) {
-            return;
-        }
-
-        $packageNames = implode(' ', $packages);
-        $result = $this->executeCommand("composer remove {$packageNames} --dev --no-interaction");
-
-        if ($result === 0) {
-            $io->write('<fg=magenta>  - Dev dependencies removed successfully.</>');
-        } else {
-            $io->writeError('<error>  - Failed to remove dev dependencies. Run "composer remove" manually.</error>');
-        }
-
-        $io->write('');
-    }
-
     private function deleteOrphan(string $projectDir, string $orphanPath): void
     {
         $filePath = $projectDir . '/' . $orphanPath;
@@ -609,10 +520,10 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     }
 
     /**
-     * Compose the AI guidelines and skills (Laravel Boost) into agent files.
-     *
-     * Only full Laravel apps are composed, through their own `artisan`. A
-     * package has no console entry point to run Boost with.
+     * Install Laravel Boost through the project's `artisan`: an app's own, or
+     * the shim a package repository receives. A captured run installs the
+     * guidelines, skills and MCP entries whatever `boost.json` says. A run on
+     * the terminal lets Boost's own prompts choose, and saves the choice.
      *
      * Boost composes from this package's `resources/boost` in vendor *and* from
      * the project's own `.ai`, so the run is unconditional: the package sources
@@ -626,11 +537,19 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
      */
     private function runBoost(IOInterface $io, string $projectDir, array $config): void
     {
-        // On a first install Boost is still queued in `composer.install` below,
-        // so there is no Boost command to call yet. Staying quiet beats a red
-        // "failed": installing the dev dependencies runs this plugin again, and
-        // that run composes.
-        if (! $this->composesBoost($projectDir) || ! is_dir($projectDir . '/vendor/laravel/boost')) {
+        $installCommand = 'php artisan boost:install';
+
+        if (! $this->composesBoost($projectDir)) {
+            $io->writeError(sprintf(
+                '<comment>  This repository has no artisan of its own and no %s, so Laravel Boost was not run. orchestra/testbench comes with this package: run "composer install" to restore it. A custom Composer bin-dir is not supported.</comment>',
+                PackageRepository::TESTBENCH,
+            ));
+
+            return;
+        }
+
+        // A shim that could not be written was reported with its cause.
+        if (! file_exists($projectDir . '/' . PackageRepository::ARTISAN)) {
             return;
         }
 
@@ -643,26 +562,55 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
             return;
         }
 
+        // An interactive Composer run on a terminal hands Boost the terminal,
+        // as Composer does for a script. Its output then goes to the user, not
+        // to the plugin. Anything else, CI included, runs captured and never
+        // prompts.
+        $attached = $io->isInteractive() && ($this->hasTerminal ?? SystemProcess::hasTerminal());
+
         // A fresh clone has no `boost.json` agents: the file is gitignored, and
-        // a non-interactive install never records the agents it picks. Boost
-        // then composes for whatever it detects on this machine, which may be
-        // nothing at all.
-        if (! (new BoostRegistrar)->hasAgents($projectDir)) {
+        // a captured install never records the agents it picks. Boost then
+        // composes for whatever it detects on this machine, which may be
+        // nothing at all. An attached install asks for them and saves them.
+        if (! $attached && ! (new BoostRegistrar)->hasAgents($projectDir)) {
             $io->writeError(sprintf(
-                '<comment>  %s names no agents, so Laravel Boost composes for the agents it detects on this machine. Run "php artisan boost:install" once to choose them.</comment>',
+                '<comment>  %s names no agents, so Laravel Boost composes for the agents it detects on this machine. Run "%s" once to choose them.</comment>',
                 BoostRegistrar::FILE,
+                $installCommand,
             ));
         }
 
-        $description = $config['hooks']['description'] ?? 'Composing Laravel Boost guidelines and skills...';
-        $io->write("  <info>{$description}</info> ", false);
-
+        $description = $config['hooks']['description'] ?? 'Composing Laravel Boost...';
         $startedAt = time();
-        $result = $this->executeCommand($config['hooks']['command'] ?? 'php artisan boost:install --guidelines --skills --no-interaction');
 
-        if ($result !== 0) {
+        if ($attached) {
+            // No feature flags: with any of them, Boost asks for agents but
+            // does not save the answer. Without them its own prompts choose
+            // the features and packages, and the agents land in `boost.json`.
+            $io->write("  <info>{$description}</info>");
+            $result = new ProcessResult(
+                exitCode: (new SystemProcess)->passthru($config['hooks']['interactive_command'] ?? $installCommand),
+                output: '',
+            );
+            $io->write('  Laravel Boost ', false);
+        } else {
+            // Every feature is passed explicitly, so a leftover boost.json
+            // setting can never turn one off: Boost ignores boost.json once a
+            // flag is given.
+            $io->write("  <info>{$description}</info> ", false);
+            $result = $this->executeCommand(($config['hooks']['command'] ?? $installCommand . ' --no-interaction') . self::BOOST_FEATURES);
+        }
+
+        // The user watched an attached run, so its output is already on screen.
+        $nextStep = $attached ? 'Its output is above.' : sprintf('Run "%s" to see why.', $installCommand);
+
+        if ($result->failed()) {
             $io->write('<error>failed</error>');
-            $io->writeError('<error>  Laravel Boost exited with an error. Run "php artisan boost:install" to see why. Boost registers its commands only when APP_ENV is local or APP_DEBUG is true.</error>');
+            $io->writeError(sprintf(
+                '<error>  Laravel Boost exited with an error. %s Boost registers its commands only when APP_ENV is local or APP_DEBUG is true.</error>',
+                $nextStep,
+            ));
+            $this->writeFailureOutput($io, $result);
 
             return;
         }
@@ -671,7 +619,13 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         // zero exit alone would report "done" for a run that wrote nothing.
         if (! $guard->composedSince($projectDir, $startedAt)) {
             $io->write('<error>failed</error>');
-            $io->writeError('<error>  Laravel Boost ran but composed no agent file: it found no agent to compose for. Run "php artisan boost:install" and choose your agents.</error>');
+            $io->writeError(sprintf(
+                $attached
+                    ? '<error>  Laravel Boost ran but composed no agent file. Its output is above. Run "%s" and choose at least one agent and the AI Guidelines feature.</error>'
+                    : '<error>  Laravel Boost ran but composed no agent file: it found no agent to compose for. Run "%s" and choose your agents.</error>',
+                $installCommand,
+            ));
+            $this->writeFailureOutput($io, $result);
 
             return;
         }
@@ -699,18 +653,25 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $io->writeError('<comment>  Edit the file yourself, then run the Composer command again. This package will not repair it: where your own text ends cannot be read from the file.</comment>');
     }
 
-    /**
-     * Whether Boost can compose here. Full Laravel apps have `artisan`;
-     * packages have no console entry point of their own.
-     */
+    // Whether Boost can run here at all: through an app's artisan, or through
+    // the shim in a package repository with Testbench installed.
     private function composesBoost(string $projectDir): bool
     {
-        return file_exists($projectDir . '/artisan');
+        return PackageRepository::isApp($projectDir) || PackageRepository::hasTestbench($projectDir);
     }
 
-    private function executeCommand(string $command): int
+    private function executeCommand(string $command): ProcessResult
     {
-        return (new SystemProcess)->run($command);
+        return (new SystemProcess)->capture(command: $command);
+    }
+
+    // Only a failure shows the command's output: a successful run stays one
+    // summary line. The output is escaped, so a tag it prints is not styled.
+    private function writeFailureOutput(IOInterface $io, ProcessResult $result): void
+    {
+        foreach ($result->tail() as $line) {
+            $io->writeError('<comment>    │ ' . OutputFormatter::escape($line) . '</comment>');
+        }
     }
 
     /**

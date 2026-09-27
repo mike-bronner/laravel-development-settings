@@ -12,43 +12,51 @@ use MikeBronner\DevelopmentSettings\Support\ContributionDetector;
 use MikeBronner\DevelopmentSettings\Support\GuidelineGuard;
 use MikeBronner\DevelopmentSettings\Support\LegacyFingerprint;
 use MikeBronner\DevelopmentSettings\Support\ManagedSection;
+use MikeBronner\DevelopmentSettings\Support\PackageRepository;
 use Symfony\Component\Console\Output\ConsoleOutput;
 
 /*
  * These tests drive `doPublish()`, the whole Composer hook, against a consuming
  * project on disk. The package it installs from is a real directory under
- * `vendor/mike-bronner/laravel-development-settings` whose config names no dependencies
- * (so no `composer update` is ever spawned) and whose Boost command is a stand-in.
+ * `vendor/mike-bronner/laravel-development-settings` whose Boost command is a stand-in.
+ * It ships this repository's own artisan shim and .gitattributes sources.
  */
 
 const COMPOSES = 'composes';
 const COMPOSES_NOTHING = 'composes nothing';
 const EXITS_WITH_ERROR = 'exits with an error';
 
-/**
- * The Boost command stand-in. It records having run, then does what Boost
- * does in the named case: write a composed block into `AGENTS.md`, write
- * nothing and exit 0 (no agent found), or exit non-zero.
- */
-function boostStandIn(string $behaviour): string
+// The Boost command stand-in, as PHP code. It records having run, the rooting
+// it saw, the arguments it was given and the stdout it was handed, then does
+// what Boost does in the named case: write a composed block into `AGENTS.md`,
+// write nothing and exit 0 (no agent found), or exit non-zero. A silent
+// stand-in prints nothing: an attached run writes to the suite's own output.
+function boostScript(string $behaviour, bool $silent = false): string
 {
     $block = GuidelineGuard::OPENING_TAG . "\n=== rules ===\n" . GuidelineGuard::CLOSING_TAG . "\n";
+    $record = 'file_put_contents("boost.ran", json_encode(["APP_BASE_PATH" => $_ENV["APP_BASE_PATH"] ?? null, "APP_ENV" => $_ENV["APP_ENV"] ?? null, "TESTBENCH_WORKING_PATH" => getenv("TESTBENCH_WORKING_PATH"), "directories" => is_dir("bootstrap/cache") && is_dir("storage/framework/views"), "arguments" => array_slice($argv, 1)]));'
+        . ' file_put_contents("boost.stdout", fstat(STDOUT)["dev"] . ":" . fstat(STDOUT)["ino"]);';
 
-    $script = match ($behaviour) {
-        COMPOSES => 'touch("boost.ran"); file_put_contents("AGENTS.md", ' . var_export($block, true) . ');',
-        COMPOSES_NOTHING => 'touch("boost.ran");',
-        EXITS_WITH_ERROR => 'touch("boost.ran"); exit(1);',
+    $say = fn (string $statement): string => $silent ? '' : ' ' . $statement;
+
+    return $record . match ($behaviour) {
+        COMPOSES => ' file_put_contents("AGENTS.md", ' . var_export($block, true) . ');' . $say('echo "Boost stand-in composed AGENTS.md\n";'),
+        COMPOSES_NOTHING => $say('echo "Boost stand-in found no agent\n";'),
+        EXITS_WITH_ERROR => $say('fwrite(STDERR, "Boost stand-in: <error>command \\"boost:install\\"</error> is not defined\n");') . ' exit(1);',
     };
-
-    return escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg($script);
 }
 
-/**
- * A consuming project with the package installed in vendor.
- *
- * @param  array{app?: bool, boostInstalled?: bool, boost?: string, manifest?: array<string, list<string>>, sources?: array<string, string>, captured?: array<string, list<string>>, paths?: array<string, array<array-key, string>>}  $options
- * @return array{0: string, 1: string} project dir, package dir
- */
+// The Boost command, run straight through PHP. The trailing `--` hands an
+// appended flag to the script, not to PHP.
+function boostStandIn(string $behaviour, bool $silent = false): string
+{
+    return escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg(boostScript($behaviour, $silent)) . ' --';
+}
+
+// A consuming project with the package installed in vendor. `command` and
+// `interactiveCommand` replace the two Boost commands, `packageManifest` the
+// shipped package-manifest.json, and `testbench` installs a Testbench that
+// runs the Boost stand-in. `silent` makes every stand-in print nothing.
 function makeConsumer(array $options = []): array
 {
     $project = makeTempDir('devset-publish-');
@@ -58,11 +66,12 @@ function makeConsumer(array $options = []): array
     file_put_contents($project . '/composer.json', json_encode(['require-dev' => new stdClass]) . "\n");
 
     $config = [
-        'composer' => ['install' => [], 'remove' => []],
         'hooks' => [
-            'command' => boostStandIn($options['boost'] ?? COMPOSES),
+            'command' => $options['command'] ?? boostStandIn($options['boost'] ?? COMPOSES, $options['silent'] ?? false),
+            'interactive_command' => $options['interactiveCommand'] ?? boostStandIn($options['boost'] ?? COMPOSES, $options['silent'] ?? false) . ' interactive',
             'description' => 'Composing Laravel Boost guidelines and skills...',
         ],
+        'package' => (require dirname(__DIR__, 2) . '/config/development-settings.php')['package'],
         'capture' => ['resources/boost'],
         'paths' => [
             'directories' => [],
@@ -76,6 +85,15 @@ function makeConsumer(array $options = []): array
     file_put_contents($package . '/config/development-settings.php', '<?php return ' . var_export($config, true) . ';');
     file_put_contents($package . '/manifest.json', json_encode($options['manifest'] ?? new stdClass) . "\n");
     file_put_contents($package . '/' . ContributionDetector::MANIFEST_FILE, json_encode($options['captured'] ?? new stdClass) . "\n");
+    file_put_contents($package . '/' . PackageRepository::MANIFEST_FILE, json_encode($options['packageManifest'] ?? shippedPackageManifest()) . "\n");
+
+    foreach (array_keys($config['package']['files']) as $source) {
+        if (! is_dir(dirname($package . '/' . $source))) {
+            mkdir(dirname($package . '/' . $source), 0755, true);
+        }
+
+        copy(dirname(__DIR__, 2) . '/' . $source, $package . '/' . $source);
+    }
 
     foreach ($options['sources'] ?? [] as $relativePath => $content) {
         if (! is_dir(dirname($package . '/' . $relativePath))) {
@@ -89,14 +107,17 @@ function makeConsumer(array $options = []): array
         file_put_contents($project . '/artisan', "#!/usr/bin/env php\n");
     }
 
-    if ($options['boostInstalled'] ?? true) {
-        mkdir($project . '/vendor/laravel/boost', 0755, true);
+    if ($options['testbench'] ?? false) {
+        mkdir($project . '/vendor/bin', 0755, true);
+        file_put_contents($project . '/' . PackageRepository::TESTBENCH, "<?php\n" . boostScript($options['boost'] ?? COMPOSES, $options['silent'] ?? false) . "\n");
     }
 
     return [$project, $package];
 }
 
-function publishIn(string $project, string $hook = 'doPublish', bool $interactive = false): string
+// `terminal` stands in for the terminal a real Composer run detects. Left
+// null, the plugin asks the suite's own process, whatever that is.
+function publishIn(string $project, string $hook = 'doPublish', bool $interactive = false, ?bool $terminal = false): string
 {
     $io = new BufferIO;
 
@@ -109,7 +130,7 @@ function publishIn(string $project, string $hook = 'doPublish', bool $interactiv
     chdir($project);
 
     try {
-        (new ReflectionMethod(ComposerPlugin::class, $hook))->invoke(new ComposerPlugin, $io);
+        (new ReflectionMethod(ComposerPlugin::class, $hook))->invoke(new ComposerPlugin(hasTerminal: $terminal), $io);
     } finally {
         chdir($cwd);
     }
@@ -117,9 +138,34 @@ function publishIn(string $project, string $hook = 'doPublish', bool $interactiv
     return $io->getOutput();
 }
 
+// The package manifest as this repository ships it: every current source known.
+function shippedPackageManifest(): array
+{
+    return json_decode((string) file_get_contents(dirname(__DIR__, 2) . '/' . PackageRepository::MANIFEST_FILE), associative: true);
+}
+
+function shimSource(): string
+{
+    return (string) file_get_contents(dirname(__DIR__, 2) . '/resources/project/artisan');
+}
+
 function boostRan(string $project): bool
 {
     return file_exists($project . '/boost.ran');
+}
+
+function boostRun(string $project): array
+{
+    return json_decode((string) file_get_contents($project . '/boost.ran'), associative: true);
+}
+
+// Whether Boost wrote to this process's own stdout, which is what an attached
+// run hands it. A captured run writes to a pipe instead.
+function boostSharedOurStdout(string $project): bool
+{
+    $stdout = fstat(STDOUT);
+
+    return file_get_contents($project . '/boost.stdout') === $stdout['dev'] . ':' . $stdout['ino'];
 }
 
 function boostConfigIn(string $project): array
@@ -136,7 +182,174 @@ it('registers the package and composes in a fresh clone that has no boost.json',
         ->and($output)->toContain('boost.json (registered with Boost)')
         ->and($output)->toContain('1 new')
         ->and(boostRan($project))->toBeTrue()
+        ->and($output)->toContain('Composing Laravel Boost guidelines and skills... done')
+        // A successful run stays one summary line: Boost's own output is not shown.
+        ->and($output)->not->toContain('Boost stand-in');
+
+    removeTempDir($project);
+});
+
+it('composes an app through its own artisan, and gives it no package file, even with Testbench installed', function (): void {
+    [$project] = makeConsumer(['testbench' => true]);
+    file_put_contents($project . '/.gitattributes', "* text=auto\n");
+
+    $output = publishIn($project);
+
+    expect(boostRun($project)['arguments'])->toBe(['--guidelines', '--skills', '--mcp'])
+        ->and(boostRun($project)['APP_BASE_PATH'])->toBeNull()
+        ->and(file_get_contents($project . '/artisan'))->toBe("#!/usr/bin/env php\n")
+        ->and(file_get_contents($project . '/.gitattributes'))->toBe("* text=auto\n")
+        ->and($output)->not->toMatch('/  (artisan|\.gitattributes)\b/')
+        ->and(is_dir($project . '/bootstrap'))->toBeFalse()
+        ->and(is_dir($project . '/storage'))->toBeFalse();
+
+    removeTempDir($project);
+});
+
+// The package manifest knows `artisan`. An app's own artisan is no version of
+// it, so if the manifest reached an app, copy-sync would call that file locally
+// modified and orphan cleanup would offer to delete it.
+it("never reports or offers to delete an app's own artisan", function (): void {
+    [$project] = makeConsumer([
+        'testbench' => true,
+        'packageManifest' => [...shippedPackageManifest(), 'artisan' => [md5("#!/usr/bin/env php\n")], 'retired.txt' => [md5("x\n")]],
+    ]);
+
+    $output = publishIn($project);
+
+    expect(file_get_contents($project . '/artisan'))->toBe("#!/usr/bin/env php\n")
+        ->and($output)->not->toMatch('/  artisan\b/')
+        ->and($output)->toContain('0 removed');
+
+    removeTempDir($project);
+});
+
+it('writes the artisan shim and the managed .gitattributes into a package with Testbench, then composes through the shim', function (): void {
+    [$project, $package] = makeConsumer(['app' => false, 'testbench' => true]);
+
+    $output = publishIn($project);
+
+    expect(file_get_contents($project . '/artisan'))->toBe(shimSource())
+        ->and(file_get_contents($project . '/.gitattributes'))->toBe(file_get_contents($package . '/resources/project/gitattributes') . ManagedSection::MARKER . "\n")
+        ->and($output)->toMatch('/\+  artisan /')
+        ->and($output)->toMatch('/\+  \.gitattributes /')
+        ->and(boostConfigIn($project))->toBe(['packages' => ['mike-bronner/laravel-development-settings']])
+        ->and($output)->toContain('boost.json (registered with Boost)')
+        ->and(boostRun($project)['arguments'])->toBe(['--guidelines', '--skills', '--mcp'])
         ->and($output)->toContain('Composing Laravel Boost guidelines and skills... done');
+
+    removeTempDir($project);
+});
+
+// The real shim runs the real command line, and the Testbench it boots is the
+// stand-in: this is the path `php artisan boost:install` takes in a package.
+it('runs Boost in a package through the shim, rooted at the repository, and never roots Composer', function (): void {
+    [$project] = makeConsumer([
+        'app' => false,
+        'testbench' => true,
+        'command' => escapeshellarg(PHP_BINARY) . ' artisan boost:install --no-interaction',
+    ]);
+
+    $output = publishIn($project);
+
+    expect(boostRun($project))->toBe([
+        'APP_BASE_PATH' => realpath($project),
+        'APP_ENV' => 'local',
+        'TESTBENCH_WORKING_PATH' => realpath($project),
+        'directories' => true,
+        'arguments' => ['boost:install', '--no-interaction', '--guidelines', '--skills', '--mcp'],
+    ])
+        ->and($output)->toContain('... done')
+        ->and($_ENV['APP_BASE_PATH'] ?? null)->toBeNull()
+        ->and(getenv('TESTBENCH_WORKING_PATH'))->toBeFalse();
+
+    removeTempDir($project);
+});
+
+it('passes Boost every feature, whatever boost.json says, in an app and in a package', function (bool $app, array $config): void {
+    [$project] = makeConsumer(['app' => $app, 'testbench' => true]);
+    file_put_contents($project . '/boost.json', json_encode(['agents' => ['claude_code'], ...$config]));
+
+    publishIn($project);
+
+    expect(boostRun($project)['arguments'])->toBe(['--guidelines', '--skills', '--mcp']);
+
+    removeTempDir($project);
+})->with([
+    'app' => true,
+    'package' => false,
+])->with([
+    'no feature keys' => [[]],
+    'mcp off' => [['mcp' => false]],
+    'every feature off' => [['guidelines' => false, 'skills' => false, 'mcp' => false]],
+]);
+
+it('updates a shim this package shipped before', function (): void {
+    $old = str_replace('rooted at this repository.', "rooted at this repository.\n// An older release.", shimSource());
+    [$project] = makeConsumer([
+        'app' => false,
+        'testbench' => true,
+        'packageManifest' => [...shippedPackageManifest(), 'artisan' => [md5($old), md5(shimSource())]],
+    ]);
+    file_put_contents($project . '/artisan', $old);
+
+    $output = publishIn($project);
+
+    expect(file_get_contents($project . '/artisan'))->toBe(shimSource())
+        ->and($output)->toMatch('/↻  artisan /')
+        ->and(boostRan($project))->toBeTrue();
+
+    removeTempDir($project);
+});
+
+it('keeps an edited shim and names it as locally modified', function (): void {
+    $edited = shimSource() . "// Mine.\n";
+    [$project] = makeConsumer(['app' => false, 'testbench' => true]);
+    file_put_contents($project . '/artisan', $edited);
+
+    $output = publishIn($project);
+
+    expect(file_get_contents($project . '/artisan'))->toBe($edited)
+        ->and($output)->toContain('artisan (locally modified)')
+        ->and(boostRan($project))->toBeTrue();
+
+    removeTempDir($project);
+});
+
+it('does not run Boost through a shim whose Testbench is gone, and says what is missing', function (): void {
+    [$project] = makeConsumer(['app' => false]);
+    file_put_contents($project . '/artisan', shimSource());
+
+    $output = publishIn($project);
+
+    expect(file_get_contents($project . '/artisan'))->toBe(shimSource())
+        ->and(boostRan($project))->toBeFalse()
+        ->and(file_exists($project . '/boost.json'))->toBeFalse()
+        ->and($output)->toContain('no artisan of its own and no vendor/bin/testbench, so Laravel Boost was not run');
+
+    removeTempDir($project);
+});
+
+it("only warns about a package's own unmarked .gitattributes in a non-interactive run", function (): void {
+    [$project] = makeConsumer(['app' => false, 'testbench' => true]);
+    file_put_contents($project . '/.gitattributes', "/tests export-ignore\n");
+
+    $output = publishIn($project);
+
+    expect(file_get_contents($project . '/.gitattributes'))->toBe("/tests export-ignore\n")
+        ->and($output)->toContain('.gitattributes (locally modified, no sync marker)')
+        ->and(file_get_contents($project . '/artisan'))->toBe(shimSource());
+
+    removeTempDir($project);
+});
+
+it('names the artisan install as the next step when a package composes nothing', function (): void {
+    [$project] = makeConsumer(['app' => false, 'testbench' => true, 'boost' => COMPOSES_NOTHING]);
+
+    $output = publishIn($project);
+
+    expect($output)->toContain('Run "php artisan boost:install" once to choose them.')
+        ->and($output)->toContain('Run "php artisan boost:install" and choose your agents.');
 
     removeTempDir($project);
 });
@@ -152,6 +365,7 @@ it('fails loudly when Boost exits cleanly on a registrar-created boost.json but 
         ->and($output)->toContain('names no agents')
         ->and($output)->toContain('Composing Laravel Boost guidelines and skills... failed')
         ->and($output)->toContain('composed no agent file')
+        ->and($output)->toContain('│ Boost stand-in found no agent')
         ->and($output)->not->toContain('done');
 
     removeTempDir($project);
@@ -180,10 +394,118 @@ it('reports a Boost error as a failure with the next step', function (): void {
 
     $output = publishIn($project);
 
+    // Boost's own words are shown, escaped, so the tag it printed survives.
     expect(boostRan($project))->toBeTrue()
         ->and($output)->toContain('... failed')
         ->and($output)->toContain('Laravel Boost exited with an error')
+        ->and($output)->toContain('│ Boost stand-in: <error>command "boost:install"</error> is not defined')
         ->and($output)->not->toContain('composed no agent file');
+
+    removeTempDir($project);
+});
+
+it('runs Boost captured and without prompts unless Composer is interactive on a terminal', function (bool $interactive, ?bool $terminal): void {
+    [$project] = makeConsumer();
+
+    $output = publishIn($project, interactive: $interactive, terminal: $terminal);
+
+    expect(boostRun($project)['arguments'])->toBe(['--guidelines', '--skills', '--mcp'])
+        ->and(boostSharedOurStdout($project))->toBeFalse()
+        ->and($output)->toContain('names no agents')
+        ->and($output)->toContain('Composing Laravel Boost guidelines and skills... done')
+        ->and($output)->not->toContain('Boost stand-in');
+
+    removeTempDir($project);
+})->with([
+    'non-interactive, on a terminal' => [false, true],
+    'interactive, no terminal' => [true, false],
+]);
+
+it('keeps --no-interaction on the captured command and leaves it off the attached one', function (): void {
+    $hooks = (require dirname(__DIR__, 2) . '/config/development-settings.php')['hooks'];
+
+    expect($hooks['command'])->toBe('php artisan boost:install --no-interaction')
+        ->and($hooks['interactive_command'])->toBe('php artisan boost:install');
+});
+
+// No feature flags on the terminal: with any of them, Boost asks for agents
+// and does not save the answer to boost.json.
+it('hands Boost the terminal, with no feature flags, when Composer is interactive on one', function (): void {
+    [$project] = makeConsumer(['silent' => true]);
+
+    $output = publishIn($project, interactive: true, terminal: true);
+
+    expect(boostRun($project)['arguments'])->toBe(['interactive'])
+        ->and(boostSharedOurStdout($project))->toBeTrue()
+        ->and($output)->not->toContain('names no agents')
+        ->and($output)->toContain("Composing Laravel Boost guidelines and skills...\n")
+        ->and($output)->toContain('Laravel Boost done');
+
+    removeTempDir($project);
+});
+
+it('runs the attached command through the shim in a package, rooted at the repository', function (): void {
+    [$project] = makeConsumer([
+        'app' => false,
+        'testbench' => true,
+        'silent' => true,
+        'interactiveCommand' => escapeshellarg(PHP_BINARY) . ' artisan boost:install',
+    ]);
+
+    $output = publishIn($project, interactive: true, terminal: true);
+
+    expect(boostRun($project))->toMatchArray([
+        'APP_BASE_PATH' => realpath($project),
+        'arguments' => ['boost:install'],
+    ])
+        ->and(boostSharedOurStdout($project))->toBeTrue()
+        ->and($output)->toContain('Laravel Boost done');
+
+    removeTempDir($project);
+});
+
+it('reports an attached Boost error, pointing at the output above', function (): void {
+    [$project] = makeConsumer(['silent' => true, 'boost' => EXITS_WITH_ERROR]);
+
+    $output = publishIn($project, interactive: true, terminal: true);
+
+    expect(boostRan($project))->toBeTrue()
+        ->and($output)->toContain('Laravel Boost failed')
+        ->and($output)->toContain('Laravel Boost exited with an error. Its output is above.')
+        ->and($output)->not->toContain('to see why')
+        ->and($output)->not->toContain('composed no agent file');
+
+    removeTempDir($project);
+});
+
+it('fails an attached run that composes nothing, pointing at the output above', function (): void {
+    [$project] = makeConsumer(['silent' => true, 'boost' => COMPOSES_NOTHING]);
+
+    $output = publishIn($project, interactive: true, terminal: true);
+
+    // Boost asks for the agents on the terminal and saves them, so the
+    // warning a captured run gives would be wrong here.
+    expect(boostRan($project))->toBeTrue()
+        ->and($output)->not->toContain('names no agents')
+        ->and($output)->toContain('Laravel Boost failed')
+        ->and($output)->toContain('composed no agent file. Its output is above. Run "php artisan boost:install" and choose at least one agent and the AI Guidelines feature.')
+        ->and($output)->not->toContain('done');
+
+    removeTempDir($project);
+});
+
+it('refuses to hand Boost the terminal when composing would damage an agent file', function (): void {
+    [$project] = makeConsumer(['silent' => true]);
+    file_put_contents(
+        $project . '/CLAUDE.md',
+        'Prose naming ' . GuidelineGuard::OPENING_TAG . " here.\n\n" . GuidelineGuard::OPENING_TAG . "\n=== rules ===\n" . GuidelineGuard::CLOSING_TAG . "\n",
+    );
+
+    $output = publishIn($project, interactive: true, terminal: true);
+
+    expect(boostRan($project))->toBeFalse()
+        ->and($output)->toContain('overwrite hand-written content')
+        ->and($output)->not->toContain('Composing Laravel Boost');
 
     removeTempDir($project);
 });
@@ -204,15 +526,18 @@ it('does not warn about agents when boost.json names them', function (): void {
     removeTempDir($project);
 });
 
-it('neither registers nor composes in a package, which has no artisan', function (): void {
+it('neither writes the shim, registers nor composes in a package without Testbench, and says what is missing', function (): void {
     [$project] = makeConsumer(['app' => false]);
 
     $output = publishIn($project);
 
     expect(file_exists($project . '/boost.json'))->toBeFalse()
+        ->and(file_exists($project . '/artisan'))->toBeFalse()
+        ->and(file_exists($project . '/.gitattributes'))->toBeFalse()
         ->and(boostRan($project))->toBeFalse()
         ->and($output)->not->toContain('registered with Boost')
-        ->and($output)->not->toContain('Composing Laravel Boost');
+        ->and($output)->not->toContain('Composing Laravel Boost')
+        ->and($output)->toContain('This repository has no artisan of its own and no vendor/bin/testbench, so Laravel Boost was not run. orchestra/testbench comes with this package: run "composer install" to restore it.');
 
     removeTempDir($project);
 });
@@ -233,14 +558,32 @@ it('does not run Boost over a boost.json it cannot read, and says so', function 
     removeTempDir($project);
 });
 
-it('stays quiet about Boost while it is still queued for installation, but still registers', function (): void {
-    [$project] = makeConsumer(['boostInstalled' => false]);
+// The tooling comes from this package's own requirements, so the plugin has
+// no reason to write the project's composer.json or to run Composer itself.
+it("leaves the project's composer.json exactly as it found it", function (): void {
+    [$project] = makeConsumer();
+    $composerJson = json_encode(['require-dev' => ['laravel/pint' => '^1.0']], JSON_PRETTY_PRINT) . "\n";
+    file_put_contents($project . '/composer.json', $composerJson);
 
     $output = publishIn($project);
 
-    expect(boostConfigIn($project))->toBe(['packages' => ['mike-bronner/laravel-development-settings']])
-        ->and(boostRan($project))->toBeFalse()
-        ->and($output)->not->toContain('Composing Laravel Boost');
+    expect(file_get_contents($project . '/composer.json'))->toBe($composerJson)
+        ->and($output)->not->toContain('(composer)')
+        ->and($output)->not->toContain('Dev dependencies')
+        ->and(require dirname(__DIR__, 2) . '/config/development-settings.php')->not->toHaveKey('composer');
+
+    removeTempDir($project);
+});
+
+it('shows only the one summary line when a captured Boost run succeeds', function (): void {
+    [$project] = makeConsumer();
+
+    $output = publishIn($project);
+
+    expect(boostRan($project))->toBeTrue()
+        ->and($output)->toContain('... done')
+        ->and($output)->not->toContain('Boost stand-in composed AGENTS.md')
+        ->and($output)->not->toContain('    │ ');
 
     removeTempDir($project);
 });

@@ -7,14 +7,12 @@ use MikeBronner\DevelopmentSettings\ComposerPlugin;
 use MikeBronner\DevelopmentSettings\Support\GuidelineGuard;
 
 /**
- * A project shaped the way composition requires: an `artisan` entry point, and
- * Boost present in vendor.
+ * A project shaped the way composition requires: an `artisan` entry point.
  */
 function makeComposableProject(string $agentFile): string
 {
     $project = makeTempDir('devset-boost-');
 
-    mkdir($project . '/vendor/laravel/boost', 0755, true);
     file_put_contents($project . '/artisan', "#!/usr/bin/env php\n");
     file_put_contents($project . '/CLAUDE.md', $agentFile);
 
@@ -35,7 +33,9 @@ function runBoostOn(string $project): BufferIO
         $project,
         [
             'hooks' => [
-                'command' => 'touch ' . escapeshellarg($project . '/composed.marker'),
+                // The trailing `--` hands the appended feature flags to the
+                // script, not to PHP.
+                'command' => escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg('touch(' . var_export($project . '/composed.marker', true) . ');') . ' --',
                 'description' => 'Updating Laravel Boost...',
             ],
         ],
@@ -97,22 +97,27 @@ it('leaves the damaged agent file exactly as it found it', function (): void {
     removeTempDir($project);
 });
 
-it('stays quiet in a project Boost cannot compose in', function (): void {
+it('tells a project with neither artisan nor Testbench why Boost did not run', function (): void {
     $project = makeComposableProject('# CLAUDE.md');
     unlink($project . '/artisan');
 
-    expect(runBoostOn($project)->getOutput())->toBe('')
+    expect(runBoostOn($project)->getOutput())->toContain('no artisan of its own and no vendor/bin/testbench, so Laravel Boost was not run')
         ->and(composed($project))->toBeFalse();
 
     removeTempDir($project);
 });
 
-it('stays quiet while Boost is still queued for installation', function (): void {
+// Boost is a requirement of this package, so Composer installs it before the
+// plugin runs. The plugin no longer looks for it: a Boost that is missing all
+// the same fails loudly through artisan, where a silent skip would hide it.
+it('runs Boost without first looking for it in vendor', function (): void {
     $project = makeComposableProject('# CLAUDE.md');
-    rmdir($project . '/vendor/laravel/boost');
 
-    expect(runBoostOn($project)->getOutput())->toBe('')
-        ->and(composed($project))->toBeFalse();
+    expect(is_dir($project . '/vendor/laravel/boost'))->toBeFalse();
+
+    runBoostOn($project);
+
+    expect(composed($project))->toBeTrue();
 
     removeTempDir($project);
 });
