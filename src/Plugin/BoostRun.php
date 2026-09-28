@@ -44,8 +44,10 @@ final class BoostRun
 
     private const REFUSAL = [
         'not composable' => 'This repository has no artisan of its own and no %s, so Laravel Boost'
-            . " was not run. orchestra/testbench comes with this package: run \"composer install\""
-            . ' to restore it. A custom Composer bin-dir is not supported.',
+            . ' was not run. This package does not install orchestra/testbench: a'
+            . " package repository requires it itself. Run \"composer require --dev"
+            . " orchestra/testbench\", or \"composer install\" if composer.json already"
+            . ' requires it. A custom Composer bin-dir is not supported.',
         'unreadable' => '%s is not valid JSON, so Laravel Boost was not run. Its guidelines'
             . ' and skills will not compose until you fix or delete the file.',
         'refused' => 'Laravel Boost was not run: composing would overwrite hand-written content.',

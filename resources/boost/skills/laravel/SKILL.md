@@ -208,7 +208,8 @@ $leads = Lead::query()
 
 ## Testing Conventions
 
-Use **Pest** with expressive syntax. All tests must follow the **AAA pattern** with emoji section markers:
+Use **Pest** with expressive syntax. Structure tests with the **AAA pattern**, and mark each phase a test
+has with an emoji section marker:
 
 ```php
 it("creates a new lead", function () {
@@ -224,8 +225,13 @@ it("creates a new lead", function () {
 ```
 
 **Rules:**
-- All three sections required, even if minimal. Assertions ONLY in Assert section.
+- Give each of Arrange, Act and Assert its own section whenever that phase has content. A section
+  with no content has no marker: a test with no separate setup has no Arrange marker.
+- Never combine sections to remove a marker. Assertions go ONLY in the Assert section.
 - Section markers override the "no comments" rule — they are the one exception.
+- A marker is exactly `// 🧪 Arrange`, `// 🧪 Act` or `// 🧪 Assert`, alone on its line, with nothing
+  after it. Never combine two phases in one marker: split them into separate markers. Put notes in
+  prose, never after a marker.
 - Use `describe()` to group related tests. Use datasets for multiple inputs.
 - Mock external services you don't control. Never mock classes you control.
 - Feature tests for HTTP endpoints. Unit tests for isolated logic. Integration tests for external services.
