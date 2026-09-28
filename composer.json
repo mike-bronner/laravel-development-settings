@@ -20,10 +20,10 @@
         "laravel/boost": "^2.9",
         "laravel/pint": "^1.24",
         "laravel/prompts": "^0.3",
-        "mike-bronner/clean-code": "^0.1",
-        "orchestra/testbench": "^10.0|^11.0"
+        "mike-bronner/clean-code": "^0.1"
     },
     "require-dev": {
+        "mockery/mockery": "^1.6",
         "nunomaduro/collision": "^8.6",
         "pestphp/pest": "^3.0",
         "composer/composer": "^2.0"

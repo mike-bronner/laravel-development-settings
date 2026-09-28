@@ -10,7 +10,11 @@ composer require mike-bronner/laravel-development-settings
 
 That's it. The package automatically syncs files on every `composer install` and `composer update`.
 
-It also brings the shared tooling with it, as its own Composer requirements: Laravel Boost, Laravel Pint, Larastan, `mike-bronner/clean-code` and Orchestra Testbench. Composer installs them with the package, so you do not require them yourself. The plugin never edits your `composer.json` and never runs Composer. A project that an earlier release gave these packages as dev dependencies keeps them: nothing is removed.
+It also brings the shared tooling with it, as its own Composer requirements: Laravel Boost, Laravel Pint, Larastan and `mike-bronner/clean-code`. Composer installs them with the package, so you do not require them yourself. The plugin never edits your `composer.json` and never runs Composer. A project that an earlier release gave these packages as dev dependencies keeps them: nothing is removed.
+
+Orchestra Testbench is not among them. Releases 0.3.4 and 0.4.0 required it, so it reached every application, and there it broke `pest --parallel`: Pest skips its Laravel handler whenever Testbench's `TestCase` class exists, so every worker shares one database. Composer removes it from an application on the next update. A package requires Testbench itself (see "Packages" below).
+
+If your application's own `composer.json` lists `orchestra/testbench`, `pest --parallel` stays broken for as long as Testbench is installed. Remove it with `composer remove --dev orchestra/testbench`, unless your application needs it for its own reasons.
 
 ## 🔧 How It Works
 
@@ -35,7 +39,7 @@ Your project is a **direct** dependency's consumer or it gets nothing: Boost exc
 
 ### Packages
 
-A package has no `artisan` of its own. When it has Orchestra Testbench installed (`vendor/bin/testbench`), the plugin writes one: a short shim that boots Testbench rooted at your repository. From then on the package runs Boost the way an app does. `composer update` runs `php artisan boost:install`, Boost writes `boost.json`, the skills, the agent files and `php artisan boost:mcp` MCP entries into your repository, and every MCP tool works, `record-rule` included. MCP entries an earlier release pointed at `vendor/bin/testbench` are rewritten by the same run. Choose your agents with `php artisan boost:install`, as in an app.
+A package has no `artisan` of its own. This package does not install Orchestra Testbench, so require it yourself: `composer require --dev orchestra/testbench`. When Testbench is installed (`vendor/bin/testbench`), the plugin writes an `artisan`: a short shim that boots Testbench rooted at your repository. From then on the package runs Boost the way an app does. `composer update` runs `php artisan boost:install`, Boost writes `boost.json`, the skills, the agent files and `php artisan boost:mcp` MCP entries into your repository, and every MCP tool works, `record-rule` included. MCP entries an earlier release pointed at `vendor/bin/testbench` are rewritten by the same run. Choose your agents with `php artisan boost:install`, as in an app.
 
 Commit the shim. Its first comment line marks it as this package's file: an `artisan` without that line is an app's and is never touched. The plugin updates a shim it shipped before and keeps one you edited, listing it as locally modified. The shim creates `bootstrap/cache` and `storage/framework/views` on each run, because Testbench cannot boot rooted without them. The shipped `.gitignore` ignores both. Without Testbench installed, the shim stops with an error that names the missing dependency.
 
@@ -43,7 +47,7 @@ The shim must not reach the people who install your package, so the plugin also 
 
 `php artisan test` runs your suite rooted at the repository, like every Artisan command. `vendor/bin/phpunit` is unaffected.
 
-Testbench comes with this package, so every package repository has it. A repository missing `vendor/bin/testbench` all the same (an incomplete install, or a custom Composer `bin-dir`) gets no shim and is not composed, and the run says so.
+A package without `vendor/bin/testbench` (it does not require Testbench, its install is incomplete, or it uses a custom Composer `bin-dir`) gets no shim and is not composed. The run says so, and names the command that installs Testbench.
 
 ### Choosing your agents
 

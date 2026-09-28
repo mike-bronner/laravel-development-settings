@@ -139,8 +139,10 @@ it('neither composes nor registers where Testbench is missing, and says so', fun
         ->toContain('registered with Boost', 'Composing Laravel Boost');
     expect($output)->toContain(
         'This repository has no artisan of its own and no vendor/bin/testbench, so Laravel Boost'
-            . " was not run. orchestra/testbench comes with this package: run \"composer install\""
-            . ' to restore it.',
+            . ' was not run. This package does not install orchestra/testbench: a'
+            . " package repository requires it itself. Run \"composer require --dev"
+            . " orchestra/testbench\", or \"composer install\" if composer.json already"
+            . ' requires it.',
     );
 })->with([
     'a package with no shim' => [[]],

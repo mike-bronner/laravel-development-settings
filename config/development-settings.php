@@ -3,10 +3,12 @@
 declare(strict_types=1);
 
 return [
-    // The tooling (Boost, Pint, Larastan, clean-code, Testbench) is not
-    // configured here: this package requires it in its own composer.json, so
-    // Composer installs it with the package. The plugin never edits a
-    // project's composer.json and never runs Composer itself.
+    // The tooling (Boost, Pint, Larastan, clean-code) is not configured here:
+    // this package requires it in its own composer.json, so Composer installs
+    // it with the package. The plugin never edits a project's composer.json
+    // and never runs Composer itself. Orchestra Testbench is not among it: in
+    // an application its TestCase class turns off Pest's Laravel handler for
+    // --parallel, so a package repository requires Testbench itself.
 
     // Boost composition command. It runs wherever the project has an artisan:
     // a full Laravel app's own, or, in a package repository, the shim listed
@@ -52,11 +54,11 @@ return [
     ],
 
     // Files synced only into a package repository: one with no artisan of its
-    // own and with vendor/bin/testbench installed. They follow the rules of
-    // `paths` below, with their own checksums in package-manifest.json. They
-    // stay out of `paths` and manifest.json because an app holds its own
-    // artisan, and copy-sync would report it as locally modified while orphan
-    // cleanup offered to delete it.
+    // own and with vendor/bin/testbench installed, which it requires itself.
+    // They follow the rules of `paths` below, with their own checksums in
+    // package-manifest.json. They stay out of `paths` and manifest.json
+    // because an app holds its own artisan, and copy-sync would report it as
+    // locally modified while orphan cleanup offered to delete it.
     //
     // The artisan shim roots Testbench at the repository, so Boost, its MCP
     // server and every other Artisan command work there as in an app. The
