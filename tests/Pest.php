@@ -12,13 +12,11 @@ declare(strict_types=1);
 | bind. The helper files hold declarations only, so every test file can use
 | them without declaring functions of its own.
 |
+| Pest loads every file under tests/Helpers itself, before this file, in the
+| order the filesystem lists them. That order differs between macOS and
+| Linux. So a helper may use a sibling's constants and functions only inside
+| a function body, which runs after every helper has loaded, and never in a
+| constant expression or other code that runs while the file loads.
+| HelperLoadOrderTest loads them in both sorted orders to hold that line.
+|
 */
-
-require_once __DIR__ . '/Helpers/filesystem.php';
-require_once __DIR__ . '/Helpers/managed.php';
-require_once __DIR__ . '/Helpers/agents.php';
-require_once __DIR__ . '/Helpers/process.php';
-require_once __DIR__ . '/Helpers/consumer.php';
-require_once __DIR__ . '/Helpers/shipped.php';
-require_once __DIR__ . '/Helpers/phpcs.php';
-require_once __DIR__ . '/Helpers/workflow.php';

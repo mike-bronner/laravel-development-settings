@@ -9,7 +9,7 @@ use MikeBronner\DevelopmentSettings\Support\SystemProcess;
  * Steps of the reverse sync workflow, run as written in its YAML.
  */
 
-const REUSABLE_SYNC = REPOSITORY_ROOT . '/.github/workflows/reusable-sync.yml';
+const REUSABLE_SYNC = __DIR__ . '/../../.github/workflows/reusable-sync.yml';
 
 const SYNC_STEP = <<<REGEX
     /^          php -r '\n(.*?)\n          '\n/ms
