@@ -33,7 +33,8 @@
         "11512e3c1e306b9ce828c303fea5304f"
     ],
     "resources/boost/skills/laravel/SKILL.md": [
-        "d49f79c2ab9ddf7bfdd1f1a48d339259"
+        "d49f79c2ab9ddf7bfdd1f1a48d339259",
+        "a53920aeecbd35e868598b7e7d856be8"
     ],
     "resources/boost/skills/laravel/references/classes.md": [
         "81a1d9ff0e5642708bbeef1ecc5d54ed"
@@ -63,7 +64,8 @@
         "719a4c7cd5d286357176d07a12b2b070"
     ],
     "resources/boost/skills/laravel/references/pest-patterns.md": [
-        "a4dd3b692d2d6757e6b2495ab394507a"
+        "a4dd3b692d2d6757e6b2495ab394507a",
+        "dd95c393720bc323c5ecfc1f5ec44d12"
     ],
     "resources/boost/skills/laravel/references/policies.md": [
         "b66f6200b3437c0d5ce1b03e56a12015"
@@ -78,7 +80,8 @@
         "6f1a0613cee70d337ffec16731256999"
     ],
     "resources/boost/skills/refactor/SKILL.md": [
-        "f96b54012776e84288af76c05e02fafe"
+        "f96b54012776e84288af76c05e02fafe",
+        "9a739adc46c4828dab8ee7d3e9ae956b"
     ],
     "resources/boost/skills/security/SKILL.md": [
         "9830885ec000979bd0d05f01444064ca"

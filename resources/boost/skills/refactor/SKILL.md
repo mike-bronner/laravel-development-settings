@@ -15,7 +15,8 @@ style rules.
 
 ## Refactoring Workflow
 
-1. **Characterize**: write tests that capture current behavior (if tests don't exist)
+1. **Characterize**: write tests that capture current behavior (if tests don't exist). The Assert
+   section documents what currently happens, not what should happen.
 
 ```php
 // Characterization test — captures current behavior before refactoring
@@ -29,7 +30,7 @@ it("captures current lead processing behavior", function () {
     // 🧪 Act
     $result = ProcessLeadAction::run(lead: $lead);
 
-    // 🧪 Assert — document what currently happens, not what should happen
+    // 🧪 Assert
     expect($result)
         ->status->toBe("processed")
         ->score->toBeGreaterThan(0);

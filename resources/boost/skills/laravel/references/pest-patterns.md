@@ -46,8 +46,11 @@ it("throws on invalid input", function () {
     // 🧪 Arrange
     $processor = new DataProcessor();
 
-    // 🧪 Act & Assert
-    expect(fn () => $processor->process(data: null))
+    // 🧪 Act
+    $process = fn () => $processor->process(data: null);
+
+    // 🧪 Assert
+    expect($process)
         ->toThrow(InvalidArgumentException::class, "Data cannot be null");
 });
 ```
