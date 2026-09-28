@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MikeBronner\DevelopmentSettings\Support;
 
+use Illuminate\Support\Collection;
 use LogicException;
 
 /**
@@ -28,59 +29,61 @@ use LogicException;
  * marker once is judged on the part above it, as classification judges a
  * managed target, and is safe only when nothing sits below the marker: those
  * lines are the project's, and deleting the file would take them with it.
+ *
+ * @phpstan-type Scan array{
+ *     new: array<string, string>,
+ *     unchanged: array<string, string>,
+ *     modified: array<string, string>,
+ *     updatable: array<string, string>,
+ *     unmarked: array<string, string>,
+ *     refused: array<string, string>,
+ * }
  */
 final class FileSync
 {
+    public const NEW = 'new';
+
+    public const UNCHANGED = 'unchanged';
+
+    public const MODIFIED = 'modified';
+
+    public const UPDATABLE = 'updatable';
+
+    public const UNMARKED = 'unmarked';
+
+    public const REFUSED = 'refused';
+
+    private const GROUPS = [
+        self::NEW,
+        self::UNCHANGED,
+        self::MODIFIED,
+        self::UPDATABLE,
+        self::UNMARKED,
+        self::REFUSED,
+    ];
+
     /**
      * @param  list<string>  $managed  target paths synced as a managed section
      */
-    public function __construct(private Manifest $manifest, private array $managed = []) {}
+    public function __construct(
+        private Manifest $manifest,
+        private array $managed = [],
+        private CheckedFile $file = new CheckedFile(),
+        private ManagedSection $section = new ManagedSection(),
+    ) {
+    }
 
     /**
      * @param  array<string, string>  $filesToPublish  relativePath => absoluteSourcePath
-     * @return array{
-     *     new: array<string, string>,
-     *     unchanged: array<string, string>,
-     *     modified: array<string, string>,
-     *     updatable: array<string, string>,
-     *     unmarked: array<string, string>,
-     *     refused: array<string, string>,
-     * }
+     * @return Scan
      */
     public function classify(string $projectDir, array $filesToPublish): array
     {
-        $scan = ['new' => [], 'unchanged' => [], 'modified' => [], 'updatable' => [], 'unmarked' => [], 'refused' => []];
+        $scan = array_fill_keys(self::GROUPS, []);
 
         foreach ($filesToPublish as $relativePath => $sourceFile) {
-            $destinationFile = $projectDir . '/' . $relativePath;
-
-            if (! file_exists($destinationFile)) {
-                $scan['new'][$relativePath] = $sourceFile;
-
-                continue;
-            }
-
-            if ($this->isManaged($relativePath)) {
-                $scan[$this->classifyManaged($relativePath, $destinationFile, $sourceFile)][$relativePath] = $sourceFile;
-
-                continue;
-            }
-
-            $localChecksum = (string) md5_file($destinationFile);
-
-            if ($localChecksum === md5_file($sourceFile)) {
-                $scan['unchanged'][$relativePath] = $sourceFile;
-
-                continue;
-            }
-
-            if (! $this->manifest->isKnown($relativePath, $localChecksum)) {
-                $scan['modified'][$relativePath] = $sourceFile;
-
-                continue;
-            }
-
-            $scan['updatable'][$relativePath] = $sourceFile;
+            $group = $this->group("{$projectDir}/{$relativePath}", $relativePath, $sourceFile);
+            $scan[$group][$relativePath] = $sourceFile;
         }
 
         return $scan;
@@ -97,18 +100,13 @@ final class FileSync
      */
     public function write(string $projectDir, string $relativePath, string $sourceFile): void
     {
-        $destinationFile = $projectDir . '/' . $relativePath;
+        $target = "{$projectDir}/{$relativePath}";
+        $file = $this->file;
 
-        if (! $this->isManaged($relativePath)) {
-            CheckedFile::copy($sourceFile, $destinationFile);
-
-            return;
-        }
-
-        CheckedFile::write($destinationFile, ManagedSection::compose(
-            managed: CheckedFile::read($sourceFile),
-            project: file_exists($destinationFile) ? $this->projectPart($relativePath, $destinationFile) : '',
-        ));
+        match ($this->isManaged($relativePath)) {
+            true => $file->write($target, $this->composed($relativePath, $sourceFile, $target)),
+            false => $file->copy($sourceFile, $target),
+        };
     }
 
     /**
@@ -126,25 +124,15 @@ final class FileSync
     public function orphans(string $projectDir, array $discoveredFiles): array
     {
         $discoveredPaths = array_keys($discoveredFiles);
-        $orphaned = [];
+        $paths = $this->manifest
+            ->paths();
 
-        foreach ($this->manifest->paths() as $manifestPath) {
-            if (in_array($manifestPath, $discoveredPaths, strict: true)) {
-                continue;
-            }
-
-            if (! file_exists($projectDir . '/' . $manifestPath)) {
-                continue;
-            }
-
-            if (! $this->isInsideProject($projectDir, $manifestPath)) {
-                continue;
-            }
-
-            $orphaned[] = $manifestPath;
-        }
-
-        return $orphaned;
+        return collect($paths)
+            ->reject(fn (string $path): bool => in_array($path, $discoveredPaths, strict: true))
+            ->filter(fn (string $path): bool => file_exists("{$projectDir}/{$path}"))
+            ->filter(fn (string $path): bool => $this->isInsideProject($projectDir, $path))
+            ->values()
+            ->all();
     }
 
     /**
@@ -155,10 +143,9 @@ final class FileSync
      */
     public function safeOrphans(string $projectDir, array $discoveredFiles): array
     {
-        return array_values(array_filter(
-            $this->orphans($projectDir, $discoveredFiles),
-            fn (string $path): bool => $this->isLocalCopyKnown($projectDir, $path),
-        ));
+        [$safe] = $this->partitionOrphans($projectDir, $discoveredFiles);
+
+        return $safe;
     }
 
     /**
@@ -169,10 +156,78 @@ final class FileSync
      */
     public function protectedOrphans(string $projectDir, array $discoveredFiles): array
     {
-        return array_values(array_filter(
-            $this->orphans($projectDir, $discoveredFiles),
-            fn (string $path): bool => ! $this->isLocalCopyKnown($projectDir, $path),
-        ));
+        [, $protected] = $this->partitionOrphans($projectDir, $discoveredFiles);
+
+        return $protected;
+    }
+
+    /**
+     * The orphans split into the safe ones and the protected ones.
+     *
+     * @param  array<string, string>  $discoveredFiles
+     * @return array{list<string>, list<string>}
+     */
+    private function partitionOrphans(string $projectDir, array $discoveredFiles): array
+    {
+        return collect($this->orphans($projectDir, $discoveredFiles))
+            ->partition(fn (string $path): bool => $this->isLocalCopyKnown($projectDir, $path))
+            ->map(fn (Collection $orphans): array => $orphans->values()->all())
+            ->all();
+    }
+
+    /**
+     * @return 'new'|'unchanged'|'updatable'|'modified'|'unmarked'|'refused'
+     */
+    private function group(string $target, string $path, string $source): string
+    {
+        return match (true) {
+            ! file_exists($target) => self::NEW,
+            $this->isManaged($path) => $this->classifyManaged($path, $target, $source),
+            default => $this->compare($path, (string) md5_file($target), $source),
+        };
+    }
+
+    /**
+     * @return 'unchanged'|'updatable'|'modified'|'unmarked'|'refused'
+     */
+    private function classifyManaged(string $path, string $target, string $source): string
+    {
+        $contents = (string) file_get_contents($target);
+        $section = $this->section;
+        $managedPart = (string) $section->managedPart($contents);
+
+        return match ($section->markers($contents)) {
+            0 => $this->classifyUnmarked($path, $contents),
+            1 => $this->compare($path, md5($managedPart), $source),
+            default => self::REFUSED,
+        };
+    }
+
+    /**
+     * @return 'updatable'|'unmarked'
+     */
+    private function classifyUnmarked(string $path, string $contents): string
+    {
+        $manifest = $this->manifest;
+
+        return match ($manifest->isKnown($path, md5($contents))) {
+            true => self::UPDATABLE,
+            false => self::UNMARKED,
+        };
+    }
+
+    /**
+     * @return 'unchanged'|'updatable'|'modified'
+     */
+    private function compare(string $path, string $checksum, string $source): string
+    {
+        $manifest = $this->manifest;
+
+        return match (true) {
+            $checksum === md5_file($source) => self::UNCHANGED,
+            $manifest->isKnown($path, $checksum) => self::UPDATABLE,
+            default => self::MODIFIED,
+        };
     }
 
     /**
@@ -182,61 +237,56 @@ final class FileSync
      */
     private function isInsideProject(string $projectDir, string $path): bool
     {
-        $resolved = realpath($projectDir . '/' . $path);
+        $resolved = realpath("{$projectDir}/{$path}");
         $root = realpath($projectDir);
 
-        if ($resolved === false || $root === false) {
-            return false;
-        }
-
-        return str_starts_with($resolved, rtrim($root, '/') . '/');
+        return $resolved !== false
+            && $root !== false
+            && str_starts_with($resolved, rtrim($root, '/') . '/');
     }
 
-    private function isManaged(string $relativePath): bool
+    private function isManaged(string $path): bool
     {
-        return in_array($relativePath, $this->managed, strict: true);
+        return in_array($path, $this->managed, strict: true);
     }
 
     /**
-     * @return 'unchanged'|'updatable'|'modified'|'unmarked'|'refused'
+     * The managed file as written: the source, the marker, and the project's
+     * part of what the project holds now.
      */
-    private function classifyManaged(string $relativePath, string $destinationFile, string $sourceFile): string
+    private function composed(string $path, string $source, string $target): string
     {
-        $contents = (string) file_get_contents($destinationFile);
-        $markers = ManagedSection::markers($contents);
+        $section = $this->section;
+        $file = $this->file;
 
-        if ($markers > 1) {
-            return 'refused';
-        }
+        return $section->compose(
+            managed: $file->read($source),
+            project: $this->existingProjectPart($path, $target),
+        );
+    }
 
-        if ($markers === 0) {
-            return $this->manifest->isKnown($relativePath, md5($contents)) ? 'updatable' : 'unmarked';
-        }
-
-        $checksum = md5((string) ManagedSection::split($contents)['managed']);
-
-        return match (true) {
-            $checksum === md5_file($sourceFile) => 'unchanged',
-            $this->manifest->isKnown($relativePath, $checksum) => 'updatable',
-            default => 'modified',
+    private function existingProjectPart(string $path, string $target): string
+    {
+        return match (file_exists($target)) {
+            true => $this->projectPart($path, $target),
+            false => '',
         };
     }
 
-    private function projectPart(string $relativePath, string $destinationFile): string
+    private function projectPart(string $path, string $target): string
     {
-        $contents = CheckedFile::read($destinationFile);
+        $contents = $this->file
+            ->read($target);
+        $section = $this->section;
+        $manifest = $this->manifest;
+        $refusal = "{$path} holds the sync marker more than once and must not be written.";
 
-        if (ManagedSection::markers($contents) > 1) {
-            throw new LogicException("{$relativePath} holds the sync marker more than once and must not be written.");
-        }
-
-        $section = ManagedSection::split($contents);
-
-        if ($section !== null) {
-            return $section['project'];
-        }
-
-        return $this->manifest->isKnown($relativePath, md5($contents)) ? '' : $contents;
+        return match (true) {
+            $section->markers($contents) > 1 => throw new LogicException($refusal),
+            $section->markers($contents) === 1 => (string) $section->projectPart($contents),
+            $manifest->isKnown($path, md5($contents)) => '',
+            default => $contents,
+        };
     }
 
     /**
@@ -246,13 +296,15 @@ final class FileSync
      */
     private function isLocalCopyKnown(string $projectDir, string $path): bool
     {
-        $contents = (string) file_get_contents($projectDir . '/' . $path);
-        $section = ManagedSection::split($contents);
+        $contents = (string) file_get_contents("{$projectDir}/{$path}");
+        $section = $this->section;
+        $manifest = $this->manifest;
+        $managedPart = (string) $section->managedPart($contents);
 
-        if ($section === null) {
-            return $this->manifest->isKnown($path, md5($contents));
-        }
-
-        return $section['project'] === '' && $this->manifest->isKnown($path, md5($section['managed']));
+        return match ($section->markers($contents)) {
+            1 => $section->projectPart($contents) === ''
+                && $manifest->isKnown($path, md5($managedPart)),
+            default => $manifest->isKnown($path, md5($contents)),
+        };
     }
 }

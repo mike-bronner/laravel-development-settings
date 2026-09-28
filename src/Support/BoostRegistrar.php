@@ -42,46 +42,27 @@ final class BoostRegistrar
      * package that is no longer installed. Only those exact entries are
      * removed: every other package in the list belongs to the project.
      *
+     * A file that is not a JSON object, or whose `packages` is not a list, is
+     * left alone and answered as unreadable.
+     *
      * @param  list<string>  $replaces
      * @return self::REGISTERED|self::UNCHANGED|self::UNREADABLE
      */
     public function register(string $projectDir, string $package, array $replaces = []): string
     {
-        $path = $projectDir . '/' . self::FILE;
+        $path = "{$projectDir}/" . self::FILE;
         $config = $this->read($path);
+        $packages = data_get($config, 'packages') ?? [];
 
-        if ($config === null) {
-            return self::UNREADABLE;
-        }
-
-        $packages = $config['packages'] ?? [];
-
-        if (! is_array($packages)) {
-            return self::UNREADABLE;
-        }
-
-        $kept = array_values(array_filter(
-            $packages,
-            static fn (mixed $entry): bool => ! in_array($entry, $replaces, strict: true),
-        ));
-
-        if (! in_array($package, $kept, strict: true)) {
-            $kept[] = $package;
-        }
-
-        if ($kept === array_values($packages)) {
-            return self::UNCHANGED;
-        }
-
-        $config['packages'] = $kept;
-        ksort($config);
-
-        file_put_contents(
-            $path,
-            json_encode($config, flags: JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n",
-        );
-
-        return self::REGISTERED;
+        return match (true) {
+            $config === null,
+            ! is_array($packages) => self::UNREADABLE,
+            default => $this->registration(
+                $path,
+                $config,
+                $this->listed($packages, $package, $replaces),
+            ),
+        };
     }
 
     /**
@@ -90,9 +71,60 @@ final class BoostRegistrar
      */
     public function hasAgents(string $projectDir): bool
     {
-        $agents = $this->read($projectDir . '/' . self::FILE)['agents'] ?? [];
+        $agents = data_get($this->read("{$projectDir}/" . self::FILE), 'agents', []);
 
         return is_array($agents) && $agents !== [];
+    }
+
+    /**
+     * The package list with the replaced names dropped and `$package` present.
+     *
+     * @param  array<array-key, mixed>  $packages
+     * @param  list<string>  $replaces
+     * @return array{before: list<mixed>, after: list<mixed>}
+     */
+    private function listed(array $packages, string $package, array $replaces): array
+    {
+        $kept = collect($packages)
+            ->reject(static fn (mixed $entry): bool => in_array($entry, $replaces, strict: true))
+            ->values();
+        $after = match ($kept->containsStrict($package)) {
+            true => $kept,
+            false => $kept->push($package),
+        };
+
+        return ['before' => array_values($packages), 'after' => $after->all()];
+    }
+
+    /**
+     * Write the new list when it differs from the one on disk.
+     *
+     * @param  array<string, mixed>  $config
+     * @param  array{before: list<mixed>, after: list<mixed>}  $packages
+     * @return self::REGISTERED|self::UNCHANGED
+     */
+    private function registration(string $path, array $config, array $packages): string
+    {
+        ['before' => $before, 'after' => $after] = $packages;
+
+        return match ($after === $before) {
+            true => self::UNCHANGED,
+            false => $this->registerList($path, [...$config, 'packages' => $after]),
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     * @return self::REGISTERED
+     */
+    private function registerList(string $path, array $config): string
+    {
+        ksort($config);
+
+        $json = json_encode($config, flags: JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        file_put_contents($path, "{$json}\n");
+
+        return self::REGISTERED;
     }
 
     /**
@@ -105,12 +137,22 @@ final class BoostRegistrar
      */
     private function read(string $path): ?array
     {
-        if (! file_exists($path)) {
-            return [];
-        }
+        return match (file_exists($path)) {
+            true => $this->decode((string) file_get_contents($path)),
+            false => [],
+        };
+    }
 
-        $decoded = json_decode(json: (string) file_get_contents($path), associative: true);
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function decode(string $json): ?array
+    {
+        $decoded = json_decode(json: $json, associative: true);
 
-        return is_array($decoded) ? $decoded : null;
+        return match (is_array($decoded)) {
+            true => $decoded,
+            false => null,
+        };
     }
 }

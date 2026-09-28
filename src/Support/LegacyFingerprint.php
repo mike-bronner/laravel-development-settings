@@ -21,21 +21,32 @@ final class LegacyFingerprint
 {
     public const FILE = '.dev-settings-boost';
 
-    /**
-     * Whether the file was found and removed.
-     */
-    public function remove(string $projectDir): bool
+    public function __construct(private CheckedFile $file = new CheckedFile())
     {
-        $path = $projectDir . '/' . self::FILE;
+    }
 
-        if (is_link($path) || ! is_file($path)) {
-            return false;
-        }
+    /**
+     * Whether the project holds a fingerprint file this package wrote.
+     */
+    public function isStale(string $projectDir): bool
+    {
+        $path = "{$projectDir}/" . self::FILE;
 
-        if (preg_match('/\A[0-9a-f]{32}\s*\z/', (string) file_get_contents($path)) !== 1) {
-            return false;
-        }
+        return ! is_link($path)
+            && is_file($path)
+            && preg_match('/\A[0-9a-f]{32}\s*\z/', (string) file_get_contents($path)) === 1;
+    }
 
-        return unlink($path);
+    /**
+     * Remove the fingerprint file when it is stale, and throw when it stays.
+     */
+    public function remove(string $projectDir): void
+    {
+        $file = $this->file;
+
+        match ($this->isStale($projectDir)) {
+            true => $file->unlink("{$projectDir}/" . self::FILE),
+            false => null,
+        };
     }
 }

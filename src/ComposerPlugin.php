@@ -10,54 +10,54 @@ use Composer\IO\IOInterface;
 use Composer\Plugin\PluginInterface;
 use Composer\Script\Event;
 use Composer\Script\ScriptEvents;
+use MikeBronner\DevelopmentSettings\Plugin\ContributionPrompt;
+use MikeBronner\DevelopmentSettings\Plugin\Publisher;
+use MikeBronner\DevelopmentSettings\Support\InstalledPackage;
+use MikeBronner\DevelopmentSettings\Support\SystemTerminal;
+use MikeBronner\DevelopmentSettings\Support\Terminal;
+use Override;
 
-use function Laravel\Prompts\confirm;
-use function Laravel\Prompts\multiselect;
-
-use Laravel\Prompts\Prompt;
-use MikeBronner\DevelopmentSettings\Support\BoostRegistrar;
-use MikeBronner\DevelopmentSettings\Support\ContributionDetector;
-use MikeBronner\DevelopmentSettings\Support\Contributor;
-use MikeBronner\DevelopmentSettings\Support\FileDiscovery;
-use MikeBronner\DevelopmentSettings\Support\FileSync;
-use MikeBronner\DevelopmentSettings\Support\GuidelineGuard;
-use MikeBronner\DevelopmentSettings\Support\LegacyFingerprint;
-use MikeBronner\DevelopmentSettings\Support\LegacySymlink;
-use MikeBronner\DevelopmentSettings\Support\Manifest;
-use MikeBronner\DevelopmentSettings\Support\PackageRepository;
-use MikeBronner\DevelopmentSettings\Support\ProcessResult;
-use MikeBronner\DevelopmentSettings\Support\SystemProcess;
-use RuntimeException;
-use Symfony\Component\Console\Formatter\OutputFormatter;
-
+/**
+ * The Composer plugin: before an update it names local edits to the installed
+ * guideline and skill sources, and after an install or an update it publishes
+ * the package into the project. Each hook finds the package in the project's
+ * vendor directory, and hands the work to `ContributionPrompt` and
+ * `Publisher`.
+ */
 final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 {
-    private const PACKAGE_NAME = 'mike-bronner/laravel-development-settings';
-
-    /**
-     * The name this package shipped under before the repository moved. An
-     * upgraded project can still hold it in `boost.json` and in a symlink-era
-     * `.ai` link, and only this package can clean those up.
-     */
-    private const LEGACY_PACKAGE_NAME = 'mikebronner/development-settings';
-    private const MANIFEST_FILE = 'manifest.json';
-    private const BOX_WIDTH = 80;
-
-    private const BOOST_FEATURES = ' --guidelines --skills --mcp';
+    private const NOT_FOUND = <<<TEXT
+        <error>Could not locate the %s package directory</error>
+        TEXT;
 
     /**
      * Composer builds the plugin with no arguments, so the terminal is
-     * detected. A test passes it, because the suite's own terminal is not the
+     * detected. A test passes one, because the suite's own terminal is not the
      * one a real Composer run has.
      */
-    public function __construct(private readonly ?bool $hasTerminal = null) {}
+    public function __construct(private Terminal $terminal = new SystemTerminal())
+    {
+    }
 
-    public function activate(Composer $composer, IOInterface $io): void {}
+    #[Override]
+    public function activate(Composer $composer, IOInterface $inputOutput): void
+    {
+    }
 
-    public function deactivate(Composer $composer, IOInterface $io): void {}
+    #[Override]
+    public function deactivate(Composer $composer, IOInterface $inputOutput): void
+    {
+    }
 
-    public function uninstall(Composer $composer, IOInterface $io): void {}
+    #[Override]
+    public function uninstall(Composer $composer, IOInterface $inputOutput): void
+    {
+    }
 
+    /**
+     * @return array<string, string>
+     */
+    #[Override]
     public static function getSubscribedEvents(): array
     {
         return [
@@ -67,648 +67,44 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         ];
     }
 
+    /**
+     * Publish into the project. Inside this package's own repository there is
+     * nothing to publish; anywhere else a missing package is an error.
+     */
     public function publish(Event $event): void
     {
-        $this->doPublish($event->getIO());
+        $inputOutput = $event->getIO();
+        $package = new InstalledPackage((string) getcwd());
+        $packageDir = $package->directory();
+
+        match (true) {
+            $packageDir !== null => $this->publishFrom($package, $packageDir, $inputOutput),
+            $package->isOwnRepository() => null,
+            default => $inputOutput->writeError(sprintf(self::NOT_FOUND, InstalledPackage::NAME)),
+        };
     }
 
+    /**
+     * Name the installed sources edited in place, before an update overwrites
+     * them.
+     */
     public function captureBeforeUpdate(Event $event): void
     {
-        $this->doCapture($event->getIO());
-    }
+        $projectDir = (string) getcwd();
+        $packageDir = (new InstalledPackage($projectDir))->directory();
 
-    private function doCapture(IOInterface $io): void
-    {
-        $packageDir = $this->getPackageDir();
-
-        if (! $packageDir) {
-            return;
-        }
-
-        $projectDir = getcwd();
-        $config = require $packageDir . '/config/development-settings.php';
-        $modified = (new ContributionDetector)->modified(
-            packageDir: $packageDir,
-            directories: $config['capture'] ?? [],
-            sources: Manifest::load($packageDir . '/' . ContributionDetector::MANIFEST_FILE),
-            ignore: $config['paths']['ignore'] ?? FileDiscovery::DEFAULT_IGNORE,
-        );
-
-        if ($modified === []) {
-            return;
-        }
-
-        $io->write('');
-        $io->write(sprintf('<comment>You have %d local edit(s) to shared development-settings files:</comment>', count($modified)));
-
-        foreach (array_keys($modified) as $path) {
-            $io->write('  <comment>· ' . $path . '</comment>');
-        }
-
-        if (! $io->isInteractive()) {
-            $io->writeError('<comment>  These live in vendor and will be lost on update. Run "vendor/bin/dev-settings-contribute.php" to PR them upstream.</comment>');
-
-            return;
-        }
-
-        Prompt::interactive(true);
-
-        if (! confirm(label: 'Contribute these to development-settings before updating?', default: false)) {
-            $io->write('<comment>  Skipped — run "vendor/bin/dev-settings-contribute.php" later to contribute.</comment>');
-
-            return;
-        }
-
-        $result = (new Contributor(new SystemProcess))->open(
-            modified: $modified,
-            branch: $this->contributionBranch($projectDir),
-            cloneDir: sys_get_temp_dir() . '/devset-contribute-' . bin2hex(random_bytes(5)),
-            token: getenv('DEVELOPER_SETTINGS_TOKEN') ?: null,
-        );
-
-        $io->write($result['status'] === 0
-            ? '<info>  ' . $result['message'] . '</info>'
-            : '<error>  ' . $result['message'] . '</error>');
-    }
-
-    private function contributionBranch(string $projectDir): string
-    {
-        $slug = preg_replace('/[^a-z0-9._-]+/i', '-', basename($projectDir)) ?? 'project';
-
-        return 'contribute/' . $slug . '-' . date('YmdHis');
-    }
-
-    private function doPublish(IOInterface $io): void
-    {
-        $packageDir = $this->getPackageDir();
-
-        if (! $packageDir) {
-            // Running inside development-settings itself: nothing to publish.
-            if (! $this->isRunningInOwnRepository()) {
-                $io->writeError('<error>Could not locate the ' . self::PACKAGE_NAME . ' package directory</error>');
-            }
-
-            return;
-        }
-
-        $projectDir = getcwd();
-        $config = require $packageDir . '/config/development-settings.php';
-        $manifest = Manifest::load($packageDir . '/' . self::MANIFEST_FILE);
-
-        $ignore = $config['paths']['ignore'] ?? FileDiscovery::DEFAULT_IGNORE;
-        $managed = $config['paths']['managed'] ?? [];
-        $filesToPublish = (new FileDiscovery)->discover(packageDir: $packageDir, paths: $config['paths'], ignore: $ignore);
-
-        // A package repository also receives the artisan shim and the files
-        // that go with it. Their checksums join the manifest only here, so an
-        // app's own artisan never meets copy-sync or orphan cleanup.
-        if (PackageRepository::receivesShim($projectDir)) {
-            $filesToPublish += (new FileDiscovery)->discover(packageDir: $packageDir, paths: $config['package'] ?? [], ignore: $ignore);
-            $managed = [...$managed, ...$config['package']['managed'] ?? []];
-            $manifest = new Manifest([
-                ...$manifest->toArray(),
-                ...Manifest::load($packageDir . '/' . PackageRepository::MANIFEST_FILE)->toArray(),
-            ]);
-        }
-
-        // Remove the legacy `.ai` link before anything inspects the project
-        // tree: while it stands, every `.ai/…` manifest path resolves into
-        // vendor and orphan cleanup would delete this package's own sources.
-        $removedLinks = (new LegacySymlink)->remove(
-            projectDir: $projectDir,
-            packageDirs: [$packageDir, $projectDir . '/vendor/' . self::LEGACY_PACKAGE_NAME],
-            linkPaths: $config['paths']['legacy_symlinks'] ?? [],
-        );
-        $removedFingerprint = (new LegacyFingerprint)->remove($projectDir);
-
-        $fileSync = new FileSync($manifest, managed: $managed);
-        $scan = $fileSync->classify($projectDir, $filesToPublish);
-        $safeOrphans = $fileSync->safeOrphans($projectDir, $filesToPublish);
-        $protectedOrphans = $fileSync->protectedOrphans($projectDir, $filesToPublish);
-
-        // Only where Boost can actually compose: an app, or a package whose
-        // artisan shim has a Testbench to boot. Anywhere else, registering
-        // would write a config file nothing ever reads.
-        $registration = $this->composesBoost($projectDir)
-            ? (new BoostRegistrar)->register(
-                projectDir: $projectDir,
-                package: self::PACKAGE_NAME,
-                replaces: [self::LEGACY_PACKAGE_NAME],
-            )
-            : null;
-
-        // New and known-version files need no answer from the user, so they are
-        // written before the summary lists them: a write that fails is listed
-        // as failed, never as created or updated. As with a failed Boost run,
-        // the failure is reported with its cause and the run carries on.
-        $failedWrites = [];
-
-        foreach (['new', 'updatable'] as $group) {
-            foreach ($scan[$group] as $path => $sourceFile) {
-                $failure = $this->writeTracked($fileSync, $projectDir, $path, $sourceFile);
-
-                if ($failure !== null) {
-                    unset($scan[$group][$path]);
-                    $failedWrites[$path] = $failure;
-                }
-            }
-        }
-
-        $this->writeBoxHeader($io);
-
-        foreach (array_keys($failedWrites) as $path) {
-            $io->write($this->formatOutputLine(type: 'failed', path: $path));
-        }
-
-        foreach (array_keys($scan['new']) as $path) {
-            $io->write($this->formatOutputLine(type: 'created', path: $path));
-        }
-
-        foreach (array_keys($scan['updatable']) as $path) {
-            $io->write($this->formatOutputLine(type: 'updated', path: $path));
-        }
-
-        foreach (array_keys($scan['modified']) as $path) {
-            $io->write($this->formatOutputLine(type: 'modified', path: $path));
-        }
-
-        foreach (array_keys($scan['unmarked']) as $path) {
-            $io->write($this->formatOutputLine(type: 'unmarked', path: $path));
-        }
-
-        foreach (array_keys($scan['refused']) as $path) {
-            $io->write($this->formatOutputLine(type: 'refused', path: $path));
-        }
-
-        foreach ($safeOrphans as $path) {
-            $io->write($this->formatOutputLine(type: 'removed', path: $path));
-        }
-
-        foreach ($protectedOrphans as $path) {
-            $io->write($this->formatOutputLine(type: 'orphan_protected', path: $path));
-        }
-
-        foreach ($removedLinks as $linkPath) {
-            $io->write($this->formatOutputLine(type: 'unlinked', path: $linkPath));
-        }
-
-        if ($removedFingerprint) {
-            $io->write($this->formatOutputLine(type: 'stale_fingerprint', path: LegacyFingerprint::FILE));
-        }
-
-        if ($registration === BoostRegistrar::REGISTERED) {
-            $io->write($this->formatOutputLine(type: 'registered', path: BoostRegistrar::FILE));
-        }
-
-        $filesToOverwrite = [];
-
-        if ($scan['modified'] !== []) {
-            Prompt::interactive($io->isInteractive());
-
-            $filesToOverwrite = multiselect(
-                label: 'Overwrite locally modified files?',
-                options: array_combine(
-                    array_keys($scan['modified']),
-                    array_keys($scan['modified']),
-                ),
-                default: [],
-                required: false,
-                hint: 'Space to toggle, Enter to confirm.',
-            );
-        }
-
-        // An edited file with no sync marker cannot be split into the package's
-        // part and the project's, so it is only converted on consent. The
-        // conversion loses nothing: the whole file moves below the marker.
-        $filesToConvert = [];
-
-        if ($scan['unmarked'] !== []) {
-            if ($io->isInteractive()) {
-                Prompt::interactive(true);
-
-                $filesToConvert = multiselect(
-                    label: 'Add the sync marker to these locally modified files?',
-                    options: array_combine(array_keys($scan['unmarked']), array_keys($scan['unmarked'])),
-                    default: [],
-                    required: false,
-                    hint: 'Your whole file moves below the marker. Unselected files are kept as they are.',
-                );
-            } else {
-                $io->writeError(sprintf(
-                    '<comment>  %d locally-modified file(s) have no sync marker and were not updated. Run composer interactively to add it; your entries are kept below it.</comment>',
-                    count($scan['unmarked']),
-                ));
-            }
-        }
-
-        foreach (array_keys($scan['refused']) as $path) {
-            $io->writeError(sprintf(
-                '<error>  %s holds the sync marker more than once, so it was not touched. Keep one marker line and run composer again.</error>',
-                $path,
-            ));
-        }
-
-        $orphansToDelete = [];
-
-        if ($protectedOrphans !== []) {
-            if ($io->isInteractive()) {
-                Prompt::interactive(true);
-
-                $orphansToDelete = multiselect(
-                    label: 'Delete files removed upstream that you have modified locally?',
-                    options: array_combine($protectedOrphans, $protectedOrphans),
-                    default: [],
-                    required: false,
-                    hint: 'Unselected files are kept. Space to toggle, Enter to confirm.',
-                );
-            } else {
-                $io->writeError(sprintf(
-                    '<comment>  %d locally-modified file(s) removed upstream were kept. Delete manually if no longer needed.</comment>',
-                    count($protectedOrphans),
-                ));
-            }
-        }
-
-        $stats = [
-            'new' => count($scan['new']),
-            'updated' => count($scan['updatable']),
-            'unchanged' => count($scan['unchanged']),
-            'skipped' => count($scan['refused']) + count($failedWrites),
-            'removed' => 0,
-        ];
-
-        $consented = [
-            ...array_intersect_key($scan['modified'], array_flip($filesToOverwrite)),
-            ...array_intersect_key($scan['unmarked'], array_flip($filesToConvert)),
-        ];
-
-        foreach ([...$scan['modified'], ...$scan['unmarked']] as $path => $sourceFile) {
-            if (array_key_exists($path, $consented)) {
-                $failure = $this->writeTracked($fileSync, $projectDir, $path, $sourceFile);
-
-                if ($failure === null) {
-                    $stats['updated']++;
-
-                    continue;
-                }
-
-                $failedWrites[$path] = $failure;
-            }
-
-            $stats['skipped']++;
-        }
-
-        foreach ($failedWrites as $path => $failure) {
-            $io->writeError(sprintf(
-                '<error>  %s was not updated. %s Fix the cause, then run the Composer command again.</error>',
-                $path,
-                rtrim($failure, '.') . '.',
-            ));
-        }
-
-        foreach ($safeOrphans as $orphanPath) {
-            $this->deleteOrphan($projectDir, $orphanPath);
-            $stats['removed']++;
-        }
-
-        foreach ($protectedOrphans as $orphanPath) {
-            if (! in_array($orphanPath, $orphansToDelete, true)) {
-                $stats['skipped']++;
-
-                continue;
-            }
-
-            $this->deleteOrphan($projectDir, $orphanPath);
-            $stats['removed']++;
-        }
-
-        $stats['removed'] += count($removedLinks) + (int) $removedFingerprint;
-
-        match ($registration) {
-            BoostRegistrar::REGISTERED => $stats['new']++,
-            BoostRegistrar::UNCHANGED => $stats['unchanged']++,
-            BoostRegistrar::UNREADABLE => $stats['skipped']++,
-            default => null,
+        match ($packageDir) {
+            null => null,
+            default => (new ContributionPrompt($event->getIO(), $projectDir, $packageDir))->offer(),
         };
-
-        $this->writeBoxFooter($io, $stats);
-
-        // Boost is not run over a file this package cannot read: `boost:install`
-        // treats it as empty and writes a fresh config over it, destroying the
-        // developer's agent, guideline and MCP settings.
-        if ($registration === BoostRegistrar::UNREADABLE) {
-            $io->writeError(sprintf(
-                '<error>  %s is not valid JSON, so Laravel Boost was not run. Its guidelines and skills will not compose until you fix or delete the file.</error>',
-                BoostRegistrar::FILE,
-            ));
-        } else {
-            $this->runBoost($io, $projectDir, $config);
-        }
     }
 
-    private function writeBoxHeader(IOInterface $io): void
-    {
-        $border = 'fg=gray';
-
-        $io->write('');
-        $io->write("<{$border}>┌" . str_repeat('─', self::BOX_WIDTH - 2) . '┐</>');
-        $io->write("<{$border}>│</>  <fg=cyan>Developer Settings</>" . str_repeat(' ', self::BOX_WIDTH - 24) . "  <{$border}>│</>");
-        $io->write("<{$border}>├" . str_repeat('─', self::BOX_WIDTH - 2) . '┤</>');
-    }
-
-    private function writeBoxFooter(IOInterface $io, array $stats): void
-    {
-        $border = 'fg=gray';
-
-        $io->write("<{$border}>├" . str_repeat('─', self::BOX_WIDTH - 2) . '┤</>');
-
-        $summaryParts = [
-            $this->formatSummaryItem($stats['new'], 'new', 'green'),
-            $this->formatSummaryItem($stats['updated'], 'updated', 'yellow'),
-            $this->formatSummaryItem($stats['unchanged'], 'unchanged', 'gray', 'white'),
-            $this->formatSummaryItem($stats['skipped'], 'skipped', 'red'),
-            $this->formatSummaryItem($stats['removed'], 'removed', 'magenta'),
-        ];
-
-        $summary = implode(' · ', $summaryParts);
-        $summaryPlain = preg_replace('/<[^>]+>/', '', $summary);
-        $padding = self::BOX_WIDTH - 6 - mb_strlen($summaryPlain);
-        $io->write("<{$border}>│</>  " . $summary . str_repeat(' ', $padding) . "  <{$border}>│</>");
-
-        $io->write("<{$border}>└" . str_repeat('─', self::BOX_WIDTH - 2) . '┘</>');
-        $io->write('');
-    }
-
-    private function formatSummaryItem(int $count, string $label, string $bgColor, ?string $fgColor = null): string
-    {
-        if ($count === 0) {
-            return "<fg=gray>{$count} {$label}</>";
-        }
-
-        $fgColor ??= "bright-{$bgColor}";
-
-        return "<fg={$fgColor};bg={$bgColor}> {$count} {$label} </>";
-    }
-
-    private function formatOutputLine(string $type, string $path): string
-    {
-        $formats = [
-            'created' => ['icon' => '+', 'style' => 'info'],
-            'updated' => ['icon' => '↻', 'style' => 'comment'],
-            'modified' => ['icon' => '⚠', 'style' => 'fg=yellow'],
-            'orphan_protected' => ['icon' => '⚠', 'style' => 'fg=yellow'],
-            'unmarked' => ['icon' => '⚠', 'style' => 'fg=yellow'],
-            'refused' => ['icon' => '⚠', 'style' => 'fg=red'],
-            'failed' => ['icon' => '✗', 'style' => 'fg=red', 'suffix' => ' (write failed)'],
-            'unlinked' => ['icon' => '-', 'style' => 'fg=magenta', 'suffix' => ' (stale symlink into vendor)'],
-            'stale_fingerprint' => ['icon' => '-', 'style' => 'fg=magenta', 'suffix' => ' (stale Boost fingerprint)'],
-            'registered' => ['icon' => '+', 'style' => 'info', 'suffix' => ' (registered with Boost)'],
-            'removed' => ['icon' => '-', 'style' => 'fg=magenta'],
-        ];
-
-        $format = $formats[$type] ?? ['icon' => ' ', 'style' => null, 'suffix' => ''];
-        $style = $format['style'] ?? null;
-        $prefix = $style !== null
-            ? "<{$style}>{$format['icon']}</{$style}>"
-            : $format['icon'];
-        $suffix = $format['suffix'] ?? '';
-
-        $displayPath = match ($type) {
-            'modified' => "{$path} (locally modified)",
-            'unmarked' => "{$path} (locally modified, no sync marker)",
-            'refused' => "{$path} (sync marker appears twice, not touched)",
-            'orphan_protected' => "{$path} (removed upstream, kept — locally modified)",
-            default => $path . $suffix,
-        };
-
-        $prefixLength = 1;
-        $maxPathLength = self::BOX_WIDTH - 6 - $prefixLength - 2 - 1;
-
-        if (strlen($displayPath) > $maxPathLength) {
-            $displayPath = substr($displayPath, 0, $maxPathLength - 3) . '...';
-        }
-
-        $visibleLength = $prefixLength + 2 + strlen($displayPath);
-        $padding = max(1, self::BOX_WIDTH - 6 - $visibleLength);
-
-        return '<fg=gray>│</>  ' . $prefix . '  ' . $displayPath . str_repeat(' ', $padding) . '  <fg=gray>│</>';
-    }
-
-    private function deleteOrphan(string $projectDir, string $orphanPath): void
-    {
-        $filePath = $projectDir . '/' . $orphanPath;
-
-        if (file_exists($filePath)) {
-            unlink($filePath);
-        }
-
-        $this->removeEmptyDirectories(dirname($filePath), $projectDir);
-    }
-
-    private function removeEmptyDirectories(string $directory, string $stopAt): void
-    {
-        while ($directory !== $stopAt && is_dir($directory)) {
-            $files = array_diff(scandir($directory) ?: [], ['.', '..']);
-
-            if ($files !== []) {
-                break;
-            }
-
-            rmdir($directory);
-            $directory = dirname($directory);
-        }
-    }
-
-    /**
-     * Install Laravel Boost through the project's `artisan`: an app's own, or
-     * the shim a package repository receives. A captured run installs the
-     * guidelines, skills and MCP entries whatever `boost.json` says. A run on
-     * the terminal lets Boost's own prompts choose, and saves the choice.
-     *
-     * Boost composes from this package's `resources/boost` in vendor *and* from
-     * the project's own `.ai`, so the run is unconditional: the package sources
-     * alone can no longer tell us whether the output would change.
-     *
-     * Every composition passes through here, so this is where the agent files
-     * are checked first. Boost overwrites hand-written content whenever a file
-     * names its opening marker tag more than once, or leaves one unclosed, and
-     * this package composes unattended at a moment the project's author did not
-     * pick. `GuidelineGuard` carries the rule and the reasoning.
-     */
-    private function runBoost(IOInterface $io, string $projectDir, array $config): void
-    {
-        $installCommand = 'php artisan boost:install';
-
-        if (! $this->composesBoost($projectDir)) {
-            $io->writeError(sprintf(
-                '<comment>  This repository has no artisan of its own and no %s, so Laravel Boost was not run. orchestra/testbench comes with this package: run "composer install" to restore it. A custom Composer bin-dir is not supported.</comment>',
-                PackageRepository::TESTBENCH,
-            ));
-
-            return;
-        }
-
-        // A shim that could not be written was reported with its cause.
-        if (! file_exists($projectDir . '/' . PackageRepository::ARTISAN)) {
-            return;
-        }
-
-        $guard = new GuidelineGuard;
-        $hazards = $guard->hazards($projectDir);
-
-        if ($hazards !== []) {
-            $this->refuseBoost($io, $hazards);
-
-            return;
-        }
-
-        // An interactive Composer run on a terminal hands Boost the terminal,
-        // as Composer does for a script. Its output then goes to the user, not
-        // to the plugin. Anything else, CI included, runs captured and never
-        // prompts.
-        $attached = $io->isInteractive() && ($this->hasTerminal ?? SystemProcess::hasTerminal());
-
-        // A fresh clone has no `boost.json` agents: the file is gitignored, and
-        // a captured install never records the agents it picks. Boost then
-        // composes for whatever it detects on this machine, which may be
-        // nothing at all. An attached install asks for them and saves them.
-        if (! $attached && ! (new BoostRegistrar)->hasAgents($projectDir)) {
-            $io->writeError(sprintf(
-                '<comment>  %s names no agents, so Laravel Boost composes for the agents it detects on this machine. Run "%s" once to choose them.</comment>',
-                BoostRegistrar::FILE,
-                $installCommand,
-            ));
-        }
-
-        $description = $config['hooks']['description'] ?? 'Composing Laravel Boost...';
-        $startedAt = time();
-
-        if ($attached) {
-            // No feature flags: with any of them, Boost asks for agents but
-            // does not save the answer. Without them its own prompts choose
-            // the features and packages, and the agents land in `boost.json`.
-            $io->write("  <info>{$description}</info>");
-            $result = new ProcessResult(
-                exitCode: (new SystemProcess)->passthru($config['hooks']['interactive_command'] ?? $installCommand),
-                output: '',
-            );
-            $io->write('  Laravel Boost ', false);
-        } else {
-            // Every feature is passed explicitly, so a leftover boost.json
-            // setting can never turn one off: Boost ignores boost.json once a
-            // flag is given.
-            $io->write("  <info>{$description}</info> ", false);
-            $result = $this->executeCommand(($config['hooks']['command'] ?? $installCommand . ' --no-interaction') . self::BOOST_FEATURES);
-        }
-
-        // The user watched an attached run, so its output is already on screen.
-        $nextStep = $attached ? 'Its output is above.' : sprintf('Run "%s" to see why.', $installCommand);
-
-        if ($result->failed()) {
-            $io->write('<error>failed</error>');
-            $io->writeError(sprintf(
-                '<error>  Laravel Boost exited with an error. %s Boost registers its commands only when APP_ENV is local or APP_DEBUG is true.</error>',
-                $nextStep,
-            ));
-            $this->writeFailureOutput($io, $result);
-
-            return;
-        }
-
-        // Boost exits successfully when it found no agent to compose for, so a
-        // zero exit alone would report "done" for a run that wrote nothing.
-        if (! $guard->composedSince($projectDir, $startedAt)) {
-            $io->write('<error>failed</error>');
-            $io->writeError(sprintf(
-                $attached
-                    ? '<error>  Laravel Boost ran but composed no agent file. Its output is above. Run "%s" and choose at least one agent and the AI Guidelines feature.</error>'
-                    : '<error>  Laravel Boost ran but composed no agent file: it found no agent to compose for. Run "%s" and choose your agents.</error>',
-                $installCommand,
-            ));
-            $this->writeFailureOutput($io, $result);
-
-            return;
-        }
-
-        $io->write('<info>done</info>');
-    }
-
-    /**
-     * Report the agent files composing would damage, and say what to do.
-     *
-     * The files are left exactly as they are. Repairing one means guessing
-     * where its hand-written section ends, and a wrong guess destroys the
-     * content this check exists to save.
-     *
-     * @param  array<string, string>  $hazards  relativePath => reason
-     */
-    private function refuseBoost(IOInterface $io, array $hazards): void
-    {
-        $io->writeError('<error>  Laravel Boost was not run: composing would overwrite hand-written content.</error>');
-
-        foreach ($hazards as $path => $reason) {
-            $io->writeError(sprintf('<comment>  %s %s</comment>', $path, $reason));
-        }
-
-        $io->writeError('<comment>  Edit the file yourself, then run the Composer command again. This package will not repair it: where your own text ends cannot be read from the file.</comment>');
-    }
-
-    // Whether Boost can run here at all: through an app's artisan, or through
-    // the shim in a package repository with Testbench installed.
-    private function composesBoost(string $projectDir): bool
-    {
-        return PackageRepository::isApp($projectDir) || PackageRepository::hasTestbench($projectDir);
-    }
-
-    private function executeCommand(string $command): ProcessResult
-    {
-        return (new SystemProcess)->capture(command: $command);
-    }
-
-    // Only a failure shows the command's output: a successful run stays one
-    // summary line. The output is escaped, so a tag it prints is not styled.
-    private function writeFailureOutput(IOInterface $io, ProcessResult $result): void
-    {
-        foreach ($result->tail() as $line) {
-            $io->writeError('<comment>    │ ' . OutputFormatter::escape($line) . '</comment>');
-        }
-    }
-
-    /**
-     * Write one tracked file, and answer why it failed, or null when it did not.
-     */
-    private function writeTracked(FileSync $fileSync, string $projectDir, string $path, string $sourceFile): ?string
-    {
-        try {
-            $fileSync->write($projectDir, $path, $sourceFile);
-        } catch (RuntimeException $exception) {
-            return $exception->getMessage();
-        }
-
-        return null;
-    }
-
-    private function getPackageDir(): ?string
-    {
-        $vendorDir = getcwd() . '/vendor/' . self::PACKAGE_NAME;
-
-        if (is_dir($vendorDir)) {
-            return realpath($vendorDir);
-        }
-
-        return null;
-    }
-
-    private function isRunningInOwnRepository(): bool
-    {
-        $composerFile = getcwd() . '/composer.json';
-
-        if (! file_exists($composerFile)) {
-            return false;
-        }
-
-        $data = json_decode((string) file_get_contents($composerFile), associative: true);
-
-        return is_array($data) && ($data['name'] ?? null) === self::PACKAGE_NAME;
+    private function publishFrom(
+        InstalledPackage $package,
+        string $packageDir,
+        IOInterface $inputOutput,
+    ): void {
+        $publisher = new Publisher($inputOutput, $this->terminal, (string) getcwd(), $packageDir);
+        $publisher->publish($package->config($packageDir));
     }
 }

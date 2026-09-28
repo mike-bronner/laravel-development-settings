@@ -26,14 +26,16 @@ use LogicException;
  */
 final class ManagedSection
 {
-    public const MARKER = '# mike-bronner/laravel-development-settings: project entries go below this line. Anything above it is lost on the next sync.';
+    public const MARKER = <<<MARKER
+        # mike-bronner/laravel-development-settings: project entries go below this line.
+        MARKER . ' Anything above it is lost on the next sync.';
 
     /**
      * How many lines in the contents are the marker.
      */
-    public static function markers(string $contents): int
+    public function markers(string $contents): int
     {
-        return (int) preg_match_all(self::pattern(), $contents);
+        return (int) preg_match_all($this->pattern(), $contents);
     }
 
     /**
@@ -43,23 +45,34 @@ final class ManagedSection
      *
      * @return array{managed: string, project: string}|null
      */
-    public static function split(string $contents): ?array
+    public function split(string $contents): ?array
     {
-        if (preg_match_all(self::pattern(), $contents, $matches, PREG_OFFSET_CAPTURE) !== 1) {
-            return null;
-        }
+        $markers = preg_match_all($this->pattern(), $contents, $matches, PREG_OFFSET_CAPTURE);
 
-        [$line, $offset] = $matches[0][0];
-        $projectStart = $offset + strlen($line);
+        return match ($markers) {
+            1 => $this->parts($contents, $matches),
+            default => null,
+        };
+    }
 
-        if (($contents[$projectStart] ?? '') === "\n") {
-            $projectStart++;
-        }
+    /**
+     * The package's part, or null unless the marker appears exactly once.
+     */
+    public function managedPart(string $contents): ?string
+    {
+        ['managed' => $managed] = $this->split($contents) ?? ['managed' => null];
 
-        return [
-            'managed' => substr($contents, 0, $offset),
-            'project' => substr($contents, $projectStart),
-        ];
+        return $managed;
+    }
+
+    /**
+     * The project's part, or null unless the marker appears exactly once.
+     */
+    public function projectPart(string $contents): ?string
+    {
+        ['project' => $project] = $this->split($contents) ?? ['project' => null];
+
+        return $project;
     }
 
     /**
@@ -70,16 +83,43 @@ final class ManagedSection
      * written part differ from the source, and the next sync would read that as
      * a local edit.
      */
-    public static function compose(string $managed, string $project): string
+    public function compose(string $managed, string $project): string
     {
-        if ($managed !== '' && ! str_ends_with($managed, "\n")) {
-            throw new LogicException('A managed source must end with a newline.');
-        }
-
-        return $managed . self::MARKER . "\n" . $project;
+        return match (true) {
+            $managed === '',
+            str_ends_with($managed, "\n") => $managed . self::MARKER . "\n{$project}",
+            default => throw new LogicException('A managed source must end with a newline.'),
+        };
     }
 
-    private static function pattern(): string
+    /**
+     * @param  array<int, list<array{string, int}>>  $matches  the one marker match, with its offset
+     * @return array{managed: string, project: string}
+     */
+    private function parts(string $contents, array $matches): array
+    {
+        [[[$line, $offset]]] = $matches;
+        $lineEnd = $offset + strlen($line);
+
+        return [
+            'managed' => substr($contents, 0, $offset),
+            'project' => substr($contents, $this->projectStart($contents, $lineEnd)),
+        ];
+    }
+
+    /**
+     * The project's part starts after the newline ending the marker line, or
+     * at the end of the contents when the marker is the last line.
+     */
+    private function projectStart(string $contents, int $lineEnd): int
+    {
+        return match (substr($contents, $lineEnd, 1)) {
+            "\n" => $lineEnd + 1,
+            default => $lineEnd,
+        };
+    }
+
+    private function pattern(): string
     {
         return '/^' . preg_quote(self::MARKER, '/') . '[ \t\r]*$/m';
     }

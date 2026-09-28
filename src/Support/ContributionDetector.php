@@ -24,24 +24,24 @@ final class ContributionDetector
      * @param  list<string>  $ignore
      * @return array<string, string> package-relative path => absolute path
      */
-    public function modified(string $packageDir, array $directories, Manifest $sources, array $ignore = FileDiscovery::DEFAULT_IGNORE): array
-    {
-        $files = (new FileDiscovery)->discover(
+    public function modified(
+        string $packageDir,
+        array $directories,
+        Manifest $sources,
+        array $ignore = FileDiscovery::DEFAULT_IGNORE,
+    ): array {
+        $files = (new FileDiscovery())->discover(
             packageDir: $packageDir,
             paths: ['directories' => $directories, 'files' => []],
             ignore: $ignore,
         );
 
-        $modified = [];
-
-        foreach ($files as $relativePath => $absolutePath) {
-            if (! $sources->isKnown($relativePath, (string) md5_file($absolutePath))) {
-                $modified[$relativePath] = $absolutePath;
-            }
-        }
-
-        ksort($modified);
-
-        return $modified;
+        return collect($files)
+            ->reject(fn (string $absolutePath, string $relativePath): bool => $sources->isKnown(
+                $relativePath,
+                (string) md5_file($absolutePath),
+            ))
+            ->sortKeys()
+            ->all();
     }
 }

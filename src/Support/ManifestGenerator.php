@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace MikeBronner\DevelopmentSettings\Support;
 
+use InvalidArgumentException;
+
 /**
  * Rebuilds the manifest from the current source files.
  *
@@ -20,17 +22,33 @@ namespace MikeBronner\DevelopmentSettings\Support;
  */
 final class ManifestGenerator
 {
+    private const NO_PATHS = 'The config names no paths to generate from.';
+
     /**
-     * @param  array{paths: array{directories?: array<array-key, string>, files?: array<array-key, string>, ignore?: list<string>}}  $config
+     * A config with no `paths` is refused rather than read as shipping
+     * nothing: the manifest it produced would look up to date while it
+     * recorded no file.
+     *
+     * @param  array{
+     *     paths: array{
+     *         directories?: array<array-key, string>,
+     *         files?: array<array-key, string>,
+     *         ignore?: list<string>,
+     *     },
+     * }  $config
      */
     public function generate(string $packageDir, array $config, string $manifestPath): Manifest
     {
-        $manifest = Manifest::load($manifestPath);
+        $paths = data_get($config, 'paths');
+        $manifest = (new ManifestReader())->read($manifestPath);
 
-        $files = (new FileDiscovery)->discover(
+        $files = (new FileDiscovery())->discover(
             packageDir: $packageDir,
-            paths: $config['paths'],
-            ignore: $config['paths']['ignore'] ?? FileDiscovery::DEFAULT_IGNORE,
+            paths: match (is_array($paths)) {
+                true => $paths,
+                false => throw new InvalidArgumentException(self::NO_PATHS),
+            },
+            ignore: data_get($paths, 'ignore') ?? FileDiscovery::DEFAULT_IGNORE,
         );
 
         foreach ($files as $targetPath => $absoluteSourcePath) {

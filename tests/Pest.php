@@ -4,62 +4,19 @@ declare(strict_types=1);
 
 /*
 |--------------------------------------------------------------------------
-| Test Case
-|--------------------------------------------------------------------------
-|
-| Pest binds a base test case to the test files in the directories listed
-| below. These classes are plain PHPUnit test cases — this package is a
-| Composer plugin, not a Laravel application, so there is no framework
-| TestCase to extend.
-|
-*/
-
-uses()->in('Unit', 'Feature');
-
-/*
-|--------------------------------------------------------------------------
 | Helpers
 |--------------------------------------------------------------------------
 |
-| Create a unique temporary directory for filesystem-centric tests and
-| return its absolute path. Callers are responsible for cleanup, or may
-| rely on the `tempDir()` helper's registered shutdown removal.
+| The suite runs on plain PHPUnit test cases: this package is a Composer
+| plugin, not a Laravel application, so there is no framework TestCase to
+| bind. The helper files hold declarations only, so every test file can use
+| them without declaring functions of its own.
+|
+| Pest loads every file under tests/Helpers itself, before this file, in the
+| order the filesystem lists them. That order differs between macOS and
+| Linux. So a helper may use a sibling's constants and functions only inside
+| a function body, which runs after every helper has loaded, and never in a
+| constant expression or other code that runs while the file loads.
+| HelperLoadOrderTest loads them in both sorted orders to hold that line.
 |
 */
-
-function makeTempDir(string $prefix = 'devset-test-'): string
-{
-    $base = sys_get_temp_dir() . '/' . $prefix . bin2hex(random_bytes(6));
-
-    mkdir(directory: $base, permissions: 0755, recursive: true);
-
-    return $base;
-}
-
-function removeTempDir(string $path): void
-{
-    // Symlinks are unlinked, never followed (so we don't recurse into vendor).
-    if (is_link($path)) {
-        unlink($path);
-
-        return;
-    }
-
-    if (! is_dir($path)) {
-        if (file_exists($path)) {
-            unlink($path);
-        }
-
-        return;
-    }
-
-    foreach (scandir($path) ?: [] as $entry) {
-        if ($entry === '.' || $entry === '..') {
-            continue;
-        }
-
-        removeTempDir($path . '/' . $entry);
-    }
-
-    rmdir($path);
-}

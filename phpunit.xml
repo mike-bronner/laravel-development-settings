@@ -5,8 +5,17 @@
          colors="true"
          cacheDirectory=".phpunit.cache">
     <testsuites>
+        <!--
+            A class's test mirrors its source path (src/Support/Manifest.php is
+            tests/Support/ManifestTest.php), which is where the CleanCode
+            standard looks for it. Tests of shipped files and of the package as
+            a whole stay in tests/Unit.
+        -->
         <testsuite name="Unit">
             <directory>tests/Unit</directory>
+            <directory>tests/Support</directory>
+            <directory>tests/Plugin</directory>
+            <file>tests/ComposerPluginTest.php</file>
         </testsuite>
         <testsuite name="Feature">
             <directory>tests/Feature</directory>

@@ -4,39 +4,56 @@ declare(strict_types=1);
 
 namespace MikeBronner\DevelopmentSettings\Support;
 
+use Override;
+
 final class SystemProcess implements Process
 {
+    private const INPUT = 0;
+
+    private const OUTPUT = 1;
+
+    private const ERRORS = 2;
+
+    private const FAILED_TO_START = 1;
+
+    #[Override]
     public function run(string $command, ?string $workingDirectory = null): int
     {
-        return $this->capture($command, $workingDirectory)->exitCode;
+        $result = $this->capture($command, $workingDirectory);
+
+        return $result->exitCode();
     }
 
+    /**
+     * Run a command with its output captured.
+     *
+     * Stderr is redirected into the stdout pipe, so the output keeps the order
+     * it was written in, and there is only one pipe to drain. Two pipes read
+     * one after the other deadlock once the child fills the one not being
+     * read.
+     */
     public function capture(string $command, ?string $workingDirectory = null): ProcessResult
     {
-        // Stderr is redirected into the stdout pipe, so the output keeps the
-        // order it was written in, and there is only one pipe to drain. Two
-        // pipes read one after the other deadlock once the child fills the
-        // one not being read.
         $process = proc_open(
             $command,
             [
-                0 => ['pipe', 'r'],
-                1 => ['pipe', 'w'],
-                2 => ['redirect', 1],
+                self::INPUT => ['pipe', 'r'],
+                self::OUTPUT => ['pipe', 'w'],
+                self::ERRORS => ['redirect', self::OUTPUT],
             ],
             $pipes,
             $workingDirectory ?? getcwd(),
         );
 
-        if (! is_resource($process)) {
-            return new ProcessResult(exitCode: 1, output: "Could not start: {$command}");
-        }
+        $notStarted = new ProcessResult(
+            exitCode: self::FAILED_TO_START,
+            output: "Could not start: {$command}",
+        );
 
-        fclose($pipes[0]);
-        $output = (string) stream_get_contents($pipes[1]);
-        fclose($pipes[1]);
-
-        return new ProcessResult(exitCode: proc_close($process), output: $output);
+        return match (is_resource($process)) {
+            true => $this->drain($process, $pipes),
+            false => $notStarted,
+        };
     }
 
     /**
@@ -46,17 +63,33 @@ final class SystemProcess implements Process
      */
     public function passthru(string $command, ?string $workingDirectory = null): int
     {
-        $process = proc_open($command, [0 => STDIN, 1 => STDOUT, 2 => STDERR], $pipes, $workingDirectory ?? getcwd());
+        $process = proc_open(
+            $command,
+            [self::INPUT => STDIN, self::OUTPUT => STDOUT, self::ERRORS => STDERR],
+            $pipes,
+            $workingDirectory ?? getcwd(),
+        );
 
-        return is_resource($process) ? proc_close($process) : 1;
+        return match (is_resource($process)) {
+            true => proc_close($process),
+            false => self::FAILED_TO_START,
+        };
     }
 
     /**
-     * Whether this process reads from and writes to a terminal, the same test
-     * Composer makes before it gives a script the TTY.
+     * Close the child's stdin, read its output to the end, and wait for it.
+     *
+     * @param  resource  $process
+     * @param  array<int, resource>  $pipes
      */
-    public static function hasTerminal(): bool
+    private function drain(mixed $process, array $pipes): ProcessResult
     {
-        return stream_isatty(STDIN) && stream_isatty(STDOUT);
+        [self::INPUT => $input, self::OUTPUT => $output] = $pipes;
+
+        fclose($input);
+        $captured = (string) stream_get_contents($output);
+        fclose($output);
+
+        return new ProcessResult(exitCode: proc_close($process), output: $captured);
     }
 }

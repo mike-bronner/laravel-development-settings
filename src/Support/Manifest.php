@@ -16,6 +16,10 @@ namespace MikeBronner\DevelopmentSettings\Support;
  * never drops a path. Retaining keys for deleted source files is what lets
  * downstream orphan-cleanup keep firing after a file is removed upstream.
  *
+ * `ManifestReader` loads one from disk. The reverse sync workflow requires
+ * this file directly, with no Composer install, so it stays free of
+ * dependencies.
+ *
  * @phpstan-type ChecksumMap array<string, list<string>>
  */
 final class Manifest
@@ -23,17 +27,8 @@ final class Manifest
     /**
      * @param  ChecksumMap  $checksums
      */
-    public function __construct(private array $checksums = []) {}
-
-    public static function load(string $path): self
+    public function __construct(private array $checksums = [])
     {
-        if (! file_exists($path)) {
-            return new self;
-        }
-
-        $decoded = json_decode(json: (string) file_get_contents($path), associative: true);
-
-        return new self(is_array($decoded) ? $decoded : []);
     }
 
     /**
@@ -54,7 +49,9 @@ final class Manifest
      */
     public function toJson(): string
     {
-        return json_encode($this->toArray(), flags: JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+        $json = json_encode($this->toArray(), flags: JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+
+        return "{$json}\n";
     }
 
     public function dump(string $path): void
@@ -67,13 +64,9 @@ final class Manifest
      */
     public function record(string $path, string $checksum): void
     {
-        $known = $this->checksums[$path] ?? [];
+        $known = $this->knownChecksums($path);
 
-        if (! in_array($checksum, $known, strict: true)) {
-            $known[] = $checksum;
-        }
-
-        $this->checksums[$path] = array_values($known);
+        $this->checksums[$path] = array_values([...$known, ...array_diff([$checksum], $known)]);
     }
 
     /**

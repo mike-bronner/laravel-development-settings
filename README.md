@@ -16,7 +16,7 @@ It also brings the shared tooling with it, as its own Composer requirements: Lar
 
 This package is a Composer plugin that hooks into Composer's pre-update, post-install and post-update events. Before an update, it offers to contribute any edits you made to its installed guidelines and skills (see "Contributing edits made in vendor" below). After an install or update, it:
 
-1. **Syncs tracked config files** (`pint.json`, `phpmd.xml`, …) from the package into your project
+1. **Syncs tracked config files** (`pint.json`, `phpmd.xml`, `phpcs.xml`, …) from the package into your project
 2. **Registers itself with Laravel Boost** by adding its name to the `packages` list in your `boost.json` (wherever Boost can run: an application, or a package with Orchestra Testbench installed). In a package it also writes an `artisan` shim and a managed `.gitattributes` (see "Packages" below)
 3. **Preserves local modifications** — changed files aren't overwritten, and removed-upstream files you customized aren't deleted without asking
 4. **Composes Laravel Boost** — an interactive `composer` run on a terminal runs `php artisan boost:install` on that terminal: Boost's own prompts choose the features, packages and agents, you see its output, and Boost saves your agents to `boost.json`. Any other run, CI and `--no-interaction` included, runs `php artisan boost:install --no-interaction` with `--guidelines --skills --mcp`, whatever your `boost.json` says, and shows only a one-line result; packages run the same command through the `artisan` shim (see "Packages" below). Composition is refused, by file and with the reason, when it would overwrite hand-written content (see "Why a run can refuse to compose" below). A run that composes nothing is reported as failed (see "Choosing your agents" below)
@@ -131,6 +131,26 @@ The package owns everything above that line and replaces it on every sync. Every
 - If the package stops shipping a file with a marker, it is removed only when the part above the marker is a version this package shipped and nothing sits below it. With your own rules below the marker, it is kept, and an interactive `composer update` asks whether to delete it.
 
 Which files work this way is set by `paths.managed` in the package config.
+
+### PHP_CodeSniffer
+
+The package ships `phpcs.xml`, which runs the `CleanCode` standard from `mike-bronner/clean-code` over the whole project. It skips `bootstrap/cache`, `node_modules`, `public`, `storage` and `vendor` at the project root. So `vendor/bin/phpcs` needs no arguments, in an application and in a package alike. Paths given on the command line replace the project root for that run.
+
+`phpcs.xml` is a synced file like `pint.json`. An edited copy is kept as a local modification, and the upstream workflow proposes the edit to this package.
+
+The shipped `pint.json` writes what `phpcs.xml` asks for, so the two never undo each other: `new Foo()` always carries its parentheses (`new class () …` for an anonymous class), an empty body opens and closes on lines of its own, and imports are grouped as classes, then functions, then constants. Where the two disagreed, `phpcs.xml` won.
+
+Releases before 0.3.3 shipped `phpcs.xml` pointing at `.php-codesniffer/MikeBronner/ruleset.xml`, and 0.3.3 removed both. An unmodified old `phpcs.xml` is a known version, so the next update replaces it. The old ruleset is still removed when unmodified.
+
+`CleanCode` is found by name only when the PHP_CodeSniffer installer plugin has run. Composer refuses to install this package until your `composer.json` decides on that plugin, and `false` leaves `CleanCode` unregistered. Allow it:
+
+```json
+"config": {
+    "allow-plugins": {
+        "dealerdirect/phpcodesniffer-composer-installer": true
+    }
+}
+```
 
 ## ⚙️  Configuration
 

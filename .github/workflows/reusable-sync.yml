@@ -58,10 +58,11 @@ jobs:
             require "$package/src/Support/FileDiscovery.php";
             require "$package/src/Support/ManagedSection.php";
             require "$package/src/Support/Manifest.php";
+            require "$package/src/Support/ManifestReader.php";
             require "$package/src/Support/ReverseSync.php";
 
             $paths = (require "$package/config/development-settings.php")["paths"];
-            $manifest = MikeBronner\DevelopmentSettings\Support\Manifest::load("$package/manifest.json");
+            $manifest = (new MikeBronner\DevelopmentSettings\Support\ManifestReader())->read("$package/manifest.json");
 
             try {
               $changed = (new MikeBronner\DevelopmentSettings\Support\ReverseSync($manifest))

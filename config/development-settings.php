@@ -68,9 +68,7 @@ return [
             'resources/project/artisan' => 'artisan',
             'resources/project/gitattributes' => '.gitattributes',
         ],
-        'managed' => [
-            '.gitattributes',
-        ],
+        'managed' => ['.gitattributes'],
     ],
 
     // Tracked paths are copied into the consuming project. A plain entry names
@@ -94,6 +92,10 @@ return [
             // dotted copy would act as a real ignore file for its own
             // directory).
             'resources/project/gitignore' => '.gitignore',
+            // Runs the CleanCode standard from mike-bronner/clean-code. It
+            // ships under the path releases before 0.3.3 used, so their
+            // unmodified copies are known versions and are replaced.
+            'phpcs.xml',
             'phpmd.xml',
             'pint.json',
             '.github/workflows/sync-developer-settings.yml',

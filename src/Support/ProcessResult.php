@@ -4,25 +4,49 @@ declare(strict_types=1);
 
 namespace MikeBronner\DevelopmentSettings\Support;
 
+/**
+ * A captured command's exit code and output.
+ */
 final readonly class ProcessResult
 {
     public function __construct(
-        public int $exitCode,
-        public string $output,
-    ) {}
+        private int $exitCode,
+        private string $output,
+    ) {
+    }
+
+    public function exitCode(): int
+    {
+        return $this->exitCode;
+    }
+
+    public function output(): string
+    {
+        return $this->output;
+    }
 
     public function failed(): bool
     {
         return $this->exitCode !== 0;
     }
 
+    /**
+     * The last lines of output, without blank lines or trailing whitespace.
+     *
+     * @return list<string>
+     */
     public function tail(int $lines = 20): array
     {
-        $nonBlank = array_filter(
-            array_map(rtrim(...), preg_split('/\R/', $this->output) ?: []),
-            fn (string $line): bool => trim($line) !== '',
-        );
+        $split = preg_split('/\R/', $this->output);
 
-        return array_values(array_slice($nonBlank, -$lines));
+        return collect(match ($split) {
+            false => [],
+            default => $split,
+        })
+            ->map(fn (string $line): string => rtrim($line))
+            ->reject(fn (string $line): bool => trim($line) === '')
+            ->slice(-$lines)
+            ->values()
+            ->all();
     }
 }

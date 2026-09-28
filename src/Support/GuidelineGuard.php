@@ -7,6 +7,7 @@ namespace MikeBronner\DevelopmentSettings\Support;
 use RecursiveCallbackFilterIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use RuntimeException;
 use SplFileInfo;
 
 /**
@@ -51,9 +52,13 @@ use SplFileInfo;
  */
 final class GuidelineGuard
 {
-    public const OPENING_TAG = '<laravel-boost-guidelines>';
+    public const OPENING_TAG = <<<TAG
+        <laravel-boost-guidelines>
+        TAG;
 
-    public const CLOSING_TAG = '</laravel-boost-guidelines>';
+    public const CLOSING_TAG = <<<TAG
+        </laravel-boost-guidelines>
+        TAG;
 
     /**
      * @var list<string>
@@ -65,6 +70,19 @@ final class GuidelineGuard
      */
     private const EXTENSIONS = ['markdown', 'md', 'mdc'];
 
+    private const UNREADABLE = 'could not be read, so this package cannot tell whether composing'
+        . ' would damage it';
+
+    private const REPEATED = "holds %d \"%s\" tags, and composing replaces everything"
+        . ' between the first tag and the next closing tag';
+
+    private const UNCLOSED = "holds a \"%s\" tag with no closing tag after it, so composing"
+        . ' appends a second block and the run after it replaces everything between the two';
+
+    public function __construct(private CheckedFile $file = new CheckedFile())
+    {
+    }
+
     /**
      * The project files composing would damage, each with the reason.
      *
@@ -72,19 +90,11 @@ final class GuidelineGuard
      */
     public function hazards(string $projectDir): array
     {
-        $hazards = [];
-
-        foreach ($this->markdownFiles($projectDir) as $relativePath => $absolutePath) {
-            $reason = $this->hazard($absolutePath);
-
-            if ($reason !== null) {
-                $hazards[$relativePath] = $reason;
-            }
-        }
-
-        ksort($hazards);
-
-        return $hazards;
+        return collect($this->markdownFiles($projectDir))
+            ->map(fn (string $absolutePath): ?string => $this->hazard($absolutePath))
+            ->whereNotNull()
+            ->sortKeys()
+            ->all();
     }
 
     /**
@@ -103,60 +113,61 @@ final class GuidelineGuard
     {
         clearstatcache();
 
-        foreach ($this->markdownFiles($projectDir) as $absolutePath) {
-            if ((int) @filemtime($absolutePath) < $since) {
-                continue;
-            }
+        return collect($this->markdownFiles($projectDir))
+            ->contains(fn (string $absolutePath): bool => $this->composedAt($absolutePath, $since));
+    }
 
-            $content = is_readable($absolutePath) ? (string) @file_get_contents($absolutePath) : '';
-            $opensAt = strpos($content, self::OPENING_TAG);
-
-            if ($opensAt !== false && strpos($content, self::CLOSING_TAG, $opensAt) !== false) {
-                return true;
-            }
+    /**
+     * Whether the file was written at or after `$since` and holds a composed
+     * block. A file that vanished or cannot be read holds none.
+     */
+    private function composedAt(string $absolutePath, int $since): bool
+    {
+        try {
+            $modifiedAt = (new SplFileInfo($absolutePath))->getMTime();
+            $content = $this->file
+                ->read($absolutePath);
+        } catch (RuntimeException) {
+            return false;
         }
 
-        return false;
+        return $modifiedAt >= $since && $this->closesAfterOpening($content);
     }
 
     /**
      * Why composing into this file would damage it, or null when it is safe.
+     *
+     * Unreadable is treated as unsafe. A file this package cannot inspect is
+     * one it cannot clear, and refusing costs a rerun where a wrong "safe"
+     * costs the file.
      */
     private function hazard(string $absolutePath): ?string
     {
-        $content = is_readable($absolutePath) ? @file_get_contents($absolutePath) : false;
-
-        // Unreadable is treated as unsafe. A file this package cannot inspect
-        // is one it cannot clear, and refusing costs a rerun where a wrong
-        // "safe" costs the file.
-        if ($content === false) {
-            return 'could not be read, so this package cannot tell whether composing would damage it';
+        try {
+            $content = $this->file
+                ->read($absolutePath);
+        } catch (RuntimeException) {
+            return self::UNREADABLE;
         }
 
         $openingTags = substr_count($content, self::OPENING_TAG);
 
-        if ($openingTags === 0) {
-            return null;
-        }
+        return match (true) {
+            $openingTags === 0 => null,
+            $openingTags > 1 => sprintf(self::REPEATED, $openingTags, self::OPENING_TAG),
+            $this->closesAfterOpening($content) => null,
+            default => sprintf(self::UNCLOSED, self::OPENING_TAG),
+        };
+    }
 
-        if ($openingTags > 1) {
-            return sprintf(
-                'holds %d "%s" tags, and composing replaces everything between the first tag and the next closing tag',
-                $openingTags,
-                self::OPENING_TAG,
-            );
-        }
+    /**
+     * Whether a closing tag follows the first opening tag.
+     */
+    private function closesAfterOpening(string $content): bool
+    {
+        $opensAt = strpos($content, self::OPENING_TAG);
 
-        $opensAt = (int) strpos($content, self::OPENING_TAG);
-
-        if (strpos($content, self::CLOSING_TAG, $opensAt) !== false) {
-            return null;
-        }
-
-        return sprintf(
-            'holds a "%s" tag with no closing tag after it, so composing appends a second block and the run after it replaces everything between the two',
-            self::OPENING_TAG,
-        );
+        return $opensAt !== false && strpos($content, self::CLOSING_TAG, $opensAt) !== false;
     }
 
     /**
@@ -167,35 +178,58 @@ final class GuidelineGuard
      */
     private function markdownFiles(string $projectDir): array
     {
-        if (! is_dir($projectDir)) {
-            return [];
-        }
+        return match (is_dir($projectDir)) {
+            true => $this->markdownFilesIn($projectDir),
+            false => [],
+        };
+    }
 
-        $files = [];
+    /**
+     * @return array<string, string> relativePath => absolutePath
+     */
+    private function markdownFilesIn(string $projectDir): array
+    {
         $prefixLength = strlen(rtrim($projectDir, '/')) + 1;
-
         $iterator = new RecursiveIteratorIterator(
             new RecursiveCallbackFilterIterator(
                 new RecursiveDirectoryIterator($projectDir, RecursiveDirectoryIterator::SKIP_DOTS),
-                // Nothing is read through a symlink. An agent file linked into
-                // vendor belongs to a dependency, not to this project, and
-                // reporting it would name a path the developer cannot edit.
-                // The iterator already declines to walk *into* a linked
-                // directory; this check covers a linked file as well.
-                fn (SplFileInfo $entry): bool => ! $entry->isLink()
-                    && (! $entry->isDir() || ! in_array($entry->getFilename(), self::SKIP_DIRECTORIES, strict: true)),
+                fn (SplFileInfo $entry): bool => $this->isExamined($entry),
             ),
             RecursiveIteratorIterator::LEAVES_ONLY,
         );
 
-        foreach ($iterator as $entry) {
-            if (! in_array(strtolower($entry->getExtension()), self::EXTENSIONS, strict: true)) {
-                continue;
-            }
+        return collect(iterator_to_array($iterator))
+            ->filter(fn (SplFileInfo $entry): bool => $this->isMarkdown($entry))
+            ->mapWithKeys(fn (SplFileInfo $entry): array => $this->relative($entry, $prefixLength))
+            ->all();
+    }
 
-            $files[substr($entry->getPathname(), $prefixLength)] = $entry->getPathname();
-        }
+    /**
+     * Nothing is read through a symlink. An agent file linked into vendor
+     * belongs to a dependency, not to this project, and reporting it would
+     * name a path the developer cannot edit. The iterator already declines to
+     * walk *into* a linked directory; this check covers a linked file as well.
+     */
+    private function isExamined(SplFileInfo $entry): bool
+    {
+        $isSkippedDirectory = $entry->isDir()
+            && in_array($entry->getFilename(), self::SKIP_DIRECTORIES, strict: true);
 
-        return $files;
+        return ! $entry->isLink() && ! $isSkippedDirectory;
+    }
+
+    private function isMarkdown(SplFileInfo $entry): bool
+    {
+        return in_array(strtolower($entry->getExtension()), self::EXTENSIONS, strict: true);
+    }
+
+    /**
+     * @return array<string, string> relativePath => absolutePath
+     */
+    private function relative(SplFileInfo $entry, int $prefixLength): array
+    {
+        $pathname = $entry->getPathname();
+
+        return [substr($pathname, $prefixLength) => $pathname];
     }
 }

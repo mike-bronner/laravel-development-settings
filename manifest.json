@@ -251,7 +251,8 @@
     ],
     "phpcs.xml": [
         "992e3c5d1d7863fcf21d73374254a46a",
-        "9bf0a70ded72dd725a68407c309cb349"
+        "9bf0a70ded72dd725a68407c309cb349",
+        "ecebb3f4500837d493676f0b6a4f711f"
     ],
     "phpmd.xml": [
         "a2d80f6b94db829aa45205ea0f42ce5e",
@@ -260,6 +261,7 @@
     "pint.json": [
         "9ab087085e2953193527c3466e4cda47",
         "18525377b95d2d2c0c0809f5c0e3b88a",
-        "44003b4489d6ce1ec5d7199c44c5ed33"
+        "44003b4489d6ce1ec5d7199c44c5ed33",
+        "e771d93ac9deb50da1e893020545200d"
     ]
 }
