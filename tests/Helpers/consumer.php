@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use Composer\Composer;
 use Composer\IO\BufferIO;
+use Composer\Package\Loader\ArrayLoader;
+use Composer\Package\RootPackage;
 use Composer\Script\Event;
 use Composer\Script\ScriptEvents;
 use Laravel\Prompts\Prompt;
@@ -225,12 +227,42 @@ function publishIn(string $project, string $run = NON_INTERACTIVE, string $hook 
 
     try {
         (new ComposerPlugin($terminal))
-            ->{$hook}(new Event(ScriptEvents::POST_UPDATE_CMD, new Composer(), $inputOutput));
+            ->{$hook}(new Event(ScriptEvents::POST_UPDATE_CMD, composerIn($project), $inputOutput));
     } finally {
         chdir($workingDirectory);
     }
 
     return $inputOutput->getOutput();
+}
+
+/**
+ * Composer as it runs in the project: its root package loaded from the
+ * project's composer.json, or an empty one when there is none.
+ */
+function composerIn(string $project): Composer
+{
+    $composerFile = "{$project}/composer.json";
+    $config = match (file_exists($composerFile)) {
+        true => json_decode((string) file_get_contents($composerFile), associative: true),
+        false => [],
+    };
+    $composer = new Composer();
+    $composer->setPackage((new ArrayLoader())->load(
+        ['name' => '__root__', 'version' => '1.0.0', ...$config],
+        RootPackage::class,
+    ));
+
+    return $composer;
+}
+
+/**
+ * Write the project's composer.json with the given requirements.
+ *
+ * @param  array<string, array<string, string>>  $requirements  key => package => constraint
+ */
+function requireInProject(string $project, array $requirements): void
+{
+    file_put_contents("{$project}/composer.json", json_encode($requirements) . "\n");
 }
 
 /**
