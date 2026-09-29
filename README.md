@@ -113,6 +113,14 @@ The new package declares that it replaces `mikebronner/development-settings`. So
 
 The first run under the new name cleans up after the old one. It replaces `mikebronner/development-settings` with the new name in the `packages` list of `boost.json`, and leaves every other entry alone. It also removes a symlink-era `.ai` link into `vendor/mikebronner/development-settings`, which dangles once Composer deletes that directory. A consumer's copy of `.github/workflows/sync-developer-settings.yml` is updated to call the reusable workflow at its new path, unless you modified it locally.
 
+### When a run fails
+
+A failure the plugin reports itself, such as a file it could not write or a failed Boost run, is listed in the summary, and the run carries on. An exception or error thrown while the plugin publishes stops only the plugin, not Composer. The plugin prints the cause (the error's class, message, file and line) and tells you to run the same command again to finish setup: `composer install` after an install, `composer update` after an update. Composer then runs your project's own `post-install-cmd` or `post-update-cmd` scripts, which an uncaught error would skip. Add `-v` to see the trace.
+
+One known cause is an update that also updates this plugin. It was observed on an update straight from `mikebronner/development-settings` 0.2.0 to 0.5.1. Composer loads the new plugin during the run, but classes the old version had already loaded stay in memory, and the new code can call a method they lack. The next run starts fresh. If the same failure comes back on that run, it is a bug. Please report it with the printed cause.
+
+When the `CI` environment variable holds any non-empty value, as it does on most CI systems, such a failure still fails the run. `false` and `0` count as set too. An empty `CI` counts as unset. A CI install comes from the lock file and updates nothing mid-run, so a failure there is a real bug and must not pass unnoticed.
+
 ### Output
 
 After each `composer install` or `composer update`, you'll see a summary box showing what was created, updated, skipped (locally modified), or removed.
