@@ -3,9 +3,12 @@
 declare(strict_types=1);
 
 use Composer\Composer;
+use Composer\Config;
+use Composer\EventDispatcher\EventDispatcher;
 use Composer\IO\BufferIO;
 use Composer\Package\Loader\ArrayLoader;
 use Composer\Package\RootPackage;
+use Composer\PartialComposer;
 use Composer\Script\Event;
 use Composer\Script\ScriptEvents;
 use Laravel\Prompts\Prompt;
@@ -17,6 +20,7 @@ use MikeBronner\DevelopmentSettings\Support\ProjectKind;
 use MikeBronner\DevelopmentSettings\Tests\Fixtures\AttachedTerminal;
 use MikeBronner\DevelopmentSettings\Tests\Fixtures\DetachedTerminal;
 use Symfony\Component\Console\Output\ConsoleOutput;
+use Symfony\Component\Console\Output\OutputInterface;
 
 const COMPOSES = 'composes';
 
@@ -233,6 +237,83 @@ function publishIn(string $project, string $run = NON_INTERACTIVE, string $hook 
     }
 
     return $inputOutput->getOutput();
+}
+
+/**
+ * Dispatch the event in the project through Composer's own event dispatcher,
+ * with the plugin subscribed as Composer subscribes it, so the project's own
+ * scripts for the event run after the plugin's hook. Answers what was printed;
+ * a failure the plugin lets escape is thrown.
+ */
+function dispatchIn(
+    string $project,
+    string $eventName = ScriptEvents::POST_UPDATE_CMD,
+    int $verbosity = OutputInterface::VERBOSITY_NORMAL,
+): string {
+    $inputOutput = new BufferIO(verbosity: $verbosity);
+    $composer = composerIn($project);
+    $dispatching = new PartialComposer();
+    $dispatching->setPackage($composer->getPackage());
+    $dispatching->setConfig(new Config(useEnvironment: false, baseDir: $project));
+    $dispatcher = new EventDispatcher($dispatching, $inputOutput);
+    $dispatcher->addSubscriber(new ComposerPlugin(new DetachedTerminal()));
+    $workingDirectory = (string) getcwd();
+
+    chdir($project);
+
+    try {
+        $event = new Event($eventName, $composer, $inputOutput);
+        $dispatcher->dispatch(null, $event);
+    } finally {
+        chdir($workingDirectory);
+    }
+
+    return $inputOutput->getOutput();
+}
+
+/**
+ * A consuming project whose installed package fails while it publishes: its
+ * config runs the given PHP statement. The project's own `post-install-cmd`
+ * and `post-update-cmd` scripts write `later.ran` when Composer gets to them.
+ *
+ * @return array{string, string}
+ */
+function brokenConsumer(string $statement): array
+{
+    $sources = [PackageConfig::FILE => "<?php {$statement}\n"];
+    [$project, $package] = makeConsumer(['sources' => $sources]);
+    $laterScript = ['touch later.ran'];
+    $composerJson = [
+        'scripts' => [
+            ScriptEvents::POST_INSTALL_CMD => $laterScript,
+            ScriptEvents::POST_UPDATE_CMD => $laterScript,
+        ],
+    ];
+    file_put_contents("{$project}/composer.json", json_encode($composerJson) . "\n");
+
+    return [$project, $package];
+}
+
+/**
+ * Run the callback with the `CI` environment variable set to the value, or
+ * unset for null, and restore it afterwards.
+ */
+function withCi(?string $value, Closure $callback): mixed
+{
+    $before = getenv('CI');
+    putenv(match ($value) {
+        null => 'CI',
+        default => "CI={$value}",
+    });
+
+    try {
+        return $callback();
+    } finally {
+        putenv(match ($before) {
+            false => 'CI',
+            default => "CI={$before}",
+        });
+    }
 }
 
 /**

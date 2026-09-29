@@ -9,13 +9,13 @@ use Composer\EventDispatcher\EventSubscriberInterface;
 use Composer\IO\IOInterface;
 use Composer\Plugin\PluginInterface;
 use Composer\Script\Event;
-use Composer\Script\ScriptEvents;
 use MikeBronner\DevelopmentSettings\Plugin\ContributionPrompt;
 use MikeBronner\DevelopmentSettings\Plugin\Publisher;
 use MikeBronner\DevelopmentSettings\Support\InstalledPackage;
 use MikeBronner\DevelopmentSettings\Support\SystemTerminal;
 use MikeBronner\DevelopmentSettings\Support\Terminal;
 use Override;
+use Throwable;
 
 /**
  * The Composer plugin: before an update it names local edits to the installed
@@ -29,6 +29,22 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     private const NOT_FOUND = <<<TEXT
         <error>Could not locate the %s package directory</error>
         TEXT;
+
+    private const CONTAINED = <<<TEXT
+
+        <error>Developer Settings could not finish setting up this project.</error>
+        TEXT;
+
+    private const RE_RUN = "  Run \"%s\" again to finish setup.\n";
+
+    /**
+     * The command that dispatched each event `publish()` handles, and so the
+     * one to run again.
+     */
+    private const COMMANDS = [
+        'post-install-cmd' => 'composer install',
+        'post-update-cmd' => 'composer update',
+    ];
 
     /**
      * Composer builds the plugin with no arguments, so the terminal is
@@ -55,23 +71,70 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     }
 
     /**
+     * The names are Composer's `ScriptEvents` constants, written out.
+     *
      * @return array<string, string>
      */
     #[Override]
     public static function getSubscribedEvents(): array
     {
         return [
-            ScriptEvents::PRE_UPDATE_CMD => 'captureBeforeUpdate',
-            ScriptEvents::POST_INSTALL_CMD => 'publish',
-            ScriptEvents::POST_UPDATE_CMD => 'publish',
+            'pre-update-cmd' => 'captureBeforeUpdate',
+            'post-install-cmd' => 'publish',
+            'post-update-cmd' => 'publish',
         ];
     }
 
     /**
-     * Publish into the project. Inside this package's own repository there is
-     * nothing to publish; anywhere else a missing package is an error.
+     * Publish into the project, and contain an exception or error the publish
+     * throws.
+     *
+     * An uncaught failure here aborts the whole Composer run and skips the
+     * project's own `post-install-cmd` or `post-update-cmd` scripts. A run that
+     * updates this plugin can fail that way through no fault of the project:
+     * Composer loads the new version of this class fresh, but a class the old
+     * version already loaded stays old, so new code calls a method the old
+     * class lacks. The next run starts clean. So outside CI the failure is
+     * printed with its cause and the command to run again, and Composer carries
+     * on. A CI run installs from the lock and upgrades nothing mid-run, so a
+     * failure there is a real bug, and it still fails the run.
+     *
+     * The handler uses nothing of this package but this class: it runs in
+     * exactly the run where any other class of the package may be the old one.
      */
     public function publish(Event $event): void
+    {
+        try {
+            $this->publishIntoProject($event);
+        } catch (Throwable $failure) {
+            $this->contain($failure, $event);
+        }
+    }
+
+    /**
+     * Name the installed sources edited in place, before an update overwrites
+     * them.
+     *
+     * A failure here is not contained. The update has changed nothing yet, so
+     * stopping it loses nothing, while carrying on would overwrite the very
+     * edits this hook exists to name.
+     */
+    public function captureBeforeUpdate(Event $event): void
+    {
+        $projectDir = (string) getcwd();
+        $packageDir = (new InstalledPackage($projectDir))->directory();
+
+        match ($packageDir) {
+            null => null,
+            default => (new ContributionPrompt($event->getIO(), $projectDir, $packageDir))->offer(),
+        };
+    }
+
+    /**
+     * Inside this package's own repository there is nothing to publish;
+     * anywhere else a missing package is an error.
+     */
+    private function publishIntoProject(Event $event): void
     {
         $inputOutput = $event->getIO();
         $package = new InstalledPackage((string) getcwd());
@@ -85,18 +148,42 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     }
 
     /**
-     * Name the installed sources edited in place, before an update overwrites
-     * them.
+     * Under CI, rethrow: any non-empty `CI` counts, `false` and `0` included,
+     * and an empty one counts as unset. Anywhere else, print the cause and the
+     * command to run again, with the trace at `-v`, as Composer prints its own.
      */
-    public function captureBeforeUpdate(Event $event): void
+    private function contain(Throwable $failure, Event $event): void
     {
-        $projectDir = (string) getcwd();
-        $packageDir = (new InstalledPackage($projectDir))->directory();
+        $isCi = ! in_array(getenv('CI'), [false, ''], strict: true);
+        $command = self::COMMANDS[$event->getName()];
 
-        match ($packageDir) {
-            null => null,
-            default => (new ContributionPrompt($event->getIO(), $projectDir, $packageDir))->offer(),
+        match ($isCi) {
+            true => throw $failure,
+            false => $this->reportContained($failure, $event->getIO(), $command),
         };
+    }
+
+    /**
+     * The cause and the trace are written raw: a tag in them is printed, not
+     * read as a style.
+     */
+    private function reportContained(
+        Throwable $failure,
+        IOInterface $inputOutput,
+        string $command,
+    ): void {
+        $cause = sprintf(
+            '  %s: %s in %s:%d',
+            $failure::class,
+            $failure->getMessage(),
+            $failure->getFile(),
+            $failure->getLine(),
+        );
+
+        $inputOutput->writeError(self::CONTAINED);
+        $inputOutput->writeErrorRaw($cause);
+        $inputOutput->writeError(sprintf(self::RE_RUN, $command));
+        $inputOutput->writeErrorRaw($failure->getTraceAsString(), verbosity: IOInterface::VERBOSE);
     }
 
     /**
