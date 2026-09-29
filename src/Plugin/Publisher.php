@@ -18,11 +18,16 @@ use MikeBronner\DevelopmentSettings\Support\Terminal;
  */
 final class Publisher
 {
+    /**
+     * @param  list<string>  $directRequirements  the packages the project's own
+     *                                            composer.json requires, dev included
+     */
     public function __construct(
         private IOInterface $inputOutput,
         private Terminal $terminal,
         private string $projectDir,
         private string $packageDir,
+        private array $directRequirements = [],
         private Summary $summary = new Summary(),
     ) {
     }
@@ -43,6 +48,7 @@ final class Publisher
             $this->terminal,
             $config->hooks(),
             $this->projectDir,
+            $this->directRequirements,
         );
         $boost->register();
         $trackedFiles->writeUnattended();

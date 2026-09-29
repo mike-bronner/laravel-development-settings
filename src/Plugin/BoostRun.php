@@ -66,18 +66,32 @@ final class BoostRun
             . " above. Run \"%s\" and choose at least one agent and the AI Guidelines feature.",
         'captured nothing composed' => 'Laravel Boost ran but composed no agent file: it found no'
             . " agent to compose for. Run \"%s\" and choose your agents.",
+        'clean-code not direct' => 'This project does not require %s in its own composer.json,'
+            . ' so Laravel Boost composes none of its guidelines.'
+            . " Run \"composer require --dev %s\".",
     ];
+
+    /**
+     * Its guidelines compose only when the project requires it directly: Boost
+     * skips the guidelines of a transitive dependency.
+     */
+    private const CLEAN_CODE = 'mike-bronner/clean-code';
 
     /**
      * What `register()` did to `boost.json`, or null when it did not run.
      */
     private ?string $registration = null;
 
+    /**
+     * @param  list<string>  $directRequirements  the packages the project's own
+     *                                            composer.json requires, dev included
+     */
     public function __construct(
         private IOInterface $inputOutput,
         private Terminal $terminal,
         private BoostHooks $hooks,
         private string $projectDir,
+        private array $directRequirements = [],
         private ConsoleStyle $style = new ConsoleStyle(),
     ) {
     }
@@ -86,7 +100,8 @@ final class BoostRun
      * Name this package in `boost.json`, only where Boost can actually
      * compose: an app, or a package whose artisan shim has a Testbench to
      * boot. Anywhere else, registering would write a config file nothing ever
-     * reads.
+     * reads. Clean-code is named beside it only when the project requires it
+     * directly: Boost never composes a transitive dependency, listed or not.
      */
     public function register(): void
     {
@@ -97,6 +112,9 @@ final class BoostRun
                 projectDir: $this->projectDir,
                 package: InstalledPackage::NAME,
                 replaces: [InstalledPackage::LEGACY_NAME],
+                alongside: array_values(
+                    array_intersect([self::CLEAN_CODE], $this->directRequirements),
+                ),
             ),
             false => null,
         };
@@ -136,9 +154,24 @@ final class BoostRun
      * empty and writes a fresh config over it, destroying the developer's
      * agent, guideline and MCP settings. A shim that could not be written was
      * reported with its cause, so a missing artisan is passed over in silence.
+     *
+     * A project that does not require clean-code directly is told to, first,
+     * whatever happens next: the plugin never edits composer.json itself.
      */
     public function run(): void
     {
+        $requiresCleanCode = in_array(self::CLEAN_CODE, $this->directRequirements, strict: true);
+        $cleanCodeNotice = sprintf(
+            self::TEXT['clean-code not direct'],
+            self::CLEAN_CODE,
+            self::CLEAN_CODE,
+        );
+
+        match ($requiresCleanCode) {
+            true => null,
+            false => $this->writeError('comment', $cleanCodeNotice),
+        };
+
         $composes = (new ProjectKind())->composesBoost($this->projectDir);
         $notComposable = sprintf(self::REFUSAL['not composable'], ProjectKind::TESTBENCH);
         $unreadable = sprintf(self::REFUSAL['unreadable'], BoostRegistrar::FILE);

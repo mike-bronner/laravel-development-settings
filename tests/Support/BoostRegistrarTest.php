@@ -8,6 +8,8 @@ const REGISTERED_NAME = 'mike-bronner/laravel-development-settings';
 
 const REPLACED_NAME = 'mikebronner/development-settings';
 
+const ALONGSIDE_NAME = 'mike-bronner/clean-code';
+
 beforeEach(function (): void {
     $this->project = makeTempDir();
     $this->config = "{$this->project}/boost.json";
@@ -82,6 +84,60 @@ it('leaves the file byte for byte as it was, unless it has to change it', functi
         BoostRegistrar::UNREADABLE,
     ],
 ]);
+
+it('creates a config listing its own name, then each package alongside', function (): void {
+    $result = (new BoostRegistrar())
+        ->register($this->project, REGISTERED_NAME, [], [ALONGSIDE_NAME]);
+
+    expect($result)->toBe(BoostRegistrar::REGISTERED)
+        ->and(json_decode((string) file_get_contents($this->config), associative: true))
+        ->toBe(['packages' => [REGISTERED_NAME, ALONGSIDE_NAME]]);
+});
+
+it('adds each package alongside that is missing, once', function (
+    array $before,
+    array $after,
+): void {
+    file_put_contents($this->config, json_encode($before));
+
+    (new BoostRegistrar())
+        ->register($this->project, REGISTERED_NAME, [REPLACED_NAME], [ALONGSIDE_NAME]);
+
+    expect(json_decode((string) file_get_contents($this->config), associative: true))
+        ->toBe($after);
+})->with([
+    'beside the project\'s own' => [
+        ['packages' => ['acme/other', REPLACED_NAME]],
+        ['packages' => ['acme/other', REGISTERED_NAME, ALONGSIDE_NAME]],
+    ],
+    'when only its own name is listed' => [
+        ['packages' => [REGISTERED_NAME]],
+        ['packages' => [REGISTERED_NAME, ALONGSIDE_NAME]],
+    ],
+    'when only the one alongside is listed' => [
+        ['packages' => [ALONGSIDE_NAME]],
+        ['packages' => [ALONGSIDE_NAME, REGISTERED_NAME]],
+    ],
+]);
+
+it('leaves the file alone when every package is already listed', function (): void {
+    $contents = json_encode(['packages' => [ALONGSIDE_NAME, 'acme/other', REGISTERED_NAME]]);
+    file_put_contents($this->config, $contents);
+
+    expect((new BoostRegistrar())->register($this->project, REGISTERED_NAME, [], [ALONGSIDE_NAME]))
+        ->toBe(BoostRegistrar::UNCHANGED)
+        ->and(file_get_contents($this->config))
+        ->toBe($contents);
+});
+
+it('writes nothing alongside into a file it cannot read', function (): void {
+    file_put_contents($this->config, "{ this is not json\n");
+
+    expect((new BoostRegistrar())->register($this->project, REGISTERED_NAME, [], [ALONGSIDE_NAME]))
+        ->toBe(BoostRegistrar::UNREADABLE)
+        ->and(file_get_contents($this->config))
+        ->toBe("{ this is not json\n");
+});
 
 it("writes Boost's formatting contract, so Boost rewriting it causes no churn", function (): void {
     file_put_contents($this->config, json_encode(['guidelines' => true, 'agents' => []]));

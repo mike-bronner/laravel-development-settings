@@ -12,6 +12,14 @@ That's it. The package automatically syncs files on every `composer install` and
 
 It also brings the shared tooling with it, as its own Composer requirements: Laravel Boost, Laravel Pint, Larastan and `mike-bronner/clean-code`. Composer installs them with the package, so you do not require them yourself. The plugin never edits your `composer.json` and never runs Composer. A project that an earlier release gave these packages as dev dependencies keeps them: nothing is removed.
 
+The one exception is `mike-bronner/clean-code`, if you want its guidelines in your agent files. It ships them as Laravel Boost guidelines, and Boost composes the guidelines of a direct dependency only. Require it yourself:
+
+```bash
+composer require --dev mike-bronner/clean-code
+```
+
+Until your `composer.json` requires it (in `require` or `require-dev`), every `composer install` and `composer update` prints that command. Once it does, the plugin adds `mike-bronner/clean-code` to the `packages` list in `boost.json`, next to this package (see "How the AI guidelines and skills reach your project" below).
+
 Orchestra Testbench is not among them. Releases 0.3.4 and 0.4.0 required it, so it reached every application, and there it broke `pest --parallel`: Pest skips its Laravel handler whenever Testbench's `TestCase` class exists, so every worker shares one database. Composer removes it from an application on the next update. A package requires Testbench itself (see "Packages" below).
 
 If your application's own `composer.json` lists `orchestra/testbench`, `pest --parallel` stays broken for as long as Testbench is installed. Remove it with `composer remove --dev orchestra/testbench`, unless your application needs it for its own reasons.
@@ -21,7 +29,7 @@ If your application's own `composer.json` lists `orchestra/testbench`, `pest --p
 This package is a Composer plugin that hooks into Composer's pre-update, post-install and post-update events. Before an update, it offers to contribute any edits you made to its installed guidelines and skills (see "Contributing edits made in vendor" below). After an install or update, it:
 
 1. **Syncs tracked config files** (`pint.json`, `phpmd.xml`, `phpcs.xml`, …) from the package into your project
-2. **Registers itself with Laravel Boost** by adding its name to the `packages` list in your `boost.json` (wherever Boost can run: an application, or a package with Orchestra Testbench installed). In a package it also writes an `artisan` shim and a managed `.gitattributes` (see "Packages" below)
+2. **Registers itself with Laravel Boost** by adding its name to the `packages` list in your `boost.json` (wherever Boost can run: an application, or a package with Orchestra Testbench installed). It adds `mike-bronner/clean-code` too, when your `composer.json` requires it, and otherwise tells you to require it. In a package it also writes an `artisan` shim and a managed `.gitattributes` (see "Packages" below)
 3. **Preserves local modifications** — changed files aren't overwritten, and removed-upstream files you customized aren't deleted without asking
 4. **Composes Laravel Boost** — an interactive `composer` run on a terminal runs `php artisan boost:install` on that terminal: Boost's own prompts choose the features, packages and agents, you see its output, and Boost saves your agents to `boost.json`. Any other run, CI and `--no-interaction` included, runs `php artisan boost:install --no-interaction` with `--guidelines --skills --mcp`, whatever your `boost.json` says, and shows only a one-line result; packages run the same command through the `artisan` shim (see "Packages" below). Composition is refused, by file and with the reason, when it would overwrite hand-written content (see "Why a run can refuse to compose" below). A run that composes nothing is reported as failed (see "Choosing your agents" below)
 5. **Removes the legacy `.ai` symlink and `.dev-settings-boost` file** left by releases before the move to `resources/boost` (see "Upgrading" below)
@@ -36,6 +44,8 @@ Two conditions have to hold, and both are enforced:
 - **Boost 2.9 or newer.** Earlier releases keyed third-party guidelines by package name inside their per-file loop, so only the last of the four shipped files survived. This package declares a Composer conflict with `laravel/boost` below 2.9, so Composer refuses the combination instead of installing it. A project locked to an older Boost has to update it alongside this package: `composer update mike-bronner/laravel-development-settings laravel/boost`.
 
 Your project is a **direct** dependency's consumer or it gets nothing: Boost excludes transitive dependencies by design, so a package that picks this one up indirectly receives no guidelines.
+
+The same rule applies to `mike-bronner/clean-code`, which this package requires. Installed only through this package, it is transitive, so Boost composes none of its guidelines. Require it directly, and the plugin lists it in `boost.json` on the next run. The plugin adds it only when it is direct, because Boost ignores a listed package that is not.
 
 ### Packages
 

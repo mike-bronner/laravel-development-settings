@@ -78,7 +78,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $packageDir = $package->directory();
 
         match (true) {
-            $packageDir !== null => $this->publishFrom($package, $packageDir, $inputOutput),
+            $packageDir !== null => $this->publishFrom($package, $packageDir, $event),
             $package->isOwnRepository() => null,
             default => $inputOutput->writeError(sprintf(self::NOT_FOUND, InstalledPackage::NAME)),
         };
@@ -99,12 +99,23 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         };
     }
 
-    private function publishFrom(
-        InstalledPackage $package,
-        string $packageDir,
-        IOInterface $inputOutput,
-    ): void {
-        $publisher = new Publisher($inputOutput, $this->terminal, (string) getcwd(), $packageDir);
+    /**
+     * The project's direct requirements, dev included, come from the root
+     * package Composer already loaded: lowercase, and never read from the file.
+     * Composer lowercases a name written in capitals, but Boost matches the
+     * file's keys exactly, so only a lowercase requirement satisfies Boost.
+     */
+    private function publishFrom(InstalledPackage $package, string $packageDir, Event $event): void
+    {
+        $project = $event->getComposer()
+            ->getPackage();
+        $publisher = new Publisher(
+            $event->getIO(),
+            $this->terminal,
+            (string) getcwd(),
+            $packageDir,
+            array_keys([...$project->getRequires(), ...$project->getDevRequires()]),
+        );
         $publisher->publish($package->config($packageDir));
     }
 }

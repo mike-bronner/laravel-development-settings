@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace MikeBronner\DevelopmentSettings\Support;
 
 /**
- * Names this package under the `packages` key of the consuming project's
- * `boost.json`.
+ * Names this package, and any other package whose guidelines should compose,
+ * under the `packages` key of the consuming project's `boost.json`.
  *
  * Laravel Boost discovers a package's `resources/boost/guidelines` and
  * `resources/boost/skills` directories on its own, but then composes nothing
@@ -42,14 +42,22 @@ final class BoostRegistrar
      * package that is no longer installed. Only those exact entries are
      * removed: every other package in the list belongs to the project.
      *
+     * `$alongside` holds other packages to list after `$package`, each only
+     * when it is missing.
+     *
      * A file that is not a JSON object, or whose `packages` is not a list, is
      * left alone and answered as unreadable.
      *
      * @param  list<string>  $replaces
+     * @param  list<string>  $alongside
      * @return self::REGISTERED|self::UNCHANGED|self::UNREADABLE
      */
-    public function register(string $projectDir, string $package, array $replaces = []): string
-    {
+    public function register(
+        string $projectDir,
+        string $package,
+        array $replaces = [],
+        array $alongside = [],
+    ): string {
         $path = "{$projectDir}/" . self::FILE;
         $config = $this->read($path);
         $packages = data_get($config, 'packages') ?? [];
@@ -60,7 +68,7 @@ final class BoostRegistrar
             default => $this->registration(
                 $path,
                 $config,
-                $this->listed($packages, $package, $replaces),
+                $this->listed($packages, [$package, ...$alongside], $replaces),
             ),
         };
     }
@@ -77,23 +85,23 @@ final class BoostRegistrar
     }
 
     /**
-     * The package list with the replaced names dropped and `$package` present.
+     * The package list with the replaced names dropped and every wanted
+     * package present, each missing one appended in order.
      *
      * @param  array<array-key, mixed>  $packages
+     * @param  list<string>  $wanted
      * @param  list<string>  $replaces
      * @return array{before: list<mixed>, after: list<mixed>}
      */
-    private function listed(array $packages, string $package, array $replaces): array
+    private function listed(array $packages, array $wanted, array $replaces): array
     {
         $kept = collect($packages)
             ->reject(static fn (mixed $entry): bool => in_array($entry, $replaces, strict: true))
             ->values();
-        $after = match ($kept->containsStrict($package)) {
-            true => $kept,
-            false => $kept->push($package),
-        };
+        $missing = collect($wanted)
+            ->reject(static fn (string $name): bool => $kept->containsStrict($name));
 
-        return ['before' => array_values($packages), 'after' => $after->all()];
+        return ['before' => array_values($packages), 'after' => $kept->concat($missing)->all()];
     }
 
     /**
