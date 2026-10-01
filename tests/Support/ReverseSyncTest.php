@@ -43,10 +43,10 @@ it('proposes a file no shipped version matches', function (string $pint, array $
 ]);
 
 it('proposes a tracked file the manifest has no entry for', function (): void {
-    seedFiles($this->project, ['phpmd.xml' => 'anything']);
+    seedFiles($this->project, ['phpstan.neon' => 'anything']);
 
-    expect($this->unrelated->changedFiles($this->project, ['files' => ['phpmd.xml']]))
-        ->toBe(['phpmd.xml' => 'phpmd.xml']);
+    expect($this->unrelated->changedFiles($this->project, ['files' => ['phpstan.neon']]))
+        ->toBe(['phpstan.neon' => 'phpstan.neon']);
 });
 
 it('checks the known version against the project path, not the package path', function (): void {
