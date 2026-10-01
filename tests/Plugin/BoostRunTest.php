@@ -8,6 +8,7 @@ use MikeBronner\DevelopmentSettings\Plugin\Tally;
 use MikeBronner\DevelopmentSettings\Support\BoostHooks;
 use MikeBronner\DevelopmentSettings\Support\BoostRegistrar;
 use MikeBronner\DevelopmentSettings\Support\GuidelineGuard;
+use MikeBronner\DevelopmentSettings\Support\PhpGuideline;
 use MikeBronner\DevelopmentSettings\Tests\Fixtures\DetachedTerminal;
 
 /*
@@ -110,4 +111,29 @@ it('registers nothing where Boost cannot compose', function (): void {
     $boost->register();
 
     expect([file_exists("{$this->project}/boost.json"), $boost->summaryLines()])->toBe([false, []]);
+});
+
+it('fails a run that composed Boost\'s PHPDoc rule, naming the exclusion', function (): void {
+    file_put_contents("{$this->project}/AGENTS.md", agentBlock(PhpGuideline::DOCBLOCK_RULE));
+
+    $output = ($this->compose)();
+
+    expect($output)->toContain(
+        'failed',
+        'into AGENTS.md',
+        "\"php\" to boost.guidelines.exclude",
+        'package discovery is not turned off for mike-bronner/laravel-development-settings',
+    );
+    expect($output)->not
+        ->toContain('done');
+});
+
+it('reports done when the PHPDoc rule is only outside the composed block', function (): void {
+    file_put_contents("{$this->project}/CLAUDE.md", agentFile(PhpGuideline::DOCBLOCK_RULE));
+
+    $output = ($this->compose)();
+
+    expect($output)->toContain('done');
+    expect($output)->not
+        ->toContain('boost.guidelines.exclude');
 });

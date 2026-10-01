@@ -4,6 +4,10 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Weekly, so a new laravel/boost release that changes its php/core guideline
+  # fails the replacement check even when nothing here was pushed.
+  schedule:
+    - cron: '0 6 * * 1'
 
 jobs:
   test:
@@ -41,6 +45,11 @@ jobs:
       # the platform check, because it proves the declared range installs.
       - name: Install dependencies
         run: composer update --no-interaction --no-progress ${{ matrix.experimental && '--ignore-platform-req=php+' || '' }}
+
+      # The replacement for Boost's php/core is generated from the Boost this
+      # job just resolved, so a new Boost release shows up here.
+      - name: PHP guideline is up to date
+        run: php bin/generate-guideline.php --check
 
       - name: Manifest is up to date
         run: php bin/generate-manifest.php --check

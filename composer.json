@@ -16,6 +16,7 @@
         "php": "^8.3",
         "composer-plugin-api": "^2.0",
         "illuminate/collections": "^11.45.3|^12.41.1|^13.0",
+        "illuminate/support": "^11.45.3|^12.41.1|^13.0",
         "larastan/larastan": "^3.5",
         "laravel/boost": "^2.9",
         "laravel/pint": "^1.24",
@@ -50,10 +51,16 @@
     "scripts": {
         "test": "pest",
         "dev-settings:manifest": "@php bin/generate-manifest.php",
+        "dev-settings:guideline": "@php bin/generate-guideline.php",
         "dev-settings:contribute": "@php bin/dev-settings-contribute.php"
     },
     "extra": {
-        "class": "MikeBronner\\DevelopmentSettings\\ComposerPlugin"
+        "class": "MikeBronner\\DevelopmentSettings\\ComposerPlugin",
+        "laravel": {
+            "providers": [
+                "MikeBronner\\DevelopmentSettings\\Laravel\\GuidelineServiceProvider"
+            ]
+        }
     },
     "config": {
         "allow-plugins": {
