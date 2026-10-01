@@ -41,11 +41,17 @@ The shared guidelines and skills ship at `resources/boost/guidelines/` and `reso
 Two conditions have to hold, and both are enforced:
 
 - **Boost only composes a package it is told about.** With no entry under `packages` in `boost.json`, Boost discovers the directories and then filters every one of them back out — zero guidelines, silently. Boost cannot add the entry itself during a Composer run, so the plugin writes it.
-- **Boost 2.9 or newer.** Earlier releases keyed third-party guidelines by package name inside their per-file loop, so only the last of the four shipped files survived. This package declares a Composer conflict with `laravel/boost` below 2.9, so Composer refuses the combination instead of installing it. A project locked to an older Boost has to update it alongside this package: `composer update mike-bronner/laravel-development-settings laravel/boost`.
+- **Boost 2.9 or newer.** Earlier releases keyed third-party guidelines by package name inside their per-file loop, so only the last of the shipped guideline files survived. This package declares a Composer conflict with `laravel/boost` below 2.9, so Composer refuses the combination instead of installing it. A project locked to an older Boost has to update it alongside this package: `composer update mike-bronner/laravel-development-settings laravel/boost`.
 
 Your project is a **direct** dependency's consumer or it gets nothing: Boost excludes transitive dependencies by design, so a package that picks this one up indirectly receives no guidelines.
 
 The same rule applies to `mike-bronner/clean-code`, which this package requires. Installed only through this package, it is transitive, so Boost composes none of its guidelines. Require it directly, and the plugin lists it in `boost.json` on the next run. The plugin adds it only when it is direct, because Boost ignores a listed package that is not.
+
+### Boost's PHP guideline
+
+Boost's own `php/core` guideline tells agents to prefer PHPDoc blocks and to use array shape types in them. The shipped `laravel` skill says the opposite: no comments or docblocks unless asked. So this package replaces it. Its Laravel service provider, discovered automatically, adds `php` to `boost.guidelines.exclude`, and keeps any guidelines your app already excludes there. The shipped `05-php` guideline then carries every other rule of Boost's `php/core` unchanged, plus the no-docblocks rule.
+
+Nothing is written to your `.ai` directory or to `config/boost.php`. If you turn off package discovery for this package (`extra.laravel.dont-discover`), Boost composes its own `php/core` again. The plugin then reports the Boost run as failed, names the agent file, and says why.
 
 ### Packages
 
@@ -259,12 +265,13 @@ The `manifest.json` tracks every known checksum of all managed files. It is how 
 When releasing a new version:
 
 1. Update the source files (`config/development-settings.php` paths if adding/removing)
-2. Run `composer dev-settings:manifest` to regenerate `manifest.json`, `capture-manifest.json` and `package-manifest.json`
-3. Commit and tag a new release
+2. If Boost changed its `php/core` guideline, run `composer dev-settings:guideline` to regenerate `resources/boost/guidelines/05-php.blade.php` from the installed Boost
+3. Run `composer dev-settings:manifest` to regenerate `manifest.json`, `capture-manifest.json` and `package-manifest.json`
+4. Commit and tag a new release
 
 `capture-manifest.json` is its sibling for the guideline and skill sources under `resources/boost`, keyed on package paths. It only feeds the edit check above. It is kept out of `manifest.json` on purpose: copy-sync and orphan cleanup read that file on project paths, and a `resources/boost/…` key there would let cleanup delete a consuming package's own `resources/boost` files. `package-manifest.json` holds the known versions of the files only a package receives: the `artisan` shim and the `.gitattributes`. The plugin reads it only in a package with Testbench. Kept in `manifest.json`, the `artisan` key would reach every app, where copy-sync would call the app's own `artisan` locally modified and orphan cleanup would offer to delete it. The same command generates all three, append-only.
 
-CI can guard against a stale manifest with `php bin/generate-manifest.php --check` (exits non-zero if regenerating any of the files would change anything).
+CI can guard against a stale manifest with `php bin/generate-manifest.php --check` (exits non-zero if regenerating any of the files would change anything). `php bin/generate-guideline.php --check` does the same for the PHP guideline against the installed Boost. It also fails when Boost's `php/core` no longer holds either PHPDoc line verbatim, and the generator then writes nothing. CI runs both on every pull request, on every push to `main`, and weekly, so a new Boost release is caught even when nothing here changed.
 
 ## 🧪 Local Development
 

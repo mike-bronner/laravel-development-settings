@@ -9,6 +9,7 @@ use MikeBronner\DevelopmentSettings\Support\BoostHooks;
 use MikeBronner\DevelopmentSettings\Support\BoostRegistrar;
 use MikeBronner\DevelopmentSettings\Support\GuidelineGuard;
 use MikeBronner\DevelopmentSettings\Support\InstalledPackage;
+use MikeBronner\DevelopmentSettings\Support\PhpGuideline;
 use MikeBronner\DevelopmentSettings\Support\ProcessResult;
 use MikeBronner\DevelopmentSettings\Support\ProjectKind;
 use MikeBronner\DevelopmentSettings\Support\SystemProcess;
@@ -66,6 +67,10 @@ final class BoostRun
             . " above. Run \"%s\" and choose at least one agent and the AI Guidelines feature.",
         'captured nothing composed' => 'Laravel Boost ran but composed no agent file: it found no'
             . " agent to compose for. Run \"%s\" and choose your agents.",
+        'php core composed' => 'Laravel Boost composed its own PHP guideline, which asks for'
+            . " PHPDoc blocks, into %s. This package's service provider leaves that guideline"
+            . " out by adding \"%s\" to boost.guidelines.exclude, and it did not run. Check that"
+            . ' package discovery is not turned off for %s.',
         'clean-code not direct' => 'This project does not require %s in its own composer.json,'
             . ' so Laravel Boost composes none of its guidelines.'
             . " Run \"composer require --dev %s\".",
@@ -284,12 +289,38 @@ final class BoostRun
         string $nextStep,
         string $nothingComposed,
     ): void {
-        $guard = new GuidelineGuard();
+        match ($result->failed()) {
+            true => $this->fail(sprintf(self::TEXT['exited'], $nextStep), $result),
+            false => $this->verifyComposed(
+                (new GuidelineGuard())->composedBlocks($this->projectDir, $startedAt),
+                $result,
+                $nothingComposed,
+            ),
+        };
+    }
+
+    private function verifyComposed(
+        array $blocks,
+        ProcessResult $result,
+        string $nothingComposed,
+    ): void {
+        $phpCoreFiles = collect($blocks)
+            ->filter(fn (string $block): bool => str_contains($block, PhpGuideline::DOCBLOCK_RULE))
+            ->keys()
+            ->all();
 
         match (true) {
-            $result->failed() => $this->fail(sprintf(self::TEXT['exited'], $nextStep), $result),
-            ! $guard->composedSince($this->projectDir, $startedAt) => $this->fail(
+            $blocks === [] => $this->fail(
                 sprintf($nothingComposed, BoostHooks::INSTALL_COMMAND),
+                $result,
+            ),
+            $phpCoreFiles !== [] => $this->fail(
+                sprintf(
+                    self::TEXT['php core composed'],
+                    implode(', ', $phpCoreFiles),
+                    PhpGuideline::BOOST_KEY,
+                    InstalledPackage::NAME,
+                ),
                 $result,
             ),
             default => $this->inputOutput

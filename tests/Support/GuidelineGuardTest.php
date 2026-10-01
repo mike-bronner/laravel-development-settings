@@ -8,6 +8,8 @@ const BEFORE_THE_RUN = 60;
 
 beforeEach(function (): void {
     $this->project = makeTempDir();
+    $this->blocks = fn (int $since): array => (new GuidelineGuard())
+        ->composedBlocks($this->project, $since);
 });
 
 afterEach(function (): void {
@@ -102,21 +104,21 @@ it('sees a block composed during the run', function (): void {
     $since = time();
     seedFiles($this->project, ['AGENTS.md' => managedAgentFile()]);
 
-    expect((new GuidelineGuard())->composedSince($this->project, $since))->toBeTrue();
+    expect(array_keys(($this->blocks)($since)))->toBe(['AGENTS.md']);
 });
 
 it('does not count a block written before the run began', function (): void {
     seedFiles($this->project, ['CLAUDE.md' => managedAgentFile()]);
     touch("{$this->project}/CLAUDE.md", time() - BEFORE_THE_RUN);
 
-    expect((new GuidelineGuard())->composedSince($this->project, time()))->toBeFalse();
+    expect(($this->blocks)(time()))->toBe([]);
 });
 
 it('counts no new file without a whole block', function (string $path, string $content): void {
     $since = time();
     seedFiles($this->project, [$path => $content]);
 
-    expect((new GuidelineGuard())->composedSince($this->project, $since))->toBeFalse();
+    expect(($this->blocks)($since))->toBe([]);
 })->with([
     'no tags' => ['AGENTS.md', "No tags.\n"],
     'opening tag only' => ['AGENTS.md', GuidelineGuard::OPENING_TAG . "\n"],
@@ -126,3 +128,21 @@ it('counts no new file without a whole block', function (string $path, string $c
     ],
     'a block inside vendor' => ['vendor/acme/pkg/AGENTS.md', agentBlock()],
 ]);
+
+it('answers each composed block without the prose around it, in path order', function (): void {
+    $since = time();
+    $unclosed = fn (string $rules): string => str_replace(
+        GuidelineGuard::CLOSING_TAG . "\n",
+        '',
+        agentBlock($rules),
+    );
+    seedFiles($this->project, [
+        'CLAUDE.md' => agentFile('Prose before.') . "Prose after.\n",
+        'AGENTS.md' => agentBlock('first') . agentBlock('second'),
+    ]);
+
+    expect(($this->blocks)($since))->toBe([
+        'AGENTS.md' => $unclosed('first'),
+        'CLAUDE.md' => $unclosed('foundation rules'),
+    ]);
+});

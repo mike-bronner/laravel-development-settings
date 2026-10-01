@@ -98,8 +98,9 @@ final class GuidelineGuard
     }
 
     /**
-     * Whether a project file holding a composed Boost block, an opening tag
-     * with a closing tag after it, was written at or after `$since`.
+     * The composed Boost block of each project file written at or after
+     * `$since`, keyed on its relative path, in path order. A block runs from
+     * the first opening tag to the closing tag after it.
      *
      * Boost exits successfully when it finds no agent to compose for, so its
      * exit code cannot tell a composition from a run that wrote nothing. The
@@ -109,29 +110,31 @@ final class GuidelineGuard
      * supports writes its guidelines to a markdown file, which is the set this
      * class already reads.
      */
-    public function composedSince(string $projectDir, int $since): bool
+    public function composedBlocks(string $projectDir, int $since): array
     {
         clearstatcache();
 
         return collect($this->markdownFiles($projectDir))
-            ->contains(fn (string $absolutePath): bool => $this->composedAt($absolutePath, $since));
+            ->map(fn (string $absolutePath): ?string => $this->composedAt($absolutePath, $since))
+            ->whereNotNull()
+            ->sortKeys()
+            ->all();
     }
 
-    /**
-     * Whether the file was written at or after `$since` and holds a composed
-     * block. A file that vanished or cannot be read holds none.
-     */
-    private function composedAt(string $absolutePath, int $since): bool
+    private function composedAt(string $absolutePath, int $since): ?string
     {
         try {
             $modifiedAt = (new SplFileInfo($absolutePath))->getMTime();
             $content = $this->file
                 ->read($absolutePath);
         } catch (RuntimeException) {
-            return false;
+            return null;
         }
 
-        return $modifiedAt >= $since && $this->closesAfterOpening($content);
+        return match ($modifiedAt < $since) {
+            true => null,
+            false => $this->block($content),
+        };
     }
 
     /**
@@ -155,19 +158,23 @@ final class GuidelineGuard
         return match (true) {
             $openingTags === 0 => null,
             $openingTags > 1 => sprintf(self::REPEATED, $openingTags, self::OPENING_TAG),
-            $this->closesAfterOpening($content) => null,
+            is_string($this->block($content)) => null,
             default => sprintf(self::UNCLOSED, self::OPENING_TAG),
         };
     }
 
-    /**
-     * Whether a closing tag follows the first opening tag.
-     */
-    private function closesAfterOpening(string $content): bool
+    private function block(string $content): ?string
     {
         $opensAt = strpos($content, self::OPENING_TAG);
+        $closesAt = match ($opensAt) {
+            false => false,
+            default => strpos($content, self::CLOSING_TAG, $opensAt),
+        };
 
-        return $opensAt !== false && strpos($content, self::CLOSING_TAG, $opensAt) !== false;
+        return match ($closesAt) {
+            false => null,
+            default => substr($content, (int) $opensAt, $closesAt - (int) $opensAt),
+        };
     }
 
     /**
