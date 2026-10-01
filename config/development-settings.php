@@ -98,7 +98,6 @@ return [
             // ships under the path releases before 0.3.3 used, so their
             // unmodified copies are known versions and are replaced.
             'phpcs.xml',
-            'phpmd.xml',
             'pint.json',
             '.github/workflows/sync-developer-settings.yml',
         ],

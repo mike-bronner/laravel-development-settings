@@ -290,6 +290,5 @@ The linter configurations are the source of truth — not this skill file. If yo
 rule, read the actual config:
 
 - **Pint rules**: read `pint.json` in the project root
-- **PHPMD rules**: read `phpmd.xml` in the project root
 
 These configs may change over time. Always defer to what the config files say over any memorized rules.
