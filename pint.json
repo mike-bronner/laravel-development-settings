@@ -60,6 +60,9 @@
             "remove_inheritdoc": true
         },
         "phpdoc_to_comment": true,
+        "php_unit_method_casing": {
+            "case": "camel_case"
+        },
         "no_extra_blank_lines": {
             "tokens": [
                 "extra",
