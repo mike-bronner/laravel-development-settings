@@ -32,3 +32,37 @@ it('formats a test method name that the shipped phpcs.xml accepts', function (
         ->not
         ->toContain('PSR1.Methods.CamelCapsMethodName.NotCamelCaps');
 })->with(['returnsTheValue', 'returns_the_value', 'test_returns_the_value']);
+
+it('keeps an empty class-like body on its declaration line', function (string $declaration): void {
+    $source = "<?php\n\n{$declaration} {}\n";
+    $this->project = pintFiles([PINT_SOURCE_FILE => $source]);
+
+    expect(file_get_contents("{$this->project}/" . PINT_SOURCE_FILE))->toBe($source);
+})->with([
+    'class' => 'final class TextualApparatusEntry extends BaseModel',
+    'interface' => 'interface Annotated',
+    'trait' => 'trait Annotates',
+    'enum' => 'enum Testament',
+]);
+
+it('keeps a class body whose opening brace is on its own line', function (): void {
+    $source = <<<PHP
+        <?php
+
+        final class Verse extends BaseModel
+        {
+            public int \$number = 1;
+        }
+
+        PHP;
+    $this->project = pintFiles([PINT_SOURCE_FILE => $source]);
+
+    expect(file_get_contents("{$this->project}/" . PINT_SOURCE_FILE))->toBe($source);
+});
+
+it('keeps a method chain that hangs from a multi-line call', function (): void {
+    $source = file_get_contents(REPOSITORY_ROOT . '/tests/Fixtures/pint/hanging-chain.txt');
+    $this->project = pintFiles([PINT_SOURCE_FILE => $source]);
+
+    expect(file_get_contents("{$this->project}/" . PINT_SOURCE_FILE))->toBe($source);
+});

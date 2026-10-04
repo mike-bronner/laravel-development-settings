@@ -1,0 +1,16 @@
+<?php
+
+final class SupplyingBook extends BaseModel
+{
+    public function textualApparatusEntries(): HasManyDeep
+    {
+        return $this->hasManyDeep(
+                TextualApparatusEntry::class,
+                [
+                    self::class . " as apparatus_owner",
+                ],
+            )
+            ->whereColumn("versions.id", "supplying_books.version_id")
+            ->orderBy("textual_apparatus_entries.entry_order");
+    }
+}

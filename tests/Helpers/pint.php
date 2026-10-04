@@ -17,16 +17,27 @@ const PINT_TEST_CLASS = <<<PHP
 
     PHP;
 
+const PINT_SOURCE_FILE = 'src/Layout.php';
+
 function pintProject(string $methodName): string
+{
+    return pintFiles([PINT_TEST_FILE => sprintf(PINT_TEST_CLASS, $methodName)]);
+}
+
+function pintFiles(array $files): string
 {
     $project = makeTempDir('devset-pint-');
 
     copy(REPOSITORY_ROOT . '/pint.json', "{$project}/pint.json");
     copy(REPOSITORY_ROOT . '/phpcs.xml', "{$project}/phpcs.xml");
-    seedFiles($project, [PINT_TEST_FILE => sprintf(PINT_TEST_CLASS, $methodName)]);
+    seedFiles($project, $files);
     $pint = escapeshellarg(REPOSITORY_ROOT . '/vendor/bin/pint');
+    $paths = collect($files)
+        ->keys()
+        ->map(escapeshellarg(...))
+        ->implode(' ');
     $result = (new SystemProcess())
-        ->capture(escapeshellarg(PHP_BINARY) . " {$pint} --config pint.json tests", $project);
+        ->capture(escapeshellarg(PHP_BINARY) . " {$pint} --config pint.json {$paths}", $project);
 
     expect($result->exitCode())->toBe(0, "Pint failed: {$result->output()}");
 

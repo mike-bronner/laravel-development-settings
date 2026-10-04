@@ -166,7 +166,9 @@ The package ships `phpcs.xml`, which runs the `CleanCode` standard from `mike-br
 
 `phpcs.xml` is a synced file like `pint.json`. An edited copy is kept as a local modification, and the upstream workflow proposes the edit to this package.
 
-The shipped `pint.json` writes what `phpcs.xml` asks for, so the two never undo each other: `new Foo()` always carries its parentheses (`new class () …` for an anonymous class), an empty body opens and closes on lines of its own, and imports are grouped as classes, then functions, then constants. Where the two disagreed, `phpcs.xml` won.
+The shipped `pint.json` writes what `phpcs.xml` asks for, so the two never undo each other: `new Foo()` always carries its parentheses, and imports are grouped as classes, then functions, then constants. Pint keeps the line breaks of a multi-line argument list as written, so a method chain can hang from a call whose arguments span lines. Where the two disagreed, `phpcs.xml` won.
+
+Pint does not place braces or fix the spacing of a class declaration, because its `braces_position` and `class_definition` fixers are off. That lets an empty class, interface, trait or enum stay as `{}` on the line that declares it. PHPCS still reports brace placement and class-declaration spacing, and `vendor/bin/phpcbf` fixes both, including the space in `new class ()` for an anonymous class.
 
 Releases before 0.3.3 shipped `phpcs.xml` pointing at `.php-codesniffer/MikeBronner/ruleset.xml`, and 0.3.3 removed both. An unmodified old `phpcs.xml` is a known version, so the next update replaces it. The old ruleset is still removed when unmodified.
 
