@@ -260,6 +260,53 @@ Run `vendor/bin/dev-settings-contribute.php` (or `composer dev-settings:contribu
 - **Edit in your repo** — quick fixes, typo corrections, rule tweaks discovered while coding
 - **Direct PR to this repo** — major additions, new guidelines, structural changes
 
+## 🎯 Pest TIA baseline
+
+Pest 5's Test Impact Analysis (`--tia`) records a dependency graph on its first run, and that run is slow. Pest can download a graph that CI recorded instead (`--tia --baselined`). This repository holds the shared action that records and publishes that graph: `.github/actions/tia-baseline`. Each repository wires it into a workflow of its own, because only that repository knows how to set up its test environment. The workflow is not a tracked file, so the plugin never syncs it and the reverse sync never proposes it. The shipped guideline `resources/boost/guidelines/06-pest-tia.md` tells developers and agents how to use the baseline.
+
+Add `.github/workflows/tia-baseline.yml` to the repository. Set up the environment as the repository's test job does, then call the action as the last step:
+
+```yaml
+name: TIA Baseline
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: pcov
+
+      - run: composer install --no-interaction --no-progress
+
+      # Services, .env, database, npm builds: whatever the test job needs.
+
+      - uses: mike-bronner/laravel-development-settings/.github/actions/tia-baseline@main
+        with:
+          arguments: --parallel
+```
+
+The rules the workflow must follow:
+
+- **Name the file `tia-baseline.yml`.** Pest finds the baseline with `gh run list --workflow tia-baseline.yml`. Under another name, set it in `tests/Pest.php` with `pest()->tia()->baselined('<file>.yml')`.
+- **Run it on the default branch only.** That lookup takes the latest successful run on any branch. The action fails on any other branch, so a run there never becomes the baseline.
+- **Trigger it on `push`, `workflow_dispatch` or `schedule` only.** The action fails on any other event. Under `pull_request_target` the ref names the base branch while the checkout can hold the pull request's code, and a graph recorded from that code must never become the baseline.
+- **Record on the PHP minor version developers use.** Pest's environment fingerprint holds the PHP minor version, and a baseline from another minor loses its recorded test results. Record one version only: a matrix uploads the artifact once per job, and the second upload fails.
+- **Set up pcov, or Xdebug in coverage mode.** Pest records nothing without one, so the action fails before it runs the suite.
+- **Pass no coverage report option, test path or partial-run option in `arguments`.** Pest treats `--filter`, `--group`, `--testsuite`, `--exclude-testsuite`, `--covers`, `--uses`, `--dirty` and similar options as a partial run. Under any of them Pest records no graph. A repository whose CI writes coverage keeps doing that in its test job, and this workflow records with a plain run.
+
+The action fails on Pest below 5, without a coverage driver, on a failed test run, and when Pest writes no `graph.json`. It never ends green without the artifact, because Pest downloads from the latest successful run. A developer whose `--baselined` run finds no artifact there gets either an error or a slow local recording, depending on the message `gh` returns. On success it uploads the artifact `pest-tia-baseline` with `graph.json` at its root, which is the name and layout Pest downloads. The artifact expires after the repository's artifact retention period, so a repository that goes longer than that without a push to its default branch needs a manual run (`workflow_dispatch`).
+
 ## 📋 Manifest Management
 
 The `manifest.json` tracks every known checksum of all managed files. It is how the plugin knows whether a local file was modified by you or matches a known version, and which removed-upstream files are safe to clean up. It is **append-only** (it retains entries for deleted files so downstream cleanup keeps working) and **generated** — never hand-edited.

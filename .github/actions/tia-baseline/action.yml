@@ -1,0 +1,36 @@
+name: Pest TIA baseline
+description: >-
+  Records a Pest Test Impact Analysis graph with a plain run, and uploads it as
+  the pest-tia-baseline artifact that `pest --tia --baselined` downloads. Use it
+  as a step of a job that has already set up the repository's test environment,
+  in a workflow file named tia-baseline.yml that runs on the default branch.
+
+inputs:
+  arguments:
+    description: >-
+      Extra arguments for the Pest run, separated by spaces, such as --parallel.
+      Never a coverage report option, a test path, or an option Pest treats as
+      a partial run (--filter, --group, --testsuite, --exclude-testsuite,
+      --covers, --uses, --dirty and the like): under any of them Pest records
+      no graph, and this action fails.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Record the Pest TIA graph
+      id: record
+      shell: bash
+      env:
+        TIA_BASELINE_ARGUMENTS: ${{ inputs.arguments }}
+      run: bash "$GITHUB_ACTION_PATH/record.sh"
+
+    # Pest downloads the artifact by this exact name and reads graph.json from
+    # its root. A run that uploads nothing must fail, never pass.
+    - name: Upload the Pest TIA baseline
+      uses: actions/upload-artifact@v4
+      with:
+        name: pest-tia-baseline
+        path: ${{ steps.record.outputs.path }}
+        if-no-files-found: error
