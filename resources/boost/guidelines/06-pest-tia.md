@@ -1,6 +1,6 @@
 # Pest Test Impact Analysis
 
-Pest 5 can run only the tests a change affects (`--tia`). The first local `--tia` run records a dependency graph of the whole suite, and that run is slow. A repository with a `tia-baseline.yml` workflow publishes that graph from CI on every push to its default branch, so you can download it instead of recording it.
+Pest 5 can run only the tests a change affects (`--tia`). The first local `--tia` run records a dependency graph of the whole suite, and that run is slow. The `tia-baseline.yml` workflow, synced by laravel-development-settings, publishes that graph from CI so you can download it instead of recording it. It records on pushes to the default branch when that branch is `main`, `master`, `develop` or `production`. A repository whose default branch has another name records on a manual run only.
 
 ## Use the CI baseline
 
@@ -26,4 +26,4 @@ Pest 5 can run only the tests a change affects (`--tia`). The first local `--tia
 
 - Never commit the graph, `.pest/` or any other TIA cache. The graph changes on every run and is keyed to a branch, a commit and an environment. `vendor/bin/pest --baseline` prints where it is stored. When `pest()->tia()->directory()` puts it inside the project, keep that directory in `.gitignore`.
 - A run with a coverage report option (`--coverage-clover` and similar) records no graph. Record with a plain `--tia` run, and coverage runs then reuse that graph. A partial run does not use TIA at all: a run with a test path, or with a selection option such as `--filter`, `--group`, `--testsuite`, `--exclude-testsuite`, `--covers`, `--uses` or `--dirty`.
-- Never edit `tia-baseline.yml` to run on other branches. Pest downloads from the latest successful run of that workflow on any branch.
+- Never edit `.github/workflows/tia-baseline.yml`. laravel-development-settings syncs it, and an edited copy stops receiving updates. Put the repository's own test setup (services, PHP version and extensions, npm builds) in the optional hooks `.github/actions/tia-baseline-before-install` and `.github/actions/tia-baseline-after-install`. The workflow records on the default branch only, because Pest downloads from the latest successful run of that workflow on any branch.

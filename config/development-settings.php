@@ -100,6 +100,11 @@ return [
             'phpcs.xml',
             'pint.json',
             '.github/workflows/sync-developer-settings.yml',
+            // Records the Pest TIA baseline. The source sits outside
+            // .github/workflows so that this repository, on Pest below 5,
+            // never runs it. A repository's own setup goes in the optional
+            // hooks the workflow calls, never in an edited copy.
+            'resources/project/tia-baseline.yml' => '.github/workflows/tia-baseline.yml',
         ],
 
         // Tracked targets the project shares with this package, split at one

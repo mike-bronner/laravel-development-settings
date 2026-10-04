@@ -262,50 +262,139 @@ Run `vendor/bin/dev-settings-contribute.php` (or `composer dev-settings:contribu
 
 ## 🎯 Pest TIA baseline
 
-Pest 5's Test Impact Analysis (`--tia`) records a dependency graph on its first run, and that run is slow. Pest can download a graph that CI recorded instead (`--tia --baselined`). This repository holds the shared action that records and publishes that graph: `.github/actions/tia-baseline`. Each repository wires it into a workflow of its own, because only that repository knows how to set up its test environment. The workflow is not a tracked file, so the plugin never syncs it and the reverse sync never proposes it. The shipped guideline `resources/boost/guidelines/06-pest-tia.md` tells developers and agents how to use the baseline.
+Pest 5's Test Impact Analysis (`--tia`) records a dependency graph on its first run, and that run is slow. Pest can download a graph that CI recorded instead (`--tia --baselined`). The plugin syncs the workflow that records and publishes that graph, `.github/workflows/tia-baseline.yml`, into every consuming project, as it syncs `pint.json`. The workflow calls the shared action in this repository, `.github/actions/tia-baseline`. The shipped guideline `resources/boost/guidelines/06-pest-tia.md` tells developers and agents how to use the baseline.
 
-Add `.github/workflows/tia-baseline.yml` to the repository. Set up the environment as the repository's test job does, then call the action as the last step:
+**Do not edit `tia-baseline.yml`.** An edited copy is kept as locally modified, stops receiving updates, and is proposed back to this package. Everything that differs between repositories goes in two optional hooks and in the PHP version choice below. This package keeps the workflow's source at `resources/project/tia-baseline.yml`, outside `.github/workflows`, so this repository never runs it.
+
+### What the workflow runs
+
+1. Check out the repository.
+2. Run the hook `.github/actions/tia-baseline-before-install`, when the repository has one.
+3. Choose the PHP version.
+4. Set up PHP with pcov, plus the extensions and ini values the before-install hook names.
+5. Run `composer install`.
+6. Run the hook `.github/actions/tia-baseline-after-install`, when the repository has one.
+7. Run the shared action, which records the graph with `pest --tia --fresh` and uploads it.
+
+A repository with no hooks runs steps 1, 3, 4, 5 and 7 only.
+
+The workflow runs on pushes to `main`, `master`, `develop` and `production`, and on a manual run (`workflow_dispatch`). The job runs only when the branch is the repository's default branch. On any other branch the job is skipped, and the run fails nothing. Pest downloads from the latest successful run of the workflow on any branch, so a run on another branch must never publish a graph. A repository whose default branch has another name records on a manual run only.
+
+### The hooks
+
+Each hook is a composite action that the repository owns: an `action.yml` in its own directory under `.github/actions`. The plugin never writes or reads them, so they never show as locally modified. Every `run` step in a composite action needs `shell: bash`.
+
+| Hook | Runs | Use it for |
+|------|------|------------|
+| `tia-baseline-before-install` | before PHP and Composer are set up | services such as Postgres or Redis, environment variables, Composer credentials, the PHP choices below |
+| `tia-baseline-after-install` | after `composer install` | the environment file, npm builds, Playwright browsers, directory permissions, migrations |
+
+Both hooks receive every secret of the repository as one JSON input named `secrets`. Declare that input, and read a secret with `fromJSON(inputs.secrets).NAME`. A composite action cannot read the `secrets` context itself.
+
+To set a variable for every later step, write it to `$GITHUB_ENV`. A composite action cannot declare `services:`, so start a database with `docker run` instead.
+
+The before-install hook can set these outputs. Each one is optional.
+
+| Output | Default | Effect |
+|--------|---------|--------|
+| `php-version` | from `composer.json` | the PHP version the graph is recorded on |
+| `php-extensions` | none | the `extensions` input of `shivammathur/setup-php` |
+| `php-ini-values` | none | the `ini-values` input of `shivammathur/setup-php`, such as `memory_limit=-1, pcov.directory=.` |
+| `pest-arguments` | none | the `arguments` input of the shared action, such as `--parallel` |
+
+An example for an application on Postgres 17 with an npm build:
 
 ```yaml
-name: TIA Baseline
+# .github/actions/tia-baseline-before-install/action.yml
+name: TIA baseline setup before Composer
+description: Postgres, environment and Composer credentials for the TIA baseline.
 
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+inputs:
+  secrets:
+    description: Every secret of the repository, as JSON.
+    required: true
 
-jobs:
-  baseline:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
+outputs:
+  php-version:
+    value: '8.5'
+  php-extensions:
+    value: imagick, pdo_pgsql
+  php-ini-values:
+    value: memory_limit=-1, pcov.directory=.
+  pest-arguments:
+    value: --parallel
 
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-          coverage: pcov
+runs:
+  using: composite
+  steps:
+    - name: Start Postgres 17
+      shell: bash
+      run: |
+        docker run --detach --name postgres --publish 5432:5432 \
+          --env POSTGRES_DB=testing --env POSTGRES_USER=postgres --env POSTGRES_PASSWORD=postgres \
+          --health-cmd pg_isready --health-interval 2s postgres:17
+        until [ "$(docker inspect --format '{{.State.Health.Status}}' postgres)" = healthy ]; do sleep 2; done
 
-      - run: composer install --no-interaction --no-progress
-
-      # Services, .env, database, npm builds: whatever the test job needs.
-
-      - uses: mike-bronner/laravel-development-settings/.github/actions/tia-baseline@main
-        with:
-          arguments: --parallel
+    - name: Set the environment
+      shell: bash
+      env:
+        COMPOSER_TOKEN: ${{ fromJSON(inputs.secrets).WORKFLOW_PAT }}
+      run: |
+        echo "DB_USERNAME=postgres" >> "$GITHUB_ENV"
+        echo "DB_PASSWORD=postgres" >> "$GITHUB_ENV"
+        echo "COMPOSER_AUTH={\"github-oauth\": {\"github.com\": \"${COMPOSER_TOKEN}\"}}" >> "$GITHUB_ENV"
 ```
 
-The rules the workflow must follow:
+```yaml
+# .github/actions/tia-baseline-after-install/action.yml
+name: TIA baseline setup after Composer
+description: Environment file and front-end build for the TIA baseline.
 
-- **Name the file `tia-baseline.yml`.** Pest finds the baseline with `gh run list --workflow tia-baseline.yml`. Under another name, set it in `tests/Pest.php` with `pest()->tia()->baselined('<file>.yml')`.
-- **Run it on the default branch only.** That lookup takes the latest successful run on any branch. The action fails on any other branch, so a run there never becomes the baseline.
-- **Trigger it on `push`, `workflow_dispatch` or `schedule` only.** The action fails on any other event. Under `pull_request_target` the ref names the base branch while the checkout can hold the pull request's code, and a graph recorded from that code must never become the baseline.
-- **Record on the PHP minor version developers use.** Pest's environment fingerprint holds the PHP minor version, and a baseline from another minor loses its recorded test results. Record one version only: a matrix uploads the artifact once per job, and the second upload fails.
-- **Set up pcov, or Xdebug in coverage mode.** Pest records nothing without one, so the action fails before it runs the suite.
-- **Pass no coverage report option, test path or partial-run option in `arguments`.** Pest treats `--filter`, `--group`, `--testsuite`, `--exclude-testsuite`, `--covers`, `--uses`, `--dirty` and similar options as a partial run. Under any of them Pest records no graph. A repository whose CI writes coverage keeps doing that in its test job, and this workflow records with a plain run.
+inputs:
+  secrets:
+    description: Every secret of the repository, as JSON.
+    required: true
 
-The action fails on Pest below 5, without a coverage driver, on a failed test run, and when Pest writes no `graph.json`. It never ends green without the artifact, because Pest downloads from the latest successful run. A developer whose `--baselined` run finds no artifact there gets either an error or a slow local recording, depending on the message `gh` returns. On success it uploads the artifact `pest-tia-baseline` with `graph.json` at its root, which is the name and layout Pest downloads. The artifact expires after the repository's artifact retention period, so a repository that goes longer than that without a push to its default branch needs a manual run (`workflow_dispatch`).
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: cp .env.example .env
+
+    - shell: bash
+      run: npm ci && npm run build
+
+    - shell: bash
+      run: npx playwright install --with-deps chromium
+```
+
+### The PHP version
+
+Pest's environment fingerprint holds the PHP minor version, and a baseline from another minor loses its recorded test results. So record on the minor version developers use. The workflow takes the first of these that names a version:
+
+1. The `php-version` output of the before-install hook, used as written.
+2. `config.platform.php` in `composer.json`, cut to its minor version.
+3. `require.php` in `composer.json`: the first version the constraint names, such as `8.4` for `^8.4`. For `^8.4` or `>=8.4`, that is the lowest version the constraint allows.
+
+When none of them names a version, the run fails and says so. Set `php-version` when developers use a newer version than the lowest one `composer.json` allows.
+
+### Rules for the hooks
+
+- **Pass no coverage report option, test path or partial-run option in `pest-arguments`.** Pest treats `--filter`, `--group`, `--testsuite`, `--exclude-testsuite`, `--covers`, `--uses`, `--dirty` and similar options as a partial run. Under any of them Pest records no graph. A repository whose CI writes coverage keeps doing that in its test job, and this workflow records with a plain run.
+- **Do not turn off pcov.** The workflow sets it up, and Pest records nothing without a coverage driver.
+- **Never commit the graph or `.pest/`.** The graph changes on every run.
+
+The action fails on Pest below 5, without a coverage driver, on a failed test run, and when Pest writes no `graph.json`. The workflow reaches every consuming project, so a project still on Pest 3 or 4 gets a failed run on every push to its default branch until it requires Pest 5. The action never ends green without the artifact, because Pest downloads from the latest successful run. A developer whose `--baselined` run finds no artifact there gets either an error or a slow local recording, depending on the message `gh` returns. On success the action uploads the artifact `pest-tia-baseline` with `graph.json` at its root, which is the name and layout Pest downloads. The artifact expires after the repository's artifact retention period. A repository that goes longer than that without a push to its default branch needs a manual run.
+
+### Moving from a hand-written workflow
+
+In 0.6.0, each repository wrote its own `tia-baseline.yml` from this README. The sync does not know that copy. It keeps the copy and reports it as locally modified, and the upstream workflow proposes it to this package. To move to the shipped workflow:
+
+1. Move each setup step of your copy that runs before `composer install` into `.github/actions/tia-baseline-before-install/action.yml`. Turn `services:` into a `docker run` step, and job-level `env:` into lines written to `$GITHUB_ENV`.
+2. Move the PHP version, the `extensions` and `ini-values` of `setup-php`, and the `arguments` of the action into the outputs of that hook.
+3. Move each step that runs after `composer install` into `.github/actions/tia-baseline-after-install/action.yml`.
+4. Delete `.github/workflows/tia-baseline.yml`, then run `composer update`. The plugin writes the shipped workflow.
+5. Close any pull request the upstream workflow opened for your copy.
 
 ## 📋 Manifest Management
 

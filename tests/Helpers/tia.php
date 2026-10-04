@@ -8,7 +8,8 @@ use MikeBronner\DevelopmentSettings\Support\SystemProcess;
 /*
  * The shared Pest TIA baseline action, run in a stand-in consuming
  * repository: a fake vendor/bin/pest, and a `php` on the PATH whose coverage
- * driver the test chooses.
+ * driver the test chooses. And the shipped workflow that calls it, read as
+ * text and run one step at a time.
  */
 
 const TIA_ACTION = __DIR__ . '/../../.github/actions/tia-baseline';
@@ -18,6 +19,10 @@ const TIA_GRAPH = <<<JSON
     JSON;
 
 const TIA_DEFAULT_BRANCH = 'main';
+
+const TIA_WORKFLOW_SOURCE = 'resources/project/tia-baseline.yml';
+
+const TIA_WORKFLOW_TARGET = '.github/workflows/tia-baseline.yml';
 
 const TIA_EXECUTABLE = 0755;
 
@@ -189,4 +194,62 @@ function actionStep(string $name): string
     preg_match($pattern, (string) file_get_contents(TIA_ACTION . '/action.yml'), $step);
 
     return (string) data_get($step, 1);
+}
+
+/**
+ * The shipped Pest TIA baseline workflow, as a consuming project receives it.
+ */
+function tiaWorkflow(): string
+{
+    return shippedSource(TIA_WORKFLOW_SOURCE);
+}
+
+/**
+ * One step of the shipped workflow, without its name line, up to the step or
+ * comment after it. A run block may hold blank lines of its own.
+ */
+function tiaWorkflowStep(string $name): string
+{
+    $pattern = '/^      - name: ' . preg_quote($name, '/') . '\n(.*?)(?=\n+      [-#]|\n*\z)/ms';
+
+    preg_match($pattern, tiaWorkflow(), $step);
+
+    return (string) data_get($step, 1);
+}
+
+/**
+ * The lines of one step of the shipped workflow, trimmed.
+ *
+ * @return list<string>
+ */
+function tiaWorkflowStepLines(string $name): array
+{
+    return collect(explode("\n", tiaWorkflowStep($name)))
+        ->map(fn (string $line): string => trim($line))
+        ->all();
+}
+
+/**
+ * Run the workflow's PHP version step in a project holding the given
+ * composer.json, with the version the before-install hook put out.
+ */
+function runTiaPhpVersionStep(
+    string $project,
+    string $composerJson,
+    string $hookVersion = '',
+): ProcessResult {
+    $step = tiaWorkflowStep('Choose the PHP version');
+    $matched = preg_match('/^        run: \|\n(.*)/ms', $step, $match);
+
+    expect($matched)->toBe(1);
+
+    $script = (string) preg_replace('/^ {10}/m', '', (string) data_get($match, 1));
+    seedFiles($project, ['composer.json' => $composerJson, 'github-output' => '']);
+    $environment = collect([
+        'HOOK_PHP_VERSION' => $hookVersion,
+        'GITHUB_OUTPUT' => "{$project}/github-output",
+    ])->map(fn (string $value, string $name): string => "{$name}=" . escapeshellarg($value));
+
+    return (new SystemProcess())
+        ->capture("{$environment->implode(' ')} bash -e -c " . escapeshellarg($script), $project);
 }
