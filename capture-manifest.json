@@ -14,6 +14,10 @@
     "resources/boost/guidelines/05-php.blade.php": [
         "3d6bd5c0c645a82ab8f455d8fb64a08e"
     ],
+    "resources/boost/guidelines/06-pest-tia.md": [
+        "d0b412b93eb18514a32d8231a48d58ca",
+        "f41fcf1827eb5e983feafa6c95f5bfc2"
+    ],
     "resources/boost/skills/a11y/SKILL.md": [
         "005e25c9878d395a7838e36e26351d45"
     ],
