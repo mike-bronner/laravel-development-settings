@@ -38,6 +38,15 @@ use MikeBronner\DevelopmentSettings\Support\Terminal;
  * prompts, and passes every feature explicitly, so a leftover `boost.json`
  * setting can never turn one off: Boost ignores `boost.json` once a flag is
  * given.
+ *
+ * In a package repository, the package discovery cache is rebuilt first,
+ * captured, on both paths. The shim roots the app at the repository, so
+ * Laravel reads the repository's `bootstrap/cache/packages.php`, and builds
+ * that file only when it is missing: a provider installed after the first
+ * Artisan run, this package's own included, would never load. The
+ * repository's own Composer scripts cannot fix it, because their
+ * `testbench package:discover` is not rooted. An app's own scripts run its
+ * discovery, so an app gets none here.
  */
 final class BoostRun
 {
@@ -54,6 +63,12 @@ final class BoostRun
         'refused' => 'Laravel Boost was not run: composing would overwrite hand-written content.',
         'no repair' => 'Edit the file yourself, then run the Composer command again. This package'
             . ' will not repair it: where your own text ends cannot be read from the file.',
+    ];
+
+    private const DISCOVERY = [
+        'running' => 'Rebuilding the package discovery cache...',
+        'failed' => "Package discovery exited with an error. Run \"%s\" to see why: a service"
+            . ' provider installed since the cache was written may not load in Boost.',
     ];
 
     private const TEXT = [
@@ -193,14 +208,48 @@ final class BoostRun
     private function guardAndCompose(): void
     {
         $hazards = (new GuidelineGuard())->hazards($this->projectDir);
+
+        match ($hazards) {
+            [] => $this->discoverAndCompose(),
+            default => $this->refuse($hazards),
+        };
+    }
+
+    private function discoverAndCompose(): void
+    {
         $isAttached = $this->inputOutput
             ->isInteractive() && $this->terminal
             ->isAttached();
 
-        match (true) {
-            $hazards !== [] => $this->refuse($hazards),
-            $isAttached => $this->composeAttached(),
-            default => $this->composeCaptured(),
+        match ((new ProjectKind())->receivesShim($this->projectDir)) {
+            true => $this->discoverPackages(),
+            false => null,
+        };
+
+        match ($isAttached) {
+            true => $this->composeAttached(),
+            false => $this->composeCaptured(),
+        };
+    }
+
+    /**
+     * Rebuild the package repository's discovery cache through the shim. A
+     * failure is reported with its output, and Boost still runs.
+     */
+    private function discoverPackages(): void
+    {
+        $this->inputOutput
+            ->write("{$this->line(self::DISCOVERY['running'])} ", newline: false);
+        $result = (new SystemProcess())->capture(
+            command: $this->hooks->discoverCommand(),
+            workingDirectory: $this->projectDir,
+        );
+        $failure = sprintf(self::DISCOVERY['failed'], BoostHooks::DISCOVER_COMMAND);
+
+        match ($result->failed()) {
+            true => $this->fail($failure, $result),
+            false => $this->inputOutput
+                ->write($this->style->wrap('info', 'done')),
         };
     }
 
@@ -234,7 +283,7 @@ final class BoostRun
         $inputOutput = $this->inputOutput;
         $startedAt = time();
 
-        $inputOutput->write($this->description());
+        $inputOutput->write($this->line($this->hooks->description()));
         $exitCode = (new SystemProcess())->passthru($this->hooks->interactiveCommand());
         $inputOutput->write('  Laravel Boost ', newline: false);
 
@@ -267,7 +316,7 @@ final class BoostRun
         };
 
         $startedAt = time();
-        $description = $this->description();
+        $description = $this->line($this->hooks->description());
         $inputOutput->write("{$description} ", newline: false);
 
         $this->verify(
@@ -345,13 +394,10 @@ final class BoostRun
     }
 
     /**
-     * The description of the run, as it opens the run's line.
+     * The description of a run, as it opens the run's line.
      */
-    private function description(): string
+    private function line(string $description): string
     {
-        $description = $this->hooks
-            ->description();
-
         return <<<TEXT
   {$this->style
             ->wrap('info', $description)}

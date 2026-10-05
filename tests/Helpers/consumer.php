@@ -95,6 +95,43 @@ function boostSays(string $voice, string $statement): string
 }
 
 /**
+ * The Testbench stand-in, as PHP code. Run as `package:discover`, it exits
+ * with the given code: on 0 it records its arguments, and whether Boost had
+ * run yet, as JSON in the repository's `bootstrap/cache/packages.php`, and on
+ * any other it prints an error, as discovery does on a provider it cannot
+ * load. Run as anything else, it is the Boost stand-in.
+ */
+function testbenchScript(string $behaviour, string $voice, int $discoveryExit): string
+{
+    $discover = match ($discoveryExit) {
+        0 => <<<PHP
+            \$run = ['arguments' => array_slice(\$argv, 1), 'boost ran' => is_file('boost.ran')];
+            file_put_contents('bootstrap/cache/packages.php', json_encode(\$run));
+            PHP,
+        default => <<<PHP
+            echo 'Discovery stand-in: <error>Class "Provider" not found</error>';
+            PHP,
+    };
+    $exit = "exit({$discoveryExit});";
+
+    return "if ((\$argv[1] ?? null) === 'package:discover') { {$discover} {$exit} }\n"
+        . boostScript($behaviour, $voice);
+}
+
+/**
+ * What the Testbench stand-in recorded when it rebuilt the discovery cache.
+ *
+ * @return array<string, mixed>
+ */
+function discoveryRun(string $project): array
+{
+    return json_decode(
+        (string) file_get_contents("{$project}/bootstrap/cache/packages.php"),
+        associative: true,
+    );
+}
+
+/**
  * The Boost command, run straight through PHP. The trailing `--` hands an
  * appended flag to the script, not to PHP.
  */
@@ -113,6 +150,7 @@ function boostStandIn(string $behaviour, string $voice = ''): string
  * - `boost`: what the Boost stand-in does; `voice`: SILENT to print nothing.
  * - `app`: false for a project with no artisan of its own.
  * - `testbench`: true to install a Testbench that runs the Boost stand-in.
+ * - `discoveryExit`: the exit code of the Testbench stand-in's `package:discover`.
  * - `paths`: merged into the tracked paths of the package.
  * - `manifest`, `captured`, `packageManifest`: the three shipped manifests.
  * - `sources`: files written into the package, path => contents.
@@ -134,7 +172,11 @@ function makeConsumer(array $options = []): array
             false => [],
         },
         ...match (data_get($options, 'testbench', false)) {
-            true => [ProjectKind::TESTBENCH => "<?php\n" . boostScript($behaviour, $voice)],
+            true => [ProjectKind::TESTBENCH => "<?php\n" . testbenchScript(
+                $behaviour,
+                $voice,
+                data_get($options, 'discoveryExit', 0),
+            )],
             false => [],
         },
     ]);
@@ -164,6 +206,7 @@ function consumerConfig(array $options): array
         'hooks' => [
             'command' => data_get($options, 'command', $boost),
             'interactive_command' => data_get($options, 'interactiveCommand', "{$boost} attached"),
+            'discover_command' => escapeshellarg(PHP_BINARY) . ' artisan package:discover',
             'description' => 'Composing Laravel Boost guidelines and skills...',
         ],
         'package' => $shipped->entries(PackageConfig::PACKAGE),

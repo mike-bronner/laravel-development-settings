@@ -36,9 +36,17 @@ return [
     // and not save them. They are two keys, not one with the flag added in
     // code, so a plugin still running from before an update keeps
     // `--no-interaction`.
+    //
+    // `discover_command` runs captured, before Boost, in a package repository
+    // only. The shim roots the app at the repository, so Laravel reads the
+    // repository's bootstrap/cache/packages.php, and builds it only when it
+    // is missing. A provider installed since then would not load while Boost
+    // runs, and the repository's own `testbench package:discover` script is
+    // not rooted. An app's own Composer scripts rebuild its cache.
     'hooks' => [
         'command' => 'php artisan boost:install --no-interaction',
         'interactive_command' => 'php artisan boost:install',
+        'discover_command' => 'php artisan package:discover',
         'description' => 'Composing Laravel Boost...',
     ],
 

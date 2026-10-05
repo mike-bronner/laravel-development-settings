@@ -11,10 +11,15 @@ namespace MikeBronner\DevelopmentSettings\Support;
  * `command` runs captured, and `interactive_command` runs on the terminal.
  * They are two keys, not one with a flag added in code, so a plugin still
  * running from before an update keeps `--no-interaction`.
+ *
+ * `discover_command` rebuilds a package repository's discovery cache before
+ * Boost runs there, captured.
  */
 final class BoostHooks
 {
     public const INSTALL_COMMAND = 'php artisan boost:install';
+
+    public const DISCOVER_COMMAND = 'php artisan package:discover';
 
     private const DESCRIPTION = 'Composing Laravel Boost...';
 
@@ -33,6 +38,11 @@ final class BoostHooks
     public function interactiveCommand(): string
     {
         return data_get($this->hooks, 'interactive_command') ?? self::INSTALL_COMMAND;
+    }
+
+    public function discoverCommand(): string
+    {
+        return data_get($this->hooks, 'discover_command') ?? self::DISCOVER_COMMAND;
     }
 
     public function description(): string
