@@ -15,7 +15,7 @@ afterEach(function (): void {
 
 it('removes a fingerprint file the old runner wrote', function (): void {
     file_put_contents($this->path, md5('sources') . "\n");
-    $fingerprint = new LegacyFingerprint();
+    $fingerprint = new LegacyFingerprint;
 
     expect($fingerprint->isStale($this->project))->toBeTrue();
 
@@ -25,7 +25,7 @@ it('removes a fingerprint file the old runner wrote', function (): void {
 });
 
 it('reports nothing, and removes nothing, when there is no fingerprint file', function (): void {
-    $fingerprint = new LegacyFingerprint();
+    $fingerprint = new LegacyFingerprint;
     $fingerprint->remove($this->project);
 
     expect($fingerprint->isStale($this->project))->toBeFalse();
@@ -38,7 +38,7 @@ it('keeps anything but a bare fingerprint in a regular file', function (string $
         'a link to a fingerprint' => file_put_contents("{$this->project}/elsewhere", md5('sources'))
             && symlink('elsewhere', $this->path),
     };
-    $fingerprint = new LegacyFingerprint();
+    $fingerprint = new LegacyFingerprint;
     $fingerprint->remove($this->project);
 
     expect([$fingerprint->isStale($this->project), file_exists($this->path)])->toBe([false, true]);

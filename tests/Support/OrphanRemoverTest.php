@@ -20,7 +20,7 @@ it('removes the file and every directory it leaves empty, up to the project', fu
         ));
 
     try {
-        (new OrphanRemover())->remove($this->project, 'a/b/c/orphan.md');
+        (new OrphanRemover)->remove($this->project, 'a/b/c/orphan.md');
     } finally {
         restore_error_handler();
     }
@@ -32,7 +32,7 @@ it('removes the file and every directory it leaves empty, up to the project', fu
 it('removes a file at the project root and leaves the project itself', function (): void {
     seedFiles($this->project, ['orphan.md' => 'x']);
 
-    (new OrphanRemover())->remove($this->project, 'orphan.md');
+    (new OrphanRemover)->remove($this->project, 'orphan.md');
 
     expect([file_exists("{$this->project}/orphan.md"), is_dir($this->project)])
         ->toBe([false, true]);
@@ -41,7 +41,7 @@ it('removes a file at the project root and leaves the project itself', function 
 it('tidies the empty directories of a file already gone', function (): void {
     mkdir("{$this->project}/a/b", recursive: true);
 
-    (new OrphanRemover())->remove($this->project, 'a/b/orphan.md');
+    (new OrphanRemover)->remove($this->project, 'a/b/orphan.md');
 
     expect(is_dir("{$this->project}/a"))->toBeFalse();
 });

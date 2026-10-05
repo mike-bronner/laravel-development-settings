@@ -18,7 +18,7 @@ function shippedConfig(): PackageConfig
 
 function shippedManifest(string $file = 'manifest.json'): Manifest
 {
-    return (new ManifestReader())->read(REPOSITORY_ROOT . "/{$file}");
+    return (new ManifestReader)->read(REPOSITORY_ROOT . "/{$file}");
 }
 
 /**
@@ -30,7 +30,7 @@ function shippedFiles(string $group): array
 {
     $entries = data_get(shippedConfig()->entries(PackageConfig::PACKAGE), 'files');
 
-    return (new FileDiscovery())->trackedPaths(match ($group) {
+    return (new FileDiscovery)->trackedPaths(match ($group) {
         'package' => $entries,
         default => data_get(shippedConfig()->paths(), 'files'),
     });

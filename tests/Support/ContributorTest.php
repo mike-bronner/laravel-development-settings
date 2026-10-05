@@ -22,7 +22,7 @@ afterEach(function (): void {
 });
 
 it('does nothing when there are no modified files', function (): void {
-    $process = new RecordingProcess();
+    $process = new RecordingProcess;
 
     $result = (new Contributor($process))->open([], 'contribute/x', $this->cloneDir);
 
@@ -119,12 +119,12 @@ it('stops at the step that fails, and says which', function (string $step, strin
 ]);
 
 it('names the branch after the project and the time', function (): void {
-    expect((new Contributor(new RecordingProcess()))->branchFor('/work/My App'))
+    expect((new Contributor(new RecordingProcess))->branchFor('/work/My App'))
         ->toMatch('/^contribute\/My-App-\d{14}$/');
 });
 
 it('clones into a fresh directory each time', function (): void {
-    $contributor = new Contributor(new RecordingProcess());
+    $contributor = new Contributor(new RecordingProcess);
 
     expect($contributor->cloneDirectory())->toStartWith(sys_get_temp_dir() . '/devset-contribute-')
         ->not

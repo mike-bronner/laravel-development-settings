@@ -112,7 +112,7 @@ final class BoostRun
         private BoostHooks $hooks,
         private string $projectDir,
         private array $directRequirements = [],
-        private ConsoleStyle $style = new ConsoleStyle(),
+        private ConsoleStyle $style = new ConsoleStyle,
     ) {
     }
 
@@ -125,9 +125,9 @@ final class BoostRun
      */
     public function register(): void
     {
-        $registrar = new BoostRegistrar();
+        $registrar = new BoostRegistrar;
 
-        $this->registration = match ((new ProjectKind())->composesBoost($this->projectDir)) {
+        $this->registration = match ((new ProjectKind)->composesBoost($this->projectDir)) {
             true => $registrar->register(
                 projectDir: $this->projectDir,
                 package: InstalledPackage::NAME,
@@ -192,7 +192,7 @@ final class BoostRun
             false => $this->writeError('comment', $cleanCodeNotice),
         };
 
-        $composes = (new ProjectKind())->composesBoost($this->projectDir);
+        $composes = (new ProjectKind)->composesBoost($this->projectDir);
         $notComposable = sprintf(self::REFUSAL['not composable'], ProjectKind::TESTBENCH);
         $unreadable = sprintf(self::REFUSAL['unreadable'], BoostRegistrar::FILE);
         $isUnreadable = $this->registration === BoostRegistrar::UNREADABLE;
@@ -207,7 +207,7 @@ final class BoostRun
 
     private function guardAndCompose(): void
     {
-        $hazards = (new GuidelineGuard())->hazards($this->projectDir);
+        $hazards = (new GuidelineGuard)->hazards($this->projectDir);
 
         match ($hazards) {
             [] => $this->discoverAndCompose(),
@@ -221,7 +221,7 @@ final class BoostRun
             ->isInteractive() && $this->terminal
             ->isAttached();
 
-        match ((new ProjectKind())->receivesShim($this->projectDir)) {
+        match ((new ProjectKind)->receivesShim($this->projectDir)) {
             true => $this->discoverPackages(),
             false => null,
         };
@@ -240,7 +240,7 @@ final class BoostRun
     {
         $this->inputOutput
             ->write("{$this->line(self::DISCOVERY['running'])} ", newline: false);
-        $result = (new SystemProcess())->capture(
+        $result = (new SystemProcess)->capture(
                 command: $this->hooks->discoverCommand(),
                 workingDirectory: $this->projectDir,
             );
@@ -284,7 +284,7 @@ final class BoostRun
         $startedAt = time();
 
         $inputOutput->write($this->line($this->hooks->description()));
-        $exitCode = (new SystemProcess())->passthru($this->hooks->interactiveCommand());
+        $exitCode = (new SystemProcess)->passthru($this->hooks->interactiveCommand());
         $inputOutput->write('  Laravel Boost ', newline: false);
 
         $this->verify(
@@ -304,7 +304,7 @@ final class BoostRun
     private function composeCaptured(): void
     {
         $inputOutput = $this->inputOutput;
-        $hasAgents = (new BoostRegistrar())->hasAgents($this->projectDir);
+        $hasAgents = (new BoostRegistrar)->hasAgents($this->projectDir);
         $noAgents = sprintf(
                 self::TEXT['no agents'],
                 BoostRegistrar::FILE,
@@ -321,7 +321,7 @@ final class BoostRun
         $inputOutput->write("{$description} ", newline: false);
 
         $this->verify(
-                (new SystemProcess())->capture(command: $this->hooks->command() . self::FEATURES),
+                (new SystemProcess)->capture(command: $this->hooks->command() . self::FEATURES),
                 $startedAt,
                 sprintf(self::TEXT['captured next step'], BoostHooks::INSTALL_COMMAND),
                 self::TEXT['captured nothing composed'],
@@ -342,7 +342,7 @@ final class BoostRun
         match ($result->failed()) {
             true => $this->fail(sprintf(self::TEXT['exited'], $nextStep), $result),
             false => $this->verifyComposed(
-                (new GuidelineGuard())->composedBlocks($this->projectDir, $startedAt),
+                (new GuidelineGuard)->composedBlocks($this->projectDir, $startedAt),
                 $result,
                 $nothingComposed,
             ),

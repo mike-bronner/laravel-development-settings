@@ -28,7 +28,7 @@ final class Publisher
         private string $projectDir,
         private string $packageDir,
         private array $directRequirements = [],
-        private Summary $summary = new Summary(),
+        private Summary $summary = new Summary,
     ) {
     }
 
@@ -62,7 +62,7 @@ final class Publisher
             ]),
         ]);
 
-        $tally = new Tally();
+        $tally = new Tally;
         $trackedFiles->settle(new Consent($this->inputOutput), $tally);
         $tally->add(Tally::REMOVED, count($legacyLines));
         $boost->count($tally);

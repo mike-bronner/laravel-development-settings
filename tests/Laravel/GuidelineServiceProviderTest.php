@@ -8,7 +8,7 @@ use MikeBronner\DevelopmentSettings\Tests\Fixtures\ArrayConfig;
 
 beforeEach(function (): void {
     $this->boot = function (array $config): ArrayConfig {
-        $app = new Container();
+        $app = new Container;
         $repository = new ArrayConfig($config);
         $app->instance('config', $repository);
         (new GuidelineServiceProvider($app))->boot();

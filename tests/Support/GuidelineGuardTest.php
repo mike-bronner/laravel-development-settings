@@ -8,7 +8,7 @@ const BEFORE_THE_RUN = 60;
 
 beforeEach(function (): void {
     $this->project = makeTempDir();
-    $this->blocks = fn (int $since): array => (new GuidelineGuard())
+    $this->blocks = fn (int $since): array => (new GuidelineGuard)
         ->composedBlocks($this->project, $since);
 });
 
@@ -19,7 +19,7 @@ afterEach(function (): void {
 it('passes a file Boost manages, and one never composed into', function (string $agentFile): void {
     seedFiles($this->project, ['CLAUDE.md' => $agentFile]);
 
-    expect((new GuidelineGuard())->hazards($this->project))->toBe([]);
+    expect((new GuidelineGuard)->hazards($this->project))->toBe([]);
 })->with([
     'managed by Boost' => [managedAgentFile()],
     'no opening tag, so Boost appends' => ["Nothing generated here yet.\n"],
@@ -28,7 +28,7 @@ it('passes a file Boost manages, and one never composed into', function (string 
 it('refuses a file whose prose names the opening tag before the block', function (): void {
     seedFiles($this->project, ['CLAUDE.md' => armedAgentFile()]);
 
-    $hazards = (new GuidelineGuard())->hazards($this->project);
+    $hazards = (new GuidelineGuard)->hazards($this->project);
 
     expect(data_get($hazards, ['CLAUDE.md']))
         ->toContain('holds 2', 'between the first tag and the next closing tag');
@@ -37,7 +37,7 @@ it('refuses a file whose prose names the opening tag before the block', function
 it('refuses a file with no closing tag after the opening one', function (string $agentFile): void {
     seedFiles($this->project, ['AGENTS.md' => $agentFile]);
 
-    $hazards = (new GuidelineGuard())->hazards($this->project);
+    $hazards = (new GuidelineGuard)->hazards($this->project);
 
     expect(data_get($hazards, ['AGENTS.md']))->toContain('no closing tag after it');
 })->with([
@@ -62,7 +62,7 @@ it('examines every markdown file outside dependencies and history', function ():
         '.git/description.md' => armedAgentFile(),
     ]);
 
-    expect(array_keys((new GuidelineGuard())->hazards($this->project)))->toBe([
+    expect(array_keys((new GuidelineGuard)->hazards($this->project)))->toBe([
         '.cursor/rules/boost.mdc',
         '.github/copilot-instructions.md',
         'CLAUDE.md',
@@ -79,7 +79,7 @@ it('does not read through a linked directory or a linked file', function (): voi
     symlink("{$package}/.ai", "{$this->project}/.ai");
     symlink("{$package}/resources/boost/CLAUDE.md", "{$this->project}/CLAUDE.md");
 
-    expect((new GuidelineGuard())->hazards($this->project))->toBe([]);
+    expect((new GuidelineGuard)->hazards($this->project))->toBe([]);
 });
 
 it('refuses a file it cannot read, since it cannot clear it', function (): void {
@@ -87,7 +87,7 @@ it('refuses a file it cannot read, since it cannot clear it', function (): void 
     chmod("{$this->project}/CLAUDE.md", MODE_UNREADABLE);
 
     $isReadable = is_readable("{$this->project}/CLAUDE.md");
-    $hazards = (new GuidelineGuard())->hazards($this->project);
+    $hazards = (new GuidelineGuard)->hazards($this->project);
     chmod("{$this->project}/CLAUDE.md", MODE_WRITABLE);
 
     match ($isReadable) {
@@ -97,7 +97,7 @@ it('refuses a file it cannot read, since it cannot clear it', function (): void 
 });
 
 it('reports nothing for a directory that does not exist', function (): void {
-    expect((new GuidelineGuard())->hazards("{$this->project}/absent"))->toBe([]);
+    expect((new GuidelineGuard)->hazards("{$this->project}/absent"))->toBe([]);
 });
 
 it('sees a block composed during the run', function (): void {

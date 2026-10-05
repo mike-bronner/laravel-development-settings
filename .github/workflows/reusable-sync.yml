@@ -62,7 +62,7 @@ jobs:
             require "$package/src/Support/ReverseSync.php";
 
             $paths = (require "$package/config/development-settings.php")["paths"];
-            $manifest = (new MikeBronner\DevelopmentSettings\Support\ManifestReader())->read("$package/manifest.json");
+            $manifest = (new MikeBronner\DevelopmentSettings\Support\ManifestReader)->read("$package/manifest.json");
 
             try {
               $changed = (new MikeBronner\DevelopmentSettings\Support\ReverseSync($manifest))

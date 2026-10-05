@@ -91,7 +91,7 @@ it('checks each file inside a tracked directory on its own', function (): void {
 it('refuses an empty manifest before it selects or writes', function (string $method): void {
     seedFiles($this->project, ['pint.json' => 'edited']);
     file_put_contents("{$this->package}/manifest.json", "<<<<<<< HEAD\n{}\n");
-    $sync = new ReverseSync((new ManifestReader())->read("{$this->package}/manifest.json"));
+    $sync = new ReverseSync((new ManifestReader)->read("{$this->package}/manifest.json"));
 
     expect(fn () => match ($method) {
         'changedFiles' => $sync->changedFiles($this->project, ['files' => ['pint.json']]),
@@ -183,7 +183,7 @@ it('reads each changed project file once while exporting it', function (): void 
     class_exists(FileDiscovery::class);
     class_exists(ManagedSection::class);
 
-    $reads = (new ReadCounter())
+    $reads = (new ReadCounter)
         ->watch(fn (): array => $this->gitignore->export($this->project, $this->package, $paths));
 
     expect($reads)->toBe(["{$root}/.gitignore" => 1, "{$root}/pint.json" => 1])

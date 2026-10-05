@@ -68,8 +68,8 @@ final class FileSync
     public function __construct(
         private Manifest $manifest,
         private array $managed = [],
-        private CheckedFile $file = new CheckedFile(),
-        private ManagedSection $section = new ManagedSection(),
+        private CheckedFile $file = new CheckedFile,
+        private ManagedSection $section = new ManagedSection,
     ) {
     }
 

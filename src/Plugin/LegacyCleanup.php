@@ -23,7 +23,7 @@ final class LegacyCleanup
     public function __construct(
         private string $projectDir,
         private string $packageDir,
-        private LegacyFingerprint $fingerprint = new LegacyFingerprint(),
+        private LegacyFingerprint $fingerprint = new LegacyFingerprint,
     ) {
     }
 

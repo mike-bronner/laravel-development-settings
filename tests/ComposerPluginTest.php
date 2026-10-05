@@ -10,7 +10,7 @@ use MikeBronner\DevelopmentSettings\Support\InstalledPackage;
 use MikeBronner\DevelopmentSettings\Support\PackageConfig;
 use Symfony\Component\Console\Output\OutputInterface;
 
-const UNDEFINED_METHOD = 'return (new stdClass())->passthru();';
+const UNDEFINED_METHOD = 'return (new stdClass)->passthru();';
 
 const RE_RUN = "Run \"composer update\" again to finish setup.";
 
@@ -32,12 +32,12 @@ it('captures before an update and publishes after install and update', function 
 
 it('does nothing when Composer activates, deactivates or uninstalls it', function (): void {
     $this->project = makeTempDir();
-    $plugin = new ComposerPlugin();
-    $output = new BufferIO();
+    $plugin = new ComposerPlugin;
+    $output = new BufferIO;
 
-    $plugin->activate(new Composer(), $output);
-    $plugin->deactivate(new Composer(), $output);
-    $plugin->uninstall(new Composer(), $output);
+    $plugin->activate(new Composer, $output);
+    $plugin->deactivate(new Composer, $output);
+    $plugin->uninstall(new Composer, $output);
 
     expect($output->getOutput())->toBe('');
 });

@@ -24,7 +24,7 @@ beforeEach(function (): void {
             ]);
             PHP,
     ]);
-    $this->runShim = fn (string $prefix = ''): mixed => (new SystemProcess())
+    $this->runShim = fn (string $prefix = ''): mixed => (new SystemProcess)
         ->capture($prefix . escapeshellarg(PHP_BINARY) . ' artisan boost:mcp', $this->project);
 });
 
@@ -33,7 +33,7 @@ afterEach(function (): void {
 });
 
 it('carries the marker that tells it from an app artisan', function (): void {
-    expect((new ProjectKind())->isApp($this->project))->toBeFalse();
+    expect((new ProjectKind)->isApp($this->project))->toBeFalse();
 });
 
 it('boots Testbench rooted at the repository, and creates what Testbench needs', function (): void {
@@ -75,13 +75,13 @@ it('stays out of the dist archive under the .gitattributes the sync writes', fun
     $source = REPOSITORY_ROOT . '/resources/project/gitattributes';
     $gitattributes = (string) file_get_contents($source);
     seedFiles($this->project, [
-        '.gitattributes' => (new ManagedSection())
+        '.gitattributes' => (new ManagedSection)
             ->compose(managed: $gitattributes, project: "/tests export-ignore\n"),
         'tests/ExampleTest.php' => "<?php\n",
         'composer.json' => "{}\n",
     ]);
     $git = 'git -c user.name=test -c user.email=test@example.com -c commit.gpgsign=false ';
-    $process = new SystemProcess();
+    $process = new SystemProcess;
     $setUp = collect(['init -q', 'add -A', 'commit -q -m initial'])
         ->map(fn (string $command): int => $process->run($git . $command, $this->project))
         ->all();

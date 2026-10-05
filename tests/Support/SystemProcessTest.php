@@ -23,14 +23,14 @@ it('captures stdout and stderr together, in the order written, and the exit', fu
         echo 'one', PHP_EOL; fflush(STDOUT); fwrite(STDERR, 'two' . PHP_EOL); echo 'three'; exit(4);
         PHP;
 
-    $result = (new SystemProcess())->capture(phpCommand($script));
+    $result = (new SystemProcess)->capture(phpCommand($script));
 
     expect([$result->exitCode(), $result->failed(), $result->output()])
         ->toBe([MIXED_EXIT, true, "one\ntwo\nthree"]);
 });
 
 it('answers only the exit code through run()', function (): void {
-    $process = new SystemProcess();
+    $process = new SystemProcess;
 
     expect($process->run(phpCommand('fwrite(STDERR, PHP_EOL); exit(0);')))->toBe(0)
         ->and($process->run(phpCommand('exit(3);')))
@@ -38,7 +38,7 @@ it('answers only the exit code through run()', function (): void {
 });
 
 it('runs in the working directory', function (): void {
-    $result = (new SystemProcess())->capture(phpCommand('echo getcwd();'), $this->directory);
+    $result = (new SystemProcess)->capture(phpCommand('echo getcwd();'), $this->directory);
 
     expect($result->output())->toBe(realpath($this->directory));
 });
@@ -56,7 +56,7 @@ it('drains a child that fills the stderr pipe first, without deadlock', function
         echo 'done';
         PHP;
 
-    $result = (new SystemProcess())->capture(phpCommand($script));
+    $result = (new SystemProcess)->capture(phpCommand($script));
 
     expect($result->exitCode())->toBe(0)
         ->and(strlen($result->output()))
@@ -77,7 +77,7 @@ it('runs passthru on the stdin, stdout and stderr of this process', function ():
         \$id = fn (\$stream) => fstat(\$stream)['dev'] . ':' . fstat(\$stream)['ino'];
         exit(implode(',', [\$id(STDIN), \$id(STDOUT), \$id(STDERR)]) === {$expected} ? 0 : 5);
         PHP;
-    $process = new SystemProcess();
+    $process = new SystemProcess;
 
     expect($process->passthru(phpCommand($script)))->toBe(0)
         ->and($process->passthru(phpCommand('exit(3);')))
@@ -87,7 +87,7 @@ it('runs passthru on the stdin, stdout and stderr of this process', function ():
 it('runs a passthru command in the working directory', function (): void {
     $directory = var_export(realpath($this->directory), true);
 
-    $exitCode = (new SystemProcess())
+    $exitCode = (new SystemProcess)
         ->passthru(phpCommand("exit(getcwd() === {$directory} ? 0 : 6);"), $this->directory);
 
     expect($exitCode)->toBe(0);
@@ -97,7 +97,7 @@ it('reports a command it could not start, as a failure', function (): void {
     set_error_handler(static fn (): bool => true);
 
     try {
-        $result = (new SystemProcess())->capture('true', "{$this->directory}/missing");
+        $result = (new SystemProcess)->capture('true', "{$this->directory}/missing");
     } finally {
         restore_error_handler();
     }

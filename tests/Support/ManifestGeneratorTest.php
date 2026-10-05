@@ -23,7 +23,7 @@ it('records every source it discovers, and keeps every checksum it knew', functi
     seedFiles($this->package, $sources);
     (new Manifest($known))->dump($this->manifestPath);
 
-    $manifest = (new ManifestGenerator())
+    $manifest = (new ManifestGenerator)
         ->generate($this->package, ['paths' => $paths], $this->manifestPath);
 
     expect($manifest->toArray())->toBe($expected);
@@ -67,5 +67,5 @@ it('records every source it discovers, and keeps every checksum it knew', functi
 ]);
 
 it('refuses a config that names no paths', function (): void {
-    (new ManifestGenerator())->generate($this->package, [], $this->manifestPath);
+    (new ManifestGenerator)->generate($this->package, [], $this->manifestPath);
 })->throws(InvalidArgumentException::class, 'names no paths');

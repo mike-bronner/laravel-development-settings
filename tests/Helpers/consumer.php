@@ -166,7 +166,7 @@ function makeConsumer(array $options = []): array
     $voice = data_get($options, 'voice', '');
 
     seedFiles($project, [
-        'composer.json' => json_encode(['require-dev' => new stdClass()]) . "\n",
+        'composer.json' => json_encode(['require-dev' => new stdClass]) . "\n",
         ...match (data_get($options, 'app', true)) {
             true => ['artisan' => "#!/usr/bin/env php\n"],
             false => [],
@@ -226,9 +226,9 @@ function consumerConfig(array $options): array
 function consumerManifests(array $options): array
 {
     return [
-        'manifest.json' => json_encode(data_get($options, 'manifest', new stdClass())),
+        'manifest.json' => json_encode(data_get($options, 'manifest', new stdClass)),
         ContributionDetector::MANIFEST_FILE => json_encode(
-                data_get($options, 'captured', new stdClass()),
+                data_get($options, 'captured', new stdClass),
             ),
         ProjectKind::MANIFEST_FILE => json_encode(
                 data_get($options, 'packageManifest', shippedPackageManifest()),
@@ -259,13 +259,13 @@ function packageSources(): array
  */
 function publishIn(string $project, string $run = NON_INTERACTIVE, string $hook = 'publish'): string
 {
-    $inputOutput = new BufferIO();
+    $inputOutput = new BufferIO;
     $isInteractive = in_array($run, [INTERACTIVE, INTERACTIVE_ON_A_TERMINAL], strict: true);
     $terminalRuns = [INTERACTIVE_ON_A_TERMINAL, NON_INTERACTIVE_ON_A_TERMINAL];
     $onTerminal = in_array($run, $terminalRuns, strict: true);
     $terminal = match ($onTerminal) {
-        true => new AttachedTerminal(),
-        false => new DetachedTerminal(),
+        true => new AttachedTerminal,
+        false => new DetachedTerminal,
     };
     $workingDirectory = (string) getcwd();
 
@@ -295,11 +295,11 @@ function dispatchIn(
 ): string {
     $inputOutput = new BufferIO(verbosity: $verbosity);
     $composer = composerIn($project);
-    $dispatching = new PartialComposer();
+    $dispatching = new PartialComposer;
     $dispatching->setPackage($composer->getPackage());
     $dispatching->setConfig(new Config(useEnvironment: false, baseDir: $project));
     $dispatcher = new EventDispatcher($dispatching, $inputOutput);
-    $dispatcher->addSubscriber(new ComposerPlugin(new DetachedTerminal()));
+    $dispatcher->addSubscriber(new ComposerPlugin(new DetachedTerminal));
     $workingDirectory = (string) getcwd();
 
     chdir($project);
@@ -370,8 +370,8 @@ function composerIn(string $project): Composer
         true => json_decode((string) file_get_contents($composerFile), associative: true),
         false => [],
     };
-    $composer = new Composer();
-    $composer->setPackage((new ArrayLoader())->load(
+    $composer = new Composer;
+    $composer->setPackage((new ArrayLoader)->load(
             ['name' => '__root__', 'version' => '1.0.0', ...$config],
             RootPackage::class,
         ));
@@ -476,6 +476,6 @@ function withKeyPresses(array $keys, Closure $callback): mixed
     try {
         return $callback();
     } finally {
-        Prompt::setOutput(new ConsoleOutput());
+        Prompt::setOutput(new ConsoleOutput);
     }
 }

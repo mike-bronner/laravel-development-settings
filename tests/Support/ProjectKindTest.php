@@ -6,7 +6,7 @@ use MikeBronner\DevelopmentSettings\Support\ProjectKind;
 
 beforeEach(function (): void {
     $this->project = makeTempDir('devset-repository-');
-    $this->kind = new ProjectKind();
+    $this->kind = new ProjectKind;
 });
 
 afterEach(function (): void {

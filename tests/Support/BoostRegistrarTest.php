@@ -29,7 +29,7 @@ it('lists the package, drops only the replaced name, and keeps the rest', functi
         default => file_put_contents($this->config, json_encode($before)),
     };
 
-    $result = (new BoostRegistrar())->register($this->project, REGISTERED_NAME, $replaces);
+    $result = (new BoostRegistrar)->register($this->project, REGISTERED_NAME, $replaces);
 
     expect($result)->toBe(BoostRegistrar::REGISTERED)
         ->and(json_decode((string) file_get_contents($this->config), associative: true))
@@ -68,7 +68,7 @@ it('leaves the file byte for byte as it was, unless it has to change it', functi
 ): void {
     file_put_contents($this->config, $contents);
 
-    expect((new BoostRegistrar())->register($this->project, REGISTERED_NAME, [REPLACED_NAME]))
+    expect((new BoostRegistrar)->register($this->project, REGISTERED_NAME, [REPLACED_NAME]))
         ->toBe($result)
         ->and(file_get_contents($this->config))
         ->toBe($contents);
@@ -86,7 +86,7 @@ it('leaves the file byte for byte as it was, unless it has to change it', functi
 ]);
 
 it('creates a config listing its own name, then each package alongside', function (): void {
-    $result = (new BoostRegistrar())
+    $result = (new BoostRegistrar)
         ->register($this->project, REGISTERED_NAME, [], [ALONGSIDE_NAME]);
 
     expect($result)->toBe(BoostRegistrar::REGISTERED)
@@ -100,7 +100,7 @@ it('adds each package alongside that is missing, once', function (
 ): void {
     file_put_contents($this->config, json_encode($before));
 
-    (new BoostRegistrar())
+    (new BoostRegistrar)
         ->register($this->project, REGISTERED_NAME, [REPLACED_NAME], [ALONGSIDE_NAME]);
 
     expect(json_decode((string) file_get_contents($this->config), associative: true))
@@ -124,7 +124,7 @@ it('leaves the file alone when every package is already listed', function (): vo
     $contents = json_encode(['packages' => [ALONGSIDE_NAME, 'acme/other', REGISTERED_NAME]]);
     file_put_contents($this->config, $contents);
 
-    expect((new BoostRegistrar())->register($this->project, REGISTERED_NAME, [], [ALONGSIDE_NAME]))
+    expect((new BoostRegistrar)->register($this->project, REGISTERED_NAME, [], [ALONGSIDE_NAME]))
         ->toBe(BoostRegistrar::UNCHANGED)
         ->and(file_get_contents($this->config))
         ->toBe($contents);
@@ -133,7 +133,7 @@ it('leaves the file alone when every package is already listed', function (): vo
 it('writes nothing alongside into a file it cannot read', function (): void {
     file_put_contents($this->config, "{ this is not json\n");
 
-    expect((new BoostRegistrar())->register($this->project, REGISTERED_NAME, [], [ALONGSIDE_NAME]))
+    expect((new BoostRegistrar)->register($this->project, REGISTERED_NAME, [], [ALONGSIDE_NAME]))
         ->toBe(BoostRegistrar::UNREADABLE)
         ->and(file_get_contents($this->config))
         ->toBe("{ this is not json\n");
@@ -142,7 +142,7 @@ it('writes nothing alongside into a file it cannot read', function (): void {
 it("writes Boost's formatting contract, so Boost rewriting it causes no churn", function (): void {
     file_put_contents($this->config, json_encode(['guidelines' => true, 'agents' => []]));
 
-    (new BoostRegistrar())->register($this->project, REGISTERED_NAME);
+    (new BoostRegistrar)->register($this->project, REGISTERED_NAME);
 
     expect(file_get_contents($this->config))->toBe(<<<JSON
         {
@@ -159,7 +159,7 @@ it("writes Boost's formatting contract, so Boost rewriting it causes no churn", 
 it('reports agents when the config names at least one', function (): void {
     file_put_contents($this->config, json_encode(['agents' => ['claude_code']]));
 
-    expect((new BoostRegistrar())->hasAgents($this->project))->toBeTrue();
+    expect((new BoostRegistrar)->hasAgents($this->project))->toBeTrue();
 });
 
 it('reports no agents when the config names none', function (?string $contents): void {
@@ -168,7 +168,7 @@ it('reports no agents when the config names none', function (?string $contents):
         default => file_put_contents($this->config, $contents),
     };
 
-    expect((new BoostRegistrar())->hasAgents($this->project))->toBeFalse();
+    expect((new BoostRegistrar)->hasAgents($this->project))->toBeFalse();
 })->with([
     'no file' => [null],
     'packages only' => [json_encode(['packages' => [REGISTERED_NAME]])],

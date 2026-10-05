@@ -9,7 +9,7 @@ it('wraps text in the style it names', function (): void {
         <comment>  kept</comment>
         TEXT;
 
-    expect((new ConsoleStyle())->wrap('comment', '  kept'))->toBe($expected);
+    expect((new ConsoleStyle)->wrap('comment', '  kept'))->toBe($expected);
 });
 
 it('escapes a tag inside text from elsewhere, so it is printed', function (): void {
@@ -19,5 +19,5 @@ it('escapes a tag inside text from elsewhere, so it is printed', function (): vo
 
     $escaped = str_replace(['<', '>'], ['\\<', '\\>'], $text);
 
-    expect((new ConsoleStyle())->escape($text))->toBe($escaped);
+    expect((new ConsoleStyle)->escape($text))->toBe($escaped);
 });

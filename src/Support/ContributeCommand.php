@@ -30,7 +30,7 @@ final class ContributeCommand
         private string $packageDir,
         private mixed $output,
         private mixed $errors,
-        private Process $process = new SystemProcess(),
+        private Process $process = new SystemProcess,
     ) {
     }
 
@@ -41,10 +41,10 @@ final class ContributeCommand
     {
         $config = (new InstalledPackage($this->projectDir))->config($this->packageDir);
         $manifestPath = "{$this->packageDir}/" . ContributionDetector::MANIFEST_FILE;
-        $modified = (new ContributionDetector())->modified(
+        $modified = (new ContributionDetector)->modified(
                 packageDir: $this->packageDir,
                 directories: $config->entries(PackageConfig::CAPTURE),
-                sources: (new ManifestReader())->read($manifestPath),
+                sources: (new ManifestReader)->read($manifestPath),
                 ignore: $config->entries(PackageConfig::IGNORE),
             );
 

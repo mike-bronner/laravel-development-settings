@@ -9,7 +9,7 @@ it('says there is no terminal when its streams are pipes', function (): void {
     $autoload = var_export(REPOSITORY_ROOT . '/vendor/autoload.php', true);
     $terminal = SystemTerminal::class;
 
-    $result = (new SystemProcess())->capture(phpCommand(
+    $result = (new SystemProcess)->capture(phpCommand(
             "require {$autoload}; var_export((new {$terminal}())->isAttached());",
         ));
 

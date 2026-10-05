@@ -225,7 +225,7 @@ it('throws when a target cannot be written, and leaves it as it was', function (
 it('throws when a target directory cannot be created', function (): void {
     chmod($this->project, MODE_LOCKED_DIRECTORY);
 
-    expect(fn () => (new FileSync(new Manifest()))
+    expect(fn () => (new FileSync(new Manifest))
         ->write($this->project, '.github/workflows/sync.yml', "{$this->source}/sync.yml"))
         ->toThrow(RuntimeException::class, "Could not create {$this->project}/.github/workflows");
 

@@ -20,7 +20,7 @@ final class ManifestReader
     {
         return match (file_exists($path)) {
             true => new Manifest($this->decode((string) file_get_contents($path))),
-            false => new Manifest(),
+            false => new Manifest,
         };
     }
 

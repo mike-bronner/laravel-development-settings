@@ -7,7 +7,7 @@ use MikeBronner\DevelopmentSettings\Support\ManagedSection;
 const MARKERS_WHEN_DOUBLED = 2;
 
 it('splits at the marker', function (string $contents, string $managed, string $project): void {
-    $section = new ManagedSection();
+    $section = new ManagedSection;
 
     expect($section->split($contents))->toBe(['managed' => $managed, 'project' => $project])
         ->and($section->managedPart($contents))
@@ -30,7 +30,7 @@ it('splits at the marker', function (string $contents, string $managed, string $
 ]);
 
 it('splits nothing unless one line is the marker', function (string $contents, int $markers): void {
-    $section = new ManagedSection();
+    $section = new ManagedSection;
 
     expect([
         $section->split($contents),
@@ -46,7 +46,7 @@ it('splits nothing unless one line is the marker', function (string $contents, i
 ]);
 
 it('composes the source, the marker and the project part', function (): void {
-    $section = new ManagedSection();
+    $section = new ManagedSection;
     $composed = $section->compose(managed: "/vendor\n", project: "!AGENTS.md\n");
 
     expect($composed)->toBe(marked("/vendor\n", "\n!AGENTS.md\n"))
@@ -55,12 +55,12 @@ it('composes the source, the marker and the project part', function (): void {
 });
 
 it('composes an empty source as the marker alone', function (): void {
-    expect((new ManagedSection())->compose(managed: '', project: "!AGENTS.md\n"))
+    expect((new ManagedSection)->compose(managed: '', project: "!AGENTS.md\n"))
         ->toBe(marked('', "\n!AGENTS.md\n"));
 });
 
 it('refuses a source that does not end with a newline', function (): void {
-    (new ManagedSection())->compose(managed: '/vendor', project: '');
+    (new ManagedSection)->compose(managed: '/vendor', project: '');
 })->throws(LogicException::class, 'must end with a newline');
 
 it('names the package and says where project entries go and what is lost', function (): void {

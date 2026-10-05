@@ -79,7 +79,7 @@ final class GuidelineGuard
     private const UNCLOSED = "holds a \"%s\" tag with no closing tag after it, so composing"
         . ' appends a second block and the run after it replaces everything between the two';
 
-    public function __construct(private CheckedFile $file = new CheckedFile())
+    public function __construct(private CheckedFile $file = new CheckedFile)
     {
     }
 

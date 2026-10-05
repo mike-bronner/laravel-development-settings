@@ -20,7 +20,7 @@ final class SyncPlan
         private PackageConfig $config,
         private string $packageDir,
         private string $projectDir,
-        private ProjectKind $kind = new ProjectKind(),
+        private ProjectKind $kind = new ProjectKind,
     ) {
     }
 
@@ -55,7 +55,7 @@ final class SyncPlan
 
     public function manifest(): Manifest
     {
-        $reader = new ManifestReader();
+        $reader = new ManifestReader;
         $manifest = $reader->read("{$this->packageDir}/" . self::MANIFEST_FILE);
 
         return match ($this->receivesShim()) {
@@ -79,7 +79,7 @@ final class SyncPlan
      */
     private function discover(array $paths): array
     {
-        return (new FileDiscovery())->discover(
+        return (new FileDiscovery)->discover(
                 packageDir: $this->packageDir,
                 paths: $paths,
                 ignore: $this->config->entries(PackageConfig::IGNORE),

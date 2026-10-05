@@ -36,7 +36,7 @@ function pintFiles(array $files): string
         ->keys()
         ->map(escapeshellarg(...))
         ->implode(' ');
-    $result = (new SystemProcess())
+    $result = (new SystemProcess)
         ->capture(escapeshellarg(PHP_BINARY) . " {$pint} --config pint.json {$paths}", $project);
 
     expect($result->exitCode())->toBe(0, "Pint failed: {$result->output()}");

@@ -7,8 +7,8 @@ use Laravel\Prompts\Key;
 use MikeBronner\DevelopmentSettings\Plugin\Consent;
 
 beforeEach(function (): void {
-    $this->output = new BufferIO();
-    $this->interactive = new BufferIO();
+    $this->output = new BufferIO;
+    $this->interactive = new BufferIO;
     $this->interactive
         ->setUserInputs([]);
 });
