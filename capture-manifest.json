@@ -78,7 +78,8 @@
     "resources/boost/skills/laravel/references/pest-patterns.md": [
         "a4dd3b692d2d6757e6b2495ab394507a",
         "dd95c393720bc323c5ecfc1f5ec44d12",
-        "f2d680a4aea1e5e7c2edb06b16ba1292"
+        "f2d680a4aea1e5e7c2edb06b16ba1292",
+        "ff97026b36cb0e685e9d412ff9a1d530"
     ],
     "resources/boost/skills/laravel/references/policies.md": [
         "b66f6200b3437c0d5ce1b03e56a12015",
@@ -100,6 +101,7 @@
     ],
     "resources/boost/skills/security/SKILL.md": [
         "9830885ec000979bd0d05f01444064ca",
-        "b09f656647983bd1ea16be0a5433b454"
+        "b09f656647983bd1ea16be0a5433b454",
+        "6ba0701518519be305613df6feba5109"
     ]
 }

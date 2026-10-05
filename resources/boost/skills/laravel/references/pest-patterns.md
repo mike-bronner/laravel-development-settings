@@ -1,6 +1,6 @@
 # Pest Patterns & Syntax Reference
 
-Practical Pest 4 patterns for Laravel projects. For testing philosophy (when to mock, TDD workflow,
+Practical Pest 5 patterns for Laravel projects. For testing philosophy (when to mock, TDD workflow,
 test suite types), follow clean-code's `testing-*` guidelines.
 
 ## Table of Contents
@@ -437,6 +437,9 @@ test:
     - name: Run tests
       run: php artisan test --parallel --coverage --min=90
 ```
+
+The Test Impact Analysis baseline comes from the synced `tia-baseline.yml` workflow, not this one.
+The Pest Test Impact Analysis guideline (`06-pest-tia`) covers it.
 
 ### Execution Strategy
 

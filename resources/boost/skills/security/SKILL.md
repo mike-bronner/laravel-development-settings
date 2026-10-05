@@ -87,10 +87,9 @@ protected function casts(): array
 
 ### Database
 - [ ] No raw SQL with string concatenation
-- [ ] Every foreign key states its on-delete behaviour, chosen per relationship, with no default:
-      `restrictOnDelete()` for audit, PII/PHI and financial records, `cascadeOnDelete()` only for pure
-      children such as pivot rows, `nullOnDelete()` when the child survives without its parent. A
-      database cascade fires no Eloquent events or observers, so the audit log never sees it
+- [ ] Foreign keys on audit, PII/PHI and financial tables use `restrictOnDelete()`: a database cascade
+      fires no Eloquent events or observers, so the audit log never sees the delete. The `laravel`
+      skill's Database Conventions hold the full per-relationship rule
 - [ ] Soft deletes for auditable records (PHI/PII must be recoverable during retention)
 - [ ] Database credentials not in code (use env vars)
 
