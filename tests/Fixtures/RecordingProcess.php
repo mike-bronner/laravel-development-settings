@@ -85,14 +85,14 @@ final class RecordingProcess implements Process
     private function treeOf(string $directory): array
     {
         $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($directory, RecursiveDirectoryIterator::SKIP_DOTS),
-        );
+                new RecursiveDirectoryIterator($directory, RecursiveDirectoryIterator::SKIP_DOTS),
+            );
 
         return collect(iterator_to_array($iterator))
             ->mapWithKeys(static fn (SplFileInfo $file): array => [
                 substr($file->getPathname(), strlen($directory) + 1) => (string) file_get_contents(
-                    $file->getPathname(),
-                ),
+                        $file->getPathname(),
+                    ),
             ])
             ->sortKeys()
             ->all();

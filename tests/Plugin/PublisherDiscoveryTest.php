@@ -62,12 +62,13 @@ it('reports a failed discovery with its escaped output, and still runs Boost', f
     $output = publishIn($this->project);
 
     expect($output)->toContain(
-        'Rebuilding the package discovery cache... failed',
-        "Package discovery exited with an error. Run \"php artisan package:discover\" to see why:"
-            . ' a service provider installed since the cache was written may not load in Boost.',
-        $error,
-        'Composing Laravel Boost guidelines and skills... done',
-    );
+            'Rebuilding the package discovery cache... failed',
+            "Package discovery exited with an error. Run \"php artisan package:discover\" to see"
+                . ' why: a service provider installed since the cache was written may not load in'
+                . ' Boost.',
+            $error,
+            'Composing Laravel Boost guidelines and skills... done',
+        );
     expect(boostRan($this->project))->toBeTrue();
 });
 

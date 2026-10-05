@@ -77,10 +77,10 @@ final class ManifestFiles
 
         return collect($this->sources())
             ->map(fn (array $sources, string $file): Manifest => $generator->generate(
-                $this->packageDir,
-                $sources,
-                "{$this->packageDir}/{$file}",
-            ))
+                    $this->packageDir,
+                    $sources,
+                    "{$this->packageDir}/{$file}",
+                ))
             ->all();
     }
 

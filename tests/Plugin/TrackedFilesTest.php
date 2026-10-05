@@ -25,15 +25,15 @@ beforeEach(function (): void {
         'kept.md' => 'mine',
     ]);
     $this->files = new TrackedFiles(
-        new FileSync(new Manifest([
-            'known.md' => [md5('v1')],
-            'edited.md' => [md5('v1')],
-            'retired.md' => [md5('shipped')],
-            'kept.md' => [md5('shipped')],
-        ])),
-        $this->project,
-        $this->output,
-    );
+            new FileSync(new Manifest([
+                'known.md' => [md5('v1')],
+                'edited.md' => [md5('v1')],
+                'retired.md' => [md5('shipped')],
+                'kept.md' => [md5('shipped')],
+            ])),
+            $this->project,
+            $this->output,
+        );
     $this->files
         ->classify(collect(['new.md', 'known.md', 'edited.md'])
             ->mapWithKeys(fn (string $path): array => [$path => "{$this->source}/{$path}"])

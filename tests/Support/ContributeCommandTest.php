@@ -17,12 +17,12 @@ beforeEach(function (): void {
         'resources/boost/a.md' => 'a',
     ]);
     $this->run = fn (array $exitCodes): int => (new ContributeCommand(
-        '/work/app',
-        $this->package,
-        $this->output,
-        $this->errors,
-        new RecordingProcess(exitCodes: $exitCodes),
-    ))->run();
+            '/work/app',
+            $this->package,
+            $this->output,
+            $this->errors,
+            new RecordingProcess(exitCodes: $exitCodes),
+        ))->run();
     $this->streams = fn (): array => [
         (string) stream_get_contents($this->output, offset: 0),
         (string) stream_get_contents($this->errors, offset: 0),

@@ -42,11 +42,11 @@ final class ContributeCommand
         $config = (new InstalledPackage($this->projectDir))->config($this->packageDir);
         $manifestPath = "{$this->packageDir}/" . ContributionDetector::MANIFEST_FILE;
         $modified = (new ContributionDetector())->modified(
-            packageDir: $this->packageDir,
-            directories: $config->entries(PackageConfig::CAPTURE),
-            sources: (new ManifestReader())->read($manifestPath),
-            ignore: $config->entries(PackageConfig::IGNORE),
-        );
+                packageDir: $this->packageDir,
+                directories: $config->entries(PackageConfig::CAPTURE),
+                sources: (new ManifestReader())->read($manifestPath),
+                ignore: $config->entries(PackageConfig::IGNORE),
+            );
 
         return match ($modified) {
             [] => $this->nothingToContribute(),
@@ -78,11 +78,11 @@ final class ContributeCommand
         }
 
         ['status' => $status, 'message' => $message] = $contributor->open(
-            modified: $modified,
-            branch: $contributor->branchFor($this->projectDir),
-            cloneDir: $contributor->cloneDirectory(),
-            token: (string) getenv('DEVELOPER_SETTINGS_TOKEN'),
-        );
+                modified: $modified,
+                branch: $contributor->branchFor($this->projectDir),
+                cloneDir: $contributor->cloneDirectory(),
+                token: (string) getenv('DEVELOPER_SETTINGS_TOKEN'),
+            );
 
         $stream = match ($status) {
             self::SUCCEEDED => $this->output,

@@ -38,18 +38,18 @@ final class Publisher
         $legacyLines = (new LegacyCleanup($this->projectDir, $this->packageDir))
             ->clean($config->entries(PackageConfig::LEGACY_SYMLINKS));
         $trackedFiles = new TrackedFiles(
-            new FileSync($plan->manifest(), managed: $plan->managed()),
-            $this->projectDir,
-            $this->inputOutput,
-        );
+                new FileSync($plan->manifest(), managed: $plan->managed()),
+                $this->projectDir,
+                $this->inputOutput,
+            );
         $trackedFiles->classify($plan->files());
         $boost = new BoostRun(
-            $this->inputOutput,
-            $this->terminal,
-            $config->hooks(),
-            $this->projectDir,
-            $this->directRequirements,
-        );
+                $this->inputOutput,
+                $this->terminal,
+                $config->hooks(),
+                $this->projectDir,
+                $this->directRequirements,
+            );
         $boost->register();
         $trackedFiles->writeUnattended();
 

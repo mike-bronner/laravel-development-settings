@@ -126,9 +126,9 @@ function testbenchScript(string $behaviour, string $voice, int $discoveryExit): 
 function discoveryRun(string $project): array
 {
     return json_decode(
-        (string) file_get_contents("{$project}/bootstrap/cache/packages.php"),
-        associative: true,
-    );
+            (string) file_get_contents("{$project}/bootstrap/cache/packages.php"),
+            associative: true,
+        );
 }
 
 /**
@@ -228,11 +228,11 @@ function consumerManifests(array $options): array
     return [
         'manifest.json' => json_encode(data_get($options, 'manifest', new stdClass())),
         ContributionDetector::MANIFEST_FILE => json_encode(
-            data_get($options, 'captured', new stdClass()),
-        ),
+                data_get($options, 'captured', new stdClass()),
+            ),
         ProjectKind::MANIFEST_FILE => json_encode(
-            data_get($options, 'packageManifest', shippedPackageManifest()),
-        ),
+                data_get($options, 'packageManifest', shippedPackageManifest()),
+            ),
     ];
 }
 
@@ -372,9 +372,9 @@ function composerIn(string $project): Composer
     };
     $composer = new Composer();
     $composer->setPackage((new ArrayLoader())->load(
-        ['name' => '__root__', 'version' => '1.0.0', ...$config],
-        RootPackage::class,
-    ));
+            ['name' => '__root__', 'version' => '1.0.0', ...$config],
+            RootPackage::class,
+        ));
 
     return $composer;
 }
@@ -397,9 +397,9 @@ function requireInProject(string $project, array $requirements): void
 function shippedPackageManifest(): array
 {
     return json_decode(
-        (string) file_get_contents(REPOSITORY_ROOT . '/' . ProjectKind::MANIFEST_FILE),
-        associative: true,
-    );
+            (string) file_get_contents(REPOSITORY_ROOT . '/' . ProjectKind::MANIFEST_FILE),
+            associative: true,
+        );
 }
 
 function shimSource(): string

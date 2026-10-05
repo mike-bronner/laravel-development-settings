@@ -21,11 +21,11 @@ const HELPER_FILES = REPOSITORY_ROOT . '/tests/Helpers/*.php';
 
 it('loads the helpers in any order', function (array $helpers): void {
     $script = sprintf(
-        'require %s; foreach (%s as $helper) { require_once $helper; } echo %s;',
-        var_export(REPOSITORY_ROOT . '/vendor/autoload.php', true),
-        var_export($helpers, true),
-        var_export(HELPERS_LOADED, true),
-    );
+            'require %s; foreach (%s as $helper) { require_once $helper; } echo %s;',
+            var_export(REPOSITORY_ROOT . '/vendor/autoload.php', true),
+            var_export($helpers, true),
+            var_export(HELPERS_LOADED, true),
+        );
 
     $result = (new SystemProcess())->capture(phpCommand($script));
 

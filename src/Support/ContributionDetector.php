@@ -31,16 +31,16 @@ final class ContributionDetector
         array $ignore = FileDiscovery::DEFAULT_IGNORE,
     ): array {
         $files = (new FileDiscovery())->discover(
-            packageDir: $packageDir,
-            paths: ['directories' => $directories, 'files' => []],
-            ignore: $ignore,
-        );
+                packageDir: $packageDir,
+                paths: ['directories' => $directories, 'files' => []],
+                ignore: $ignore,
+            );
 
         return collect($files)
             ->reject(fn (string $absolutePath, string $relativePath): bool => $sources->isKnown(
-                $relativePath,
-                (string) md5_file($absolutePath),
-            ))
+                    $relativePath,
+                    (string) md5_file($absolutePath),
+                ))
             ->sortKeys()
             ->all();
     }

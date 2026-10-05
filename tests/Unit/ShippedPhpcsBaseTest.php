@@ -31,10 +31,10 @@ it('checks each project file with CleanCode, but not the generated directories',
 
     expect(array_keys($checked))->toBe(collect($shipped)->sort()->values()->all());
     expect(collect($checked)->reject(fn (array $sources): bool => in_array(
-        PHPCS_ELSE_SNIFF,
-        $sources,
-        strict: true,
-    ))->all())->toBe([]);
+            PHPCS_ELSE_SNIFF,
+            $sources,
+            strict: true,
+        ))->all())->toBe([]);
 })->with([
     'application' => [
         [

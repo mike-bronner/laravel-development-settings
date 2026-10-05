@@ -102,10 +102,10 @@ it('runs each project-owned hook only when the project has it', function (
     string $hook,
 ): void {
     expect(tiaWorkflowStepLines($step))->toContain(
-        "if: hashFiles('{$hook}/action.yml', '{$hook}/action.yaml') != ''",
-        "uses: ./{$hook}",
-        'secrets: ${{ toJSON(secrets) }}',
-    );
+            "if: hashFiles('{$hook}/action.yml', '{$hook}/action.yaml') != ''",
+            "uses: ./{$hook}",
+            'secrets: ${{ toJSON(secrets) }}',
+        );
 })->with([
     'before Composer' => ['Set up the project before Composer', BEFORE_INSTALL_HOOK],
     'after Composer' => ['Set up the project after Composer', AFTER_INSTALL_HOOK],
@@ -185,8 +185,8 @@ it('fails when neither the hook nor composer.json names a PHP version', function
 
     expect($result->exitCode())->toBe(1);
     expect($result->output())->toContain(
-        '::error title=Pest TIA baseline::composer.json names no PHP version',
-        'Set the php-version output of .github/actions/tia-baseline-before-install.',
-    );
+            '::error title=Pest TIA baseline::composer.json names no PHP version',
+            'Set the php-version output of .github/actions/tia-baseline-before-install.',
+        );
     expect((string) file_get_contents("{$this->project}/github-output"))->toBe('');
 });

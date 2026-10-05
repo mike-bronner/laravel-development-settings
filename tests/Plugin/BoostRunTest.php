@@ -22,11 +22,11 @@ beforeEach(function (): void {
     $marker = var_export("{$this->project}/composed.marker", true);
     $command = escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg("touch({$marker});") . ' --';
     $this->boost = new BoostRun(
-        $this->output,
-        new DetachedTerminal(),
-        new BoostHooks(['command' => $command, 'description' => 'Updating Laravel Boost...']),
-        $this->project,
-    );
+            $this->output,
+            new DetachedTerminal(),
+            new BoostHooks(['command' => $command, 'description' => 'Updating Laravel Boost...']),
+            $this->project,
+        );
     $this->compose = function (): string {
         $boost = $this->boost;
         $boost->run();
@@ -57,11 +57,11 @@ it('refuses to compose over a file it would damage, and says which and why', fun
     expect([($this->composed)(), str_contains($output, 'Updating Laravel Boost...')])
         ->toBe([false, false]);
     expect($output)->toContain(
-        'CLAUDE.md',
-        'overwrite hand-written content',
-        GuidelineGuard::OPENING_TAG,
-        'between the first tag and the next closing tag',
-    );
+            'CLAUDE.md',
+            'overwrite hand-written content',
+            GuidelineGuard::OPENING_TAG,
+            'between the first tag and the next closing tag',
+        );
     expect(file_get_contents("{$this->project}/CLAUDE.md"))->toBe(armedAgentFile());
 });
 
@@ -119,11 +119,11 @@ it('fails a run that composed Boost\'s PHPDoc rule, naming the exclusion', funct
     $output = ($this->compose)();
 
     expect($output)->toContain(
-        'failed',
-        'into AGENTS.md',
-        "\"php\" to boost.guidelines.exclude",
-        'package discovery is not turned off for mike-bronner/laravel-development-settings',
-    );
+            'failed',
+            'into AGENTS.md',
+            "\"php\" to boost.guidelines.exclude",
+            'package discovery is not turned off for mike-bronner/laravel-development-settings',
+        );
     expect($output)->not
         ->toContain('done');
 });

@@ -114,11 +114,11 @@ it('never selects a path reached through a symlink', function (array $paths): vo
     symlink("{$this->project}/secret", "{$this->project}/linked-stubs");
 
     expect($this->unrelated->changedFiles($this->project, $paths))->toBe(
-        match ($paths) {
+            match ($paths) {
             ['directories' => ['stubs']] => ['stubs/real.md' => 'stubs/real.md'],
             default => [],
-        },
-    );
+            },
+        );
 })->with([
     'a tracked file that is a symlink' => [['files' => ['pint.json']]],
     'a tracked file below a symlinked parent' => [['files' => ['.github/workflows/sync.yml']]],

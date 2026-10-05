@@ -120,10 +120,10 @@ function stepOutputs(string $written): array
 function renderPullRequestBody(array $outputs): string
 {
     $body = (string) preg_replace_callback(
-        '/\$\{\{ steps\.changes\.outputs\.(\w+) \}\}/',
-        fn (array $name): string => (string) data_get($outputs, [data_get($name, 1)]),
-        workflowPart(PULL_REQUEST_BODY, PULL_REQUEST_BODY_INDENT),
-    );
+            '/\$\{\{ steps\.changes\.outputs\.(\w+) \}\}/',
+            fn (array $name): string => (string) data_get($outputs, [data_get($name, 1)]),
+            workflowPart(PULL_REQUEST_BODY, PULL_REQUEST_BODY_INDENT),
+        );
 
     return (string) preg_replace('/\$\{\{ [^}]+ \}\}/', 'owner/project', $body);
 }

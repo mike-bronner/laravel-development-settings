@@ -132,10 +132,10 @@ it('counts no new file without a whole block', function (string $path, string $c
 it('answers each composed block without the prose around it, in path order', function (): void {
     $since = time();
     $unclosed = fn (string $rules): string => str_replace(
-        GuidelineGuard::CLOSING_TAG . "\n",
-        '',
-        agentBlock($rules),
-    );
+            GuidelineGuard::CLOSING_TAG . "\n",
+            '',
+            agentBlock($rules),
+        );
     seedFiles($this->project, [
         'CLAUDE.md' => agentFile('Prose before.') . "Prose after.\n",
         'AGENTS.md' => agentBlock('first') . agentBlock('second'),

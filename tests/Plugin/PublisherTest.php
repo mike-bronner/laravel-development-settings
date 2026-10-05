@@ -25,10 +25,10 @@ it('registers the package and composes in a fresh clone with no boost.json', fun
     expect(boostConfigIn($this->project))->toBe(REGISTERED_PACKAGES);
     expect(boostRan($this->project))->toBeTrue();
     expect($output)->toContain(
-        'boost.json (registered with Boost)',
-        '1 new',
-        'Composing Laravel Boost guidelines and skills... done',
-    );
+            'boost.json (registered with Boost)',
+            '1 new',
+            'Composing Laravel Boost guidelines and skills... done',
+        );
     expect($output)->not
         ->toContain('Boost stand-in');
 });
@@ -146,9 +146,9 @@ it('reports a new file it cannot create as failed, not created, and carries on',
     expect(file_exists("{$this->project}/locked/a.yml"))->toBeFalse();
     expect(file_get_contents("{$this->project}/b.yml"))->toBe("b\n");
     expect($output)->toContain(
-        'locked/a.yml (write failed)',
-        'locked/a.yml was not updated. Could not copy',
-        '1 new',
-        '1 skipped',
-    );
+            'locked/a.yml (write failed)',
+            'locked/a.yml was not updated. Could not copy',
+            '1 new',
+            '1 skipped',
+        );
 });

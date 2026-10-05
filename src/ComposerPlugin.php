@@ -173,12 +173,12 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         string $command,
     ): void {
         $cause = sprintf(
-            '  %s: %s in %s:%d',
-            $failure::class,
-            $failure->getMessage(),
-            $failure->getFile(),
-            $failure->getLine(),
-        );
+                '  %s: %s in %s:%d',
+                $failure::class,
+                $failure->getMessage(),
+                $failure->getFile(),
+                $failure->getLine(),
+            );
 
         $inputOutput->writeError(self::CONTAINED);
         $inputOutput->writeErrorRaw($cause);
@@ -197,12 +197,12 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         $project = $event->getComposer()
             ->getPackage();
         $publisher = new Publisher(
-            $event->getIO(),
-            $this->terminal,
-            (string) getcwd(),
-            $packageDir,
-            array_keys([...$project->getRequires(), ...$project->getDevRequires()]),
-        );
+                $event->getIO(),
+                $this->terminal,
+                (string) getcwd(),
+                $packageDir,
+                array_keys([...$project->getRequires(), ...$project->getDevRequires()]),
+            );
         $publisher->publish($package->config($packageDir));
     }
 }

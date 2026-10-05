@@ -24,27 +24,27 @@ final class CheckedFile
     public function read(string $path): string
     {
         return (string) $this->attempt(
-            static fn (): string|false => file_get_contents($path),
-            "Could not read {$path}",
-        );
+                static fn (): string|false => file_get_contents($path),
+                "Could not read {$path}",
+            );
     }
 
     public function write(string $path, string $contents): void
     {
         $this->ensureDirectory(dirname($path));
         $this->attempt(
-            static fn (): bool => file_put_contents($path, $contents) === strlen($contents),
-            "Could not write {$path}",
-        );
+                static fn (): bool => file_put_contents($path, $contents) === strlen($contents),
+                "Could not write {$path}",
+            );
     }
 
     public function copy(string $source, string $destination): void
     {
         $this->ensureDirectory(dirname($destination));
         $this->attempt(
-            static fn (): bool => copy($source, $destination),
-            "Could not copy {$source} to {$destination}",
-        );
+                static fn (): bool => copy($source, $destination),
+                "Could not copy {$source} to {$destination}",
+            );
     }
 
     /**
@@ -58,9 +58,9 @@ final class CheckedFile
     public function ensureDirectory(string $directory): void
     {
         $this->attempt(
-            fn (): bool => is_dir($directory) || $this->createDirectory($directory),
-            "Could not create {$directory}",
-        );
+                fn (): bool => is_dir($directory) || $this->createDirectory($directory),
+                "Could not create {$directory}",
+            );
     }
 
     /**
@@ -69,10 +69,10 @@ final class CheckedFile
     private function createDirectory(string $directory): bool
     {
         return mkdir(
-            directory: $directory,
-            permissions: self::DIRECTORY_PERMISSIONS,
-            recursive: true,
-        ) || is_dir($directory);
+                directory: $directory,
+                permissions: self::DIRECTORY_PERMISSIONS,
+                recursive: true,
+            ) || is_dir($directory);
     }
 
     /**

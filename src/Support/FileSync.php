@@ -260,9 +260,9 @@ final class FileSync
         $file = $this->file;
 
         return $section->compose(
-            managed: $file->read($source),
-            project: $this->existingProjectPart($path, $target),
-        );
+                managed: $file->read($source),
+                project: $this->existingProjectPart($path, $target),
+            );
     }
 
     private function existingProjectPart(string $path, string $target): string

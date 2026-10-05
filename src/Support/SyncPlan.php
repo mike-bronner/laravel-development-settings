@@ -80,9 +80,9 @@ final class SyncPlan
     private function discover(array $paths): array
     {
         return (new FileDiscovery())->discover(
-            packageDir: $this->packageDir,
-            paths: $paths,
-            ignore: $this->config->entries(PackageConfig::IGNORE),
-        );
+                packageDir: $this->packageDir,
+                paths: $paths,
+                ignore: $this->config->entries(PackageConfig::IGNORE),
+            );
     }
 }

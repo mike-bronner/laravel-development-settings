@@ -31,10 +31,10 @@ it('names the edited sources and the contribute command, and opens nothing', fun
         ->getOutput();
 
     expect($output)->toContain(
-        '1 local edit(s) to shared development-settings files',
-        'resources/boost/guidelines/01-identity.md',
-        'vendor/bin/dev-settings-contribute.php',
-    );
+            '1 local edit(s) to shared development-settings files',
+            'resources/boost/guidelines/01-identity.md',
+            'vendor/bin/dev-settings-contribute.php',
+        );
     expect($output)->not
         ->toContain('02-workflow.md');
     expect(file_get_contents("{$this->package}/resources/boost/guidelines/01-identity.md"))

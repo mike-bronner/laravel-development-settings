@@ -249,9 +249,9 @@ final class ReverseSync
     private function walk(string $dir, string $targetDir, string $sourceDir): array
     {
         $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::LEAVES_ONLY,
-        );
+                new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::LEAVES_ONLY,
+            );
 
         $files = [];
 

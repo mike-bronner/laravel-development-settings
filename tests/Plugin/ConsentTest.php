@@ -56,7 +56,7 @@ it('says why each file holding the marker twice was not touched', function (): v
     (new Consent($this->output))->explainRefused(['.gitignore', '.gitattributes']);
 
     expect($this->output->getOutput())->toContain(
-        '.gitignore holds the sync marker more than once, so it was not touched.',
-        '.gitattributes holds the sync marker more than once, so it was not touched.',
-    );
+            '.gitignore holds the sync marker more than once, so it was not touched.',
+            '.gitattributes holds the sync marker more than once, so it was not touched.',
+        );
 });

@@ -126,12 +126,12 @@ final class Consent
         Prompt::interactive($inputOutput->isInteractive());
 
         return multiselect(
-            label: self::TEXT[$question],
-            options: array_combine($paths, $paths),
-            default: [],
-            required: false,
-            hint: self::TEXT["{$question} hint"],
-        );
+                label: self::TEXT[$question],
+                options: array_combine($paths, $paths),
+                default: [],
+                required: false,
+                hint: self::TEXT["{$question} hint"],
+            );
     }
 
     /**

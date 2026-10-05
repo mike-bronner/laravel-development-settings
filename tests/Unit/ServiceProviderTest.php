@@ -16,8 +16,8 @@ use Illuminate\Support\ServiceProvider;
  */
 it('ships no Laravel service provider that publishes files', function (): void {
     $sources = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator(REPOSITORY_ROOT . '/src', FilesystemIterator::SKIP_DOTS),
-    );
+            new RecursiveDirectoryIterator(REPOSITORY_ROOT . '/src', FilesystemIterator::SKIP_DOTS),
+        );
     $providers = collect(iterator_to_array($sources))
         ->keys()
         ->map(fn (string $path): string => (string) file_get_contents($path))

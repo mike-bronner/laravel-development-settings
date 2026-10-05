@@ -15,9 +15,9 @@ afterEach(function (): void {
 it('removes the file and every directory it leaves empty, up to the project', function (): void {
     seedFiles($this->project, ['a/b/c/orphan.md' => 'x', 'a/kept.md' => 'x']);
     set_error_handler(static fn (int $level, string $warning): never => throw new ErrorException(
-        $warning,
-        severity: $level,
-    ));
+            $warning,
+            severity: $level,
+        ));
 
     try {
         (new OrphanRemover())->remove($this->project, 'a/b/c/orphan.md');

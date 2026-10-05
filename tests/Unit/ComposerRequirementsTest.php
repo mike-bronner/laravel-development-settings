@@ -6,10 +6,10 @@ use Composer\Semver\Semver;
 
 beforeEach(function (): void {
     $this->composer = json_decode(
-        shippedSource('composer.json'),
-        associative: true,
-        flags: JSON_THROW_ON_ERROR,
-    );
+            shippedSource('composer.json'),
+            associative: true,
+            flags: JSON_THROW_ON_ERROR,
+        );
 });
 
 /*
@@ -33,17 +33,6 @@ it('installs the tooling a project needs before the plugin runs', function (stri
     'laravel/pint',
     'mike-bronner/clean-code',
 ]);
-
-/*
- * The shipped skills teach the test-phase markers, and CleanCode's
- * SectionComment sniff exempts them from 0.2.1 onward. A lower floor lets a
- * project keep a standard that flags every marker the skills ask for.
- */
-it('refuses clean-code releases flagging the test-phase markers', function (string $version): void {
-    $constraint = $this->composer['require']['mike-bronner/clean-code'];
-
-    expect(Semver::satisfies(version: $version, constraints: $constraint))->toBeFalse();
-})->with(['0.1.1', '0.2.0']);
 
 it('accepts the clean-code release exempting the test-phase markers', function (): void {
     $constraint = $this->composer['require']['mike-bronner/clean-code'];

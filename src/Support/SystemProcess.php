@@ -24,6 +24,7 @@ final class SystemProcess implements Process
         return $result->exitCode();
     }
 
+    // phpcs:disable CleanCode.Pattern.AvoidDuplicateCodeBlocks.Found -- One proc_open each way.
     /**
      * Run a command with its output captured.
      *
@@ -35,20 +36,20 @@ final class SystemProcess implements Process
     public function capture(string $command, ?string $workingDirectory = null): ProcessResult
     {
         $process = proc_open(
-            $command,
-            [
-                self::INPUT => ['pipe', 'r'],
-                self::OUTPUT => ['pipe', 'w'],
-                self::ERRORS => ['redirect', self::OUTPUT],
-            ],
-            $pipes,
-            $workingDirectory ?? getcwd(),
-        );
+                $command,
+                [
+                    self::INPUT => ['pipe', 'r'],
+                    self::OUTPUT => ['pipe', 'w'],
+                    self::ERRORS => ['redirect', self::OUTPUT],
+                ],
+                $pipes,
+                $workingDirectory ?? getcwd(),
+            );
 
         $notStarted = new ProcessResult(
-            exitCode: self::FAILED_TO_START,
-            output: "Could not start: {$command}",
-        );
+                exitCode: self::FAILED_TO_START,
+                output: "Could not start: {$command}",
+            );
 
         return match (is_resource($process)) {
             true => $this->drain($process, $pipes),
@@ -64,17 +65,18 @@ final class SystemProcess implements Process
     public function passthru(string $command, ?string $workingDirectory = null): int
     {
         $process = proc_open(
-            $command,
-            [self::INPUT => STDIN, self::OUTPUT => STDOUT, self::ERRORS => STDERR],
-            $pipes,
-            $workingDirectory ?? getcwd(),
-        );
+                $command,
+                [self::INPUT => STDIN, self::OUTPUT => STDOUT, self::ERRORS => STDERR],
+                $pipes,
+                $workingDirectory ?? getcwd(),
+            );
 
         return match (is_resource($process)) {
             true => proc_close($process),
             false => self::FAILED_TO_START,
         };
     }
+    // phpcs:enable CleanCode.Pattern.AvoidDuplicateCodeBlocks.Found
 
     /**
      * Close the child's stdin, read its output to the end, and wait for it.

@@ -198,12 +198,15 @@ final class GuidelineGuard
     {
         $prefixLength = strlen(rtrim($projectDir, '/')) + 1;
         $iterator = new RecursiveIteratorIterator(
-            new RecursiveCallbackFilterIterator(
-                new RecursiveDirectoryIterator($projectDir, RecursiveDirectoryIterator::SKIP_DOTS),
-                fn (SplFileInfo $entry): bool => $this->isExamined($entry),
-            ),
-            RecursiveIteratorIterator::LEAVES_ONLY,
-        );
+                new RecursiveCallbackFilterIterator(
+                        new RecursiveDirectoryIterator(
+                                $projectDir,
+                                RecursiveDirectoryIterator::SKIP_DOTS,
+                            ),
+                        fn (SplFileInfo $entry): bool => $this->isExamined($entry),
+                    ),
+                RecursiveIteratorIterator::LEAVES_ONLY,
+            );
 
         return collect(iterator_to_array($iterator))
             ->filter(fn (SplFileInfo $entry): bool => $this->isMarkdown($entry))

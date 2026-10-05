@@ -10,8 +10,8 @@ it('says there is no terminal when its streams are pipes', function (): void {
     $terminal = SystemTerminal::class;
 
     $result = (new SystemProcess())->capture(phpCommand(
-        "require {$autoload}; var_export((new {$terminal}())->isAttached());",
-    ));
+            "require {$autoload}; var_export((new {$terminal}())->isAttached());",
+        ));
 
     expect($result->output())->toBe('false');
 });

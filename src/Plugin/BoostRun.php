@@ -182,10 +182,10 @@ final class BoostRun
     {
         $requiresCleanCode = in_array(self::CLEAN_CODE, $this->directRequirements, strict: true);
         $cleanCodeNotice = sprintf(
-            self::TEXT['clean-code not direct'],
-            self::CLEAN_CODE,
-            self::CLEAN_CODE,
-        );
+                self::TEXT['clean-code not direct'],
+                self::CLEAN_CODE,
+                self::CLEAN_CODE,
+            );
 
         match ($requiresCleanCode) {
             true => null,
@@ -241,9 +241,9 @@ final class BoostRun
         $this->inputOutput
             ->write("{$this->line(self::DISCOVERY['running'])} ", newline: false);
         $result = (new SystemProcess())->capture(
-            command: $this->hooks->discoverCommand(),
-            workingDirectory: $this->projectDir,
-        );
+                command: $this->hooks->discoverCommand(),
+                workingDirectory: $this->projectDir,
+            );
         $failure = sprintf(self::DISCOVERY['failed'], BoostHooks::DISCOVER_COMMAND);
 
         match ($result->failed()) {
@@ -288,13 +288,14 @@ final class BoostRun
         $inputOutput->write('  Laravel Boost ', newline: false);
 
         $this->verify(
-            new ProcessResult(exitCode: $exitCode, output: ''),
-            $startedAt,
-            self::TEXT['attached next step'],
-            self::TEXT['attached nothing composed'],
-        );
+                new ProcessResult(exitCode: $exitCode, output: ''),
+                $startedAt,
+                self::TEXT['attached next step'],
+                self::TEXT['attached nothing composed'],
+            );
     }
 
+    // phpcs:disable CleanCode.Pattern.AvoidDuplicateCodeBlocks.Found -- Line shapes match by chance.
     /**
      * A fresh clone has no `boost.json` agents: the file is gitignored, and a
      * captured install never records the agents it picks. Boost then composes
@@ -305,10 +306,10 @@ final class BoostRun
         $inputOutput = $this->inputOutput;
         $hasAgents = (new BoostRegistrar())->hasAgents($this->projectDir);
         $noAgents = sprintf(
-            self::TEXT['no agents'],
-            BoostRegistrar::FILE,
-            BoostHooks::INSTALL_COMMAND,
-        );
+                self::TEXT['no agents'],
+                BoostRegistrar::FILE,
+                BoostHooks::INSTALL_COMMAND,
+            );
 
         match ($hasAgents) {
             true => null,
@@ -320,11 +321,11 @@ final class BoostRun
         $inputOutput->write("{$description} ", newline: false);
 
         $this->verify(
-            (new SystemProcess())->capture(command: $this->hooks->command() . self::FEATURES),
-            $startedAt,
-            sprintf(self::TEXT['captured next step'], BoostHooks::INSTALL_COMMAND),
-            self::TEXT['captured nothing composed'],
-        );
+                (new SystemProcess())->capture(command: $this->hooks->command() . self::FEATURES),
+                $startedAt,
+                sprintf(self::TEXT['captured next step'], BoostHooks::INSTALL_COMMAND),
+                self::TEXT['captured nothing composed'],
+            );
     }
 
     /**
@@ -347,6 +348,7 @@ final class BoostRun
             ),
         };
     }
+    // phpcs:enable CleanCode.Pattern.AvoidDuplicateCodeBlocks.Found
 
     private function verifyComposed(
         array $blocks,

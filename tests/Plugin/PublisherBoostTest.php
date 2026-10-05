@@ -22,11 +22,11 @@ it('fails loudly when Boost exits cleanly but composes nothing', function (): vo
 
     expect(boostRan($this->project))->toBeTrue();
     expect($output)->toContain(
-        'names no agents',
-        'Composing Laravel Boost guidelines and skills... failed',
-        'composed no agent file',
-        '│ Boost stand-in found no agent',
-    );
+            'names no agents',
+            'Composing Laravel Boost guidelines and skills... failed',
+            'composed no agent file',
+            '│ Boost stand-in found no agent',
+        );
     expect($output)->not
         ->toContain('done');
 });

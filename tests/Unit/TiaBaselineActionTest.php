@@ -112,9 +112,9 @@ it('records through pcov when it is enabled, and fails when it is not', function
     expect($disabled->exitCode())->toBe(1);
     expect($disabled->output())->toContain('No coverage driver.');
 })->skip(
-    ! extension_loaded('pcov') || extension_loaded('xdebug'),
-    'Needs the pcov extension, without Xdebug.',
-);
+        ! extension_loaded('pcov') || extension_loaded('xdebug'),
+        'Needs the pcov extension, without Xdebug.',
+    );
 
 /*
  * A failed run on the default branch is not a successful run, so Pest keeps

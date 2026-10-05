@@ -72,9 +72,13 @@ final class FileDiscovery
         ['directories' => $directories, 'files' => $files] = $paths + self::NO_PATHS;
 
         return array_replace(
-            $this->shipped($packageDir, $this->directoryFiles($packageDir, $directories), $ignore),
-            $this->shipped($packageDir, $this->trackedPaths($files), $ignore),
-        );
+                $this->shipped(
+                        $packageDir,
+                        $this->directoryFiles($packageDir, $directories),
+                        $ignore,
+                    ),
+                $this->shipped($packageDir, $this->trackedPaths($files), $ignore),
+            );
     }
 
     /**
@@ -113,9 +117,9 @@ final class FileDiscovery
     private function walk(string $sourcePath, string $targetDir, string $sourceDir): array
     {
         $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($sourcePath, RecursiveDirectoryIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::LEAVES_ONLY,
-        );
+                new RecursiveDirectoryIterator($sourcePath, RecursiveDirectoryIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::LEAVES_ONLY,
+            );
 
         $files = [];
 

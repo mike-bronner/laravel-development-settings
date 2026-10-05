@@ -37,9 +37,9 @@ it('writes each manifest from the sources it records, and says so', function ():
     $status = $this->manifests
         ->regenerate();
     $read = fn (string $file): array => json_decode(
-        (string) file_get_contents("{$this->package}/{$file}"),
-        associative: true,
-    );
+            (string) file_get_contents("{$this->package}/{$file}"),
+            associative: true,
+        );
 
     expect([$status, ($this->streams)()])->toBe([0, [
         <<<TEXT

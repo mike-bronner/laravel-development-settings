@@ -47,10 +47,10 @@ it('only warns about an edited, unmarked .gitignore in a non-interactive run', f
 
     expect(file_get_contents("{$this->project}/.gitignore"))->toBe(GITIGNORE_V1 . "!AGENTS.md\n");
     expect($output)->toContain(
-        '.gitignore (locally modified, no sync marker)',
-        '1 locally-modified file(s) have no sync marker and were not updated',
-        '1 skipped',
-    );
+            '.gitignore (locally modified, no sync marker)',
+            '1 locally-modified file(s) have no sync marker and were not updated',
+            '1 skipped',
+        );
 });
 
 it('changes an edited .gitignore only on consent', function (
@@ -101,12 +101,12 @@ it('reports a known-version .gitignore it cannot write as failed, not updated', 
 
     expect(file_get_contents("{$this->project}/.gitignore"))->toBe(GITIGNORE_V1);
     expect($output)->toContain(
-        '.gitignore (write failed)',
-        '.gitignore was not updated. Could not write ',
-        'Permission denied',
-        '0 updated',
-        '1 skipped',
-    );
+            '.gitignore (write failed)',
+            '.gitignore was not updated. Could not write ',
+            'Permission denied',
+            '0 updated',
+            '1 skipped',
+        );
     expect($output)->not
         ->toContain('↻');
 });
@@ -132,8 +132,8 @@ it('does not touch a .gitignore holding the sync marker twice, and says why', fu
 
     expect(file_get_contents("{$this->project}/.gitignore"))->toBe($local);
     expect($output)->toContain(
-        '.gitignore (sync marker appears twice, not touched)',
-        '.gitignore holds the sync marker more than once, so it was not touched',
-        '1 skipped',
-    );
+            '.gitignore (sync marker appears twice, not touched)',
+            '.gitignore holds the sync marker more than once, so it was not touched',
+            '1 skipped',
+        );
 });

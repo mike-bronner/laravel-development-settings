@@ -51,11 +51,11 @@ final class ContributionPrompt
         $manifestPath = "{$this->packageDir}/" . ContributionDetector::MANIFEST_FILE;
         $sources = (new ManifestReader())->read($manifestPath);
         $modified = (new ContributionDetector())->modified(
-            packageDir: $this->packageDir,
-            directories: $config->entries(PackageConfig::CAPTURE),
-            sources: $sources,
-            ignore: $config->entries(PackageConfig::IGNORE),
-        );
+                packageDir: $this->packageDir,
+                directories: $config->entries(PackageConfig::CAPTURE),
+                sources: $sources,
+                ignore: $config->entries(PackageConfig::IGNORE),
+            );
 
         match ($modified) {
             [] => null,
@@ -103,11 +103,11 @@ final class ContributionPrompt
     {
         $contributor = new Contributor(new SystemProcess());
         ['status' => $status, 'message' => $message] = $contributor->open(
-            modified: $modified,
-            branch: $contributor->branchFor($this->projectDir),
-            cloneDir: $contributor->cloneDirectory(),
-            token: (string) getenv('DEVELOPER_SETTINGS_TOKEN'),
-        );
+                modified: $modified,
+                branch: $contributor->branchFor($this->projectDir),
+                cloneDir: $contributor->cloneDirectory(),
+                token: (string) getenv('DEVELOPER_SETTINGS_TOKEN'),
+            );
 
         $this->inputOutput
             ->write(match ($status) {

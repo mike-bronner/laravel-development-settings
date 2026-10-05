@@ -43,13 +43,13 @@ final class ManifestGenerator
         $manifest = (new ManifestReader())->read($manifestPath);
 
         $files = (new FileDiscovery())->discover(
-            packageDir: $packageDir,
-            paths: match (is_array($paths)) {
+                packageDir: $packageDir,
+                paths: match (is_array($paths)) {
                 true => $paths,
                 false => throw new InvalidArgumentException(self::NO_PATHS),
-            },
-            ignore: data_get($paths, 'ignore') ?? FileDiscovery::DEFAULT_IGNORE,
-        );
+                },
+                ignore: data_get($paths, 'ignore') ?? FileDiscovery::DEFAULT_IGNORE,
+            );
 
         foreach ($files as $targetPath => $absoluteSourcePath) {
             $manifest->record($targetPath, (string) md5_file($absoluteSourcePath));

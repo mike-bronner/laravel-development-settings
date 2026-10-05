@@ -57,10 +57,10 @@ final class Contributor
         $url = escapeshellarg($this->url((string) $token));
         $directory = escapeshellarg($cloneDir);
         $cloneFailed = fn (): ?array => $this->failureOf(
-            "git clone --depth 1 {$url} {$directory}",
-            null,
-            'Failed to clone ' . self::REPO . '.',
-        );
+                "git clone --depth 1 {$url} {$directory}",
+                null,
+                'Failed to clone ' . self::REPO . '.',
+            );
 
         return match ($modified) {
             [] => $this->result(self::SUCCEEDED, 'Nothing to contribute.'),
@@ -117,26 +117,26 @@ final class Contributor
         try {
             return $this->firstOutcome([
                 fn (): ?array => $this->failureOf(
-                    "git checkout -b {$quotedBranch}",
-                    $cloneDir,
-                    "Failed to create branch {$branch}.",
-                ),
+                        "git checkout -b {$quotedBranch}",
+                        $cloneDir,
+                        "Failed to create branch {$branch}.",
+                    ),
                 fn (): ?array => $this->stage($modified, $cloneDir),
                 fn (): ?array => $this->failureOf(
-                    "git commit -m {$message}",
-                    $cloneDir,
-                    'Failed to commit changes.',
-                ),
+                        "git commit -m {$message}",
+                        $cloneDir,
+                        'Failed to commit changes.',
+                    ),
                 fn (): ?array => $this->failureOf(
-                    "git push -u origin {$quotedBranch}",
-                    $cloneDir,
-                    "Failed to push branch {$branch}.",
-                ),
+                        "git push -u origin {$quotedBranch}",
+                        $cloneDir,
+                        "Failed to push branch {$branch}.",
+                    ),
                 fn (): ?array => $this->failureOf(
-                    $this->pullRequestCommand($modified, $branch),
-                    $cloneDir,
-                    "Pushed {$branch} but failed to open the PR (open it manually).",
-                ),
+                        $this->pullRequestCommand($modified, $branch),
+                        $cloneDir,
+                        "Pushed {$branch} but failed to open the PR (open it manually).",
+                    ),
             ]) ?? $opened;
         } finally {
             $this->deleteTree($cloneDir);
@@ -260,9 +260,9 @@ final class Contributor
     private function deleteDirectory(string $path): void
     {
         $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($path, RecursiveDirectoryIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::CHILD_FIRST,
-        );
+                new RecursiveDirectoryIterator($path, RecursiveDirectoryIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::CHILD_FIRST,
+            );
 
         foreach ($iterator as $item) {
             $this->deleteEntry($item);
