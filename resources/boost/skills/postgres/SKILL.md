@@ -12,7 +12,7 @@ When writing Eloquent code, also invoke the `laravel` skill to ensure code style
 arguments, no `empty()`, strict types, etc.).
 
 This skill applies when writing or optimizing database queries in Laravel projects backed by PostgreSQL.
-Use Laravel Boost MCP's `DatabaseSchema` and `DatabaseQuery` tools to understand the actual schema before
+Use Laravel Boost MCP's `database-schema` and `database-query` tools to understand the actual schema before
 writing queries.
 
 ## PostgreSQL-First Patterns
@@ -84,7 +84,13 @@ CREATE INDEX idx_active_leads ON leads (agent_id) WHERE status = 'active';
 ## Migration Patterns
 
 - Always add indexes for foreign keys and frequently-queried columns
-- Use `->constrained()` for foreign keys, never cascading deletes
+- State every foreign key's on-delete behaviour, chosen per relationship. There is no default, so never
+  write a bare `->constrained()`:
+  - `->restrictOnDelete()` when the child must outlive its parent: audit, PII/PHI and financial records.
+  - `->cascadeOnDelete()` when the child is a pure child of the parent, such as a pivot row.
+  - `->nullOnDelete()` when the child should survive without its parent. The column must be nullable.
+- A database-level cascade fires no Eloquent events or observers, so audit logging never sees a
+  cascaded delete.
 - Use specific PostgreSQL column types when appropriate:
 ```php
 $table->jsonb(column: "metadata")->nullable();

@@ -46,15 +46,16 @@ Always tell the user when spawning sub-agents. Summarize findings when they comp
 
 ### Documentation First
 
-Use `SearchDocs` before making code changes to verify the correct approach for the installed
+Use `search-docs` before making code changes to verify the correct approach for the installed
 package versions.
 
 ### Debugging
 
-- Use `LastError` and `BrowserLogs` to diagnose issues before guessing at fixes.
-- Use `Tinker` to execute PHP for debugging or querying Eloquent models directly.
+- Use `last-error` and `browser-logs` to diagnose issues before guessing at fixes.
+- Use `php artisan tinker --execute '...'` to execute PHP for debugging or querying Eloquent models
+  directly.
 
 ### Database
 
-- Use `DatabaseQuery` for read-only database access instead of raw SQL.
-- Use `DatabaseSchema` to understand table structure before writing migrations or queries.
+- Use `database-query` for read-only database access instead of raw SQL.
+- Use `database-schema` to understand table structure before writing migrations or queries.

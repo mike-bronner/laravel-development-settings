@@ -3,7 +3,8 @@
         "b84767e8b3846bff498d7ced5ceecdd3"
     ],
     "resources/boost/guidelines/02-workflow.md": [
-        "ea7a744b93fbc1c8768e6c6bfc89182d"
+        "ea7a744b93fbc1c8768e6c6bfc89182d",
+        "3de2907a38410016cebd0d5a5b3ed8a3"
     ],
     "resources/boost/guidelines/03-laravel-code-generation.md": [
         "6e51bca478beefdb3c3b5b8ebfbacc9b"
@@ -43,7 +44,8 @@
     "resources/boost/skills/laravel/SKILL.md": [
         "d49f79c2ab9ddf7bfdd1f1a48d339259",
         "a53920aeecbd35e868598b7e7d856be8",
-        "f13a9399cf590e35095f2c34d2ba10ce"
+        "f13a9399cf590e35095f2c34d2ba10ce",
+        "8516342035d7caa7f56ee3776174bdbc"
     ],
     "resources/boost/skills/laravel/references/classes.md": [
         "81a1d9ff0e5642708bbeef1ecc5d54ed"
@@ -58,7 +60,8 @@
         "a0fc7ae8132e78d77b3409ece700a460"
     ],
     "resources/boost/skills/laravel/references/debugging.md": [
-        "974edf37a6736366f91fefaebcb032bc"
+        "974edf37a6736366f91fefaebcb032bc",
+        "a1d36e9440af178d2d6811e205b78a53"
     ],
     "resources/boost/skills/laravel/references/exceptions.md": [
         "f64c8493e0d99abf70f674bf353e0f32"
@@ -74,10 +77,12 @@
     ],
     "resources/boost/skills/laravel/references/pest-patterns.md": [
         "a4dd3b692d2d6757e6b2495ab394507a",
-        "dd95c393720bc323c5ecfc1f5ec44d12"
+        "dd95c393720bc323c5ecfc1f5ec44d12",
+        "f2d680a4aea1e5e7c2edb06b16ba1292"
     ],
     "resources/boost/skills/laravel/references/policies.md": [
-        "b66f6200b3437c0d5ce1b03e56a12015"
+        "b66f6200b3437c0d5ce1b03e56a12015",
+        "3273ce5846299d7adf3f8f53ade13021"
     ],
     "resources/boost/skills/laravel/references/routes.md": [
         "d270c31d5d1c1b42abe666caf09c1e68"
@@ -86,13 +91,15 @@
         "e50cc74ee64c97df75ffacee53d66eed"
     ],
     "resources/boost/skills/postgres/SKILL.md": [
-        "6f1a0613cee70d337ffec16731256999"
+        "6f1a0613cee70d337ffec16731256999",
+        "a8c2dd99eb5c7ac9901de544173fbdc9"
     ],
     "resources/boost/skills/refactor/SKILL.md": [
         "f96b54012776e84288af76c05e02fafe",
         "9a739adc46c4828dab8ee7d3e9ae956b"
     ],
     "resources/boost/skills/security/SKILL.md": [
-        "9830885ec000979bd0d05f01444064ca"
+        "9830885ec000979bd0d05f01444064ca",
+        "b09f656647983bd1ea16be0a5433b454"
     ]
 }

@@ -1,5 +1,16 @@
 # Debugging Laravel Applications
 
+## Table of Contents
+- [Laravel-Specific Tools](#laravel-specific-tools)
+- [Laravel Boost MCP for Debugging](#laravel-boost-mcp-for-debugging)
+- [Diagnostic Approach](#diagnostic-approach) (information gathering, hypotheses, elimination)
+- [Error Pattern Analysis](#error-pattern-analysis)
+- [Common Laravel Bug Patterns](#common-laravel-bug-patterns) (N+1, null reference, cache race, memory)
+- [Cascade Patterns](#cascade-patterns)
+- [Root Cause Techniques](#root-cause-techniques) (five whys, fault tree analysis)
+- [Production Debugging](#production-debugging)
+- [Postmortem Template](#postmortem-template)
+
 ## Laravel-Specific Tools
 
 ```php
@@ -25,11 +36,12 @@ dd(DB::getQueryLog());
 
 Use these Boost tools when diagnosing issues:
 
-- **`LastError`** — get the most recent application error
-- **`ReadLogEntries`** — read application log files (pass entry count)
-- **`BrowserLogs`** — browser console logs for frontend issues
-- **`Tinker`** — execute diagnostic code in application context
-- **`DatabaseQuery`** — run read-only queries to verify data state
+- **`last-error`** — get the most recent application error
+- **`read-log-entries`** — read application log files (pass entry count)
+- **`browser-logs`** — browser console logs for frontend issues
+- **`database-query`** — run read-only queries to verify data state
+
+To execute diagnostic code in application context, run `php artisan tinker --execute '...'`.
 
 ## Diagnostic Approach
 

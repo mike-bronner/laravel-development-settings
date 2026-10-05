@@ -12,8 +12,9 @@ description: >
 # Laravel Specialist
 
 Every line of PHP you write in a Laravel project must follow the clean code standards in this skill and pass the
-project's linters. The `references/` directory contains detailed rationale — consult the relevant file before
-writing code in that domain.
+project's linters. The general clean code standards ship as Boost guidelines from `mike-bronner/clean-code`.
+The `references/` directory covers what those guidelines do not — consult the relevant file before writing
+code in that domain.
 
 ## Use Laravel Boost MCP
 
@@ -22,42 +23,34 @@ in Laravel projects that have this skill installed.
 
 **Always use these Boost tools when relevant:**
 
-- **`DatabaseSchema`** — before writing migrations, models, or queries. Understand existing tables, columns,
+- **`database-schema`** — before writing migrations, models, or queries. Understand existing tables, columns,
   indexes, and foreign keys so your code fits the actual schema.
-- **`SearchDocs`** — when unsure about Laravel API, syntax, or best practices. Search Laravel and package
+- **`search-docs`** — when unsure about Laravel API, syntax, or best practices. Search Laravel and package
   docs for the exact version installed.
-- **`ApplicationInfo`** — to know PHP version, Laravel version, installed packages, and available models.
-- **`ListRoutes`** — before adding or modifying routes. See what exists to avoid conflicts and follow naming
-  patterns.
-- **`Tinker`** — to test snippets, verify model relationships, or check data before writing code that depends
-  on runtime state.
-- **`DatabaseQuery`** — read-only queries to verify data assumptions before writing logic.
-- **`GetConfig`** / **`ListAvailableConfigKeys`** — to check application configuration rather than guessing.
-- **`ListArtisanCommands`** — before creating or running artisan commands. See available commands and
-  their parameters.
-- **`LastError`** / **`ReadLogEntries`** — when debugging or writing error-handling code.
+- **`application-info`** — to know PHP version, Laravel version, database engine, and installed packages.
+- **`database-query`** — read-only queries to verify data assumptions before writing logic.
+- **`last-error`** / **`read-log-entries`** — when debugging or writing error-handling code.
 
-Don't guess at schema, routes, or config — query Boost and know.
+Routes, configuration and Artisan commands have no Boost tool, and Boost registers its `tinker` tool only
+when `boost.tinker_tool_enabled` is on. Use the CLI:
+
+- `php artisan route:list` before adding or modifying routes, to avoid conflicts and follow naming patterns.
+- `php artisan config:show <key>` to check application configuration rather than guessing.
+- `php artisan list` and `php artisan <command> --help` before creating or running Artisan commands.
+- `php artisan tinker --execute '...'` to test snippets, verify model relationships, or check data before
+  writing code that depends on runtime state.
+
+Don't guess at schema, routes, or config — query Boost or Artisan and know.
 
 ## Reference Guides
 
-Read the relevant reference file before writing code in that area. These explain the *why* behind patterns:
+Read the relevant reference file before writing code in that area:
 
 | When writing...                        | Read                                 |
 |----------------------------------------|--------------------------------------|
-| Any PHP code (first task per session)  | `references/governing-principles.md` |
-| Conditionals, strings, arrays, types   | `references/code-cleanliness.md`     |
-| Formatting, operators, indentation     | `references/code-style.md`           |
-| Classes, interfaces, DI, constructors  | `references/classes.md`              |
-| Eloquent models, traits, queries       | `references/models.md`              |
-| Livewire components                    | `references/livewire.md`            |
-| Controllers, form requests             | `references/controllers.md`         |
-| Authorization policies                 | `references/policies.md`            |
-| Test philosophy, TDD, suites           | `references/testing.md`             |
-| Pest syntax, datasets, patterns        | `references/pest-patterns.md`       |
-| Error handling, try/catch              | `references/exceptions.md`          |
-| Route definitions                      | `references/routes.md`              |
-| Debugging, error diagnosis             | `references/debugging.md`           |
+| Authorization policies                 | `references/policies.md`             |
+| Pest syntax, datasets, patterns        | `references/pest-patterns.md`        |
+| Debugging, error diagnosis             | `references/debugging.md`            |
 
 ## PHP Code Style
 
@@ -154,17 +147,17 @@ This project uses a custom indentation scheme that differs from PSR-12. Count fr
             ->toArray();
 ```
 
+### Classes
+
+- **Properties are required.** Avoid classes that do not encapsulate any data. A class without
+  properties has no state and no identity, and is the same as procedural, non-object-oriented code.
+
 ### Laravel-Specific Patterns
 
 - **Controllers**: no business logic. RESTful or invokable only. Use Form Requests and Response classes.
 - **Models**: no eager loading in `$with`. Use `with()` at query site. Extract attributes and queries to
   traits (`Concerns/Attributes/ModelName`, `Concerns/Queries/ModelName`). Descriptive persistence methods
   on the model (`$agent->addListingInfo($info)`), not generic CRUD. No separate repository classes.
-  New application models should extend `App\Bases\Model` rather than `Illuminate\Database\Eloquent\Model`
-  directly — `App\Bases\Model` provides `HasCamelCasing` (required for the project's camelCase attribute
-  access convention) and `HasFactory`. For models that also need full-text search and soft deletes, extend
-  `App\Bases\SearchableModel`. Exception: auth-related models such as `User` legitimately extend
-  `Illuminate\Foundation\Auth\User` (`Authenticatable`) instead.
 - **Routes**: resource routes with RESTful controllers. No closures. Single model per route.
 - **Livewire**: single root element, no Livewire/Blade/Alpine attributes on root. Unique `wire:key`.
 
@@ -204,7 +197,14 @@ $leads = Lead::query()
 
 ## Database Conventions
 
-- **Foreign key cascades are the project default.** Most FK constraints use `->constrained()->cascadeOnDelete()->cascadeOnUpdate()`. Apply both modifiers when deleting a parent record should also remove the child. Use `->nullOnDelete()` instead of `->cascadeOnDelete()` when deleting a parent should orphan the child rather than remove it (e.g., `blog_posts.author_user_id`). Do not use bare `->constrained()` without explicit cascade or null-on-delete modifiers — the intent must always be stated.
+- **State every foreign key's on-delete behaviour, chosen per relationship.** There is no default, so
+  never write a bare `->constrained()`:
+  - `->restrictOnDelete()` when the child must outlive its parent: audit, PII/PHI and financial records.
+  - `->cascadeOnDelete()` when the child is a pure child of the parent, such as a pivot row.
+  - `->nullOnDelete()` when the child should survive without its parent. The column must be nullable.
+
+  A database-level cascade fires no Eloquent events or observers, so the audit logging the `security`
+  skill requires never sees a cascaded delete.
 
 ## Testing Conventions
 
@@ -225,6 +225,9 @@ it("creates a new lead", function () {
 ```
 
 **Rules:**
+- Run tests with Test Impact Analysis when the project is on Pest 5: `vendor/bin/pest --tia --baselined`.
+  The Pest Test Impact Analysis guideline (`06-pest-tia`) covers the baseline and its setup. Otherwise
+  run them in parallel. A run with a test path or `--filter` never uses TIA, so run it in parallel.
 - Give each of Arrange, Act and Assert its own section whenever that phase has content. A section
   with no content has no marker: a test with no separate setup has no Arrange marker.
 - Never combine sections to remove a marker. Assertions go ONLY in the Assert section.
@@ -248,9 +251,12 @@ it("creates a new lead", function () {
   - **Snapshot testing** (`toMatchSnapshot()`) for complex output structures (API responses, rendered views)
 
 ```bash
-# Running tests
-php artisan test --compact
-php artisan test --compact --filter=TestName
+# Pest 5: run only the tests your change affects
+vendor/bin/pest --tia --baselined
+
+# Without TIA, and for every filtered run
+php artisan test --parallel
+php artisan test --parallel --filter=TestName
 ```
 
 ## Related Skills

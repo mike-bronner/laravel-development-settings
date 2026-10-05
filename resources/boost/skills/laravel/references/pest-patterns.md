@@ -1,7 +1,7 @@
 # Pest Patterns & Syntax Reference
 
 Practical Pest 4 patterns for Laravel projects. For testing philosophy (when to mock, TDD workflow,
-test suite types), see `testing.md`.
+test suite types), follow clean-code's `testing-*` guidelines.
 
 ## Table of Contents
 - [Expectation API](#expectation-api)

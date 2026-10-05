@@ -1,10 +1,7 @@
 # Policies
 
-## Secure Front- and Back-Ends
-
-- Checks should be implemented on the frontend to prevent displaying of unwanted elements.
-- Checks should be implemented on the backend to prevent execution of unwanted code, in the event
-  front-end restrictions are being circumvented.
+The rule to check on both the front end and the back end is clean-code's
+`policies-secure-front-and-back-ends` guideline. This file shows how to apply it.
 
 ## Policy Authorization Pattern
 
