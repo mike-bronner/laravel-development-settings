@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+const NEW_DEREFERENCE_PHP_VERSION_ID = 80_400;
+
 afterEach(function (): void {
-    removeTempDir($this->project);
+    isset($this->project) && removeTempDir($this->project);
 });
 
 it('writes PHPUnit test method names in camel caps', function (
@@ -59,6 +61,35 @@ it('keeps a class body whose opening brace is on its own line', function (): voi
 
     expect(file_get_contents("{$this->project}/" . PINT_SOURCE_FILE))->toBe($source);
 });
+
+it('instantiates a named class without empty parentheses', function (
+    string $written,
+    string $formatted,
+): void {
+    $this->project = pintFiles([PINT_SOURCE_FILE => "<?php\n\n{$written}\n"]);
+
+    expect(file_get_contents("{$this->project}/" . PINT_SOURCE_FILE))
+        ->toBe("<?php\n\n{$formatted}\n");
+})->with([
+    'empty parentheses' => ['$verse = new Verse();', '$verse = new Verse;'],
+    'wrapped in parentheses' => ['$id = (new Verse())->id();', '$id = (new Verse)->id();'],
+    'no parentheses, unchanged' => ['$verse = new Verse;', '$verse = new Verse;'],
+    'arguments, unchanged' => ['$verse = new Verse(1);', '$verse = new Verse(1);'],
+    'anonymous class, unchanged' => ['$verse = new class() {};', '$verse = new class() {};'],
+]);
+
+it('keeps the parentheses of a new object that is dereferenced', function (string $source): void {
+    $source = "<?php\n\n{$source}\n";
+    $this->project = pintFiles([PINT_SOURCE_FILE => $source]);
+
+    expect(file_get_contents("{$this->project}/" . PINT_SOURCE_FILE))->toBe($source);
+})->with([
+    'object operator' => '$id = new Verse()->id();',
+    'nullsafe operator' => '$id = new Verse()?->id();',
+])->skip(
+        PHP_VERSION_ID < NEW_DEREFERENCE_PHP_VERSION_ID,
+        'Dereferencing a new object without wrapping parentheses needs PHP 8.4.',
+    );
 
 it('keeps a method chain that hangs from a multi-line call', function (): void {
     $source = file_get_contents(REPOSITORY_ROOT . '/tests/Fixtures/pint/hanging-chain.txt');

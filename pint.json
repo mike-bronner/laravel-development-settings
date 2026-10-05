@@ -43,7 +43,7 @@
         "braces_position": false,
         "class_definition": false,
         "new_with_parentheses": {
-            "named_class": true,
+            "named_class": false,
             "anonymous_class": true
         },
         "single_line_empty_body": false,

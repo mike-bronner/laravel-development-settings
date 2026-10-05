@@ -18,12 +18,12 @@ use MikeBronner\DevelopmentSettings\Tests\Fixtures\DetachedTerminal;
 
 beforeEach(function (): void {
     $this->project = makeTempDir('devset-boost-');
-    $this->output = new BufferIO();
+    $this->output = new BufferIO;
     $marker = var_export("{$this->project}/composed.marker", true);
     $command = escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg("touch({$marker});") . ' --';
     $this->boost = new BoostRun(
             $this->output,
-            new DetachedTerminal(),
+            new DetachedTerminal,
             new BoostHooks(['command' => $command, 'description' => 'Updating Laravel Boost...']),
             $this->project,
         );
@@ -82,7 +82,7 @@ it('runs Boost without first looking for it in vendor', function (): void {
 
 it('registers the package where Boost composes, and counts and lists it', function (): void {
     $boost = $this->boost;
-    $tally = new Tally();
+    $tally = new Tally;
 
     $boost->register();
     $boost->count($tally);
@@ -94,7 +94,7 @@ it('registers the package where Boost composes, and counts and lists it', functi
 it('neither runs nor registers over a boost.json it cannot read', function (): void {
     file_put_contents("{$this->project}/boost.json", '{not json');
     $boost = $this->boost;
-    $tally = new Tally();
+    $tally = new Tally;
 
     $boost->register();
     $boost->count($tally);

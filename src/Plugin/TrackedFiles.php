@@ -53,7 +53,7 @@ final class TrackedFiles
         private FileSync $fileSync,
         private string $projectDir,
         private IOInterface $inputOutput,
-        private OrphanRemover $orphanRemover = new OrphanRemover(),
+        private OrphanRemover $orphanRemover = new OrphanRemover,
     ) {
     }
 

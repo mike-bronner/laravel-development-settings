@@ -41,7 +41,7 @@ final class ContributionPrompt
         private IOInterface $inputOutput,
         private string $projectDir,
         private string $packageDir,
-        private ConsoleStyle $style = new ConsoleStyle(),
+        private ConsoleStyle $style = new ConsoleStyle,
     ) {
     }
 
@@ -49,8 +49,8 @@ final class ContributionPrompt
     {
         $config = (new InstalledPackage($this->projectDir))->config($this->packageDir);
         $manifestPath = "{$this->packageDir}/" . ContributionDetector::MANIFEST_FILE;
-        $sources = (new ManifestReader())->read($manifestPath);
-        $modified = (new ContributionDetector())->modified(
+        $sources = (new ManifestReader)->read($manifestPath);
+        $modified = (new ContributionDetector)->modified(
                 packageDir: $this->packageDir,
                 directories: $config->entries(PackageConfig::CAPTURE),
                 sources: $sources,
@@ -101,7 +101,7 @@ final class ContributionPrompt
      */
     private function contribute(array $modified): void
     {
-        $contributor = new Contributor(new SystemProcess());
+        $contributor = new Contributor(new SystemProcess);
         ['status' => $status, 'message' => $message] = $contributor->open(
                 modified: $modified,
                 branch: $contributor->branchFor($this->projectDir),

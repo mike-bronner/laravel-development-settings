@@ -168,7 +168,7 @@ The package ships `phpcs.xml`, which runs the `CleanCode` standard from `mike-br
 
 `phpcs.xml` is a synced file like `pint.json`. An edited copy is kept as a local modification, and the upstream workflow proposes the edit to this package.
 
-The shipped `pint.json` writes what `phpcs.xml` asks for, so the two never undo each other: `new Foo()` always carries its parentheses, and imports are grouped as classes, then functions, then constants. Pint keeps the line breaks of a multi-line argument list as written, so a method chain can hang from a call whose arguments span lines. Where the two disagreed, `phpcs.xml` won.
+The shipped `pint.json` is tuned to write what `phpcs.xml` asks for: `new Foo` carries no empty parentheses unless a method or property is read from the new object (`new Foo()->bar()` from PHP 8.4, `(new Foo)->bar()` before it), and imports are grouped as classes, then functions, then constants. Pint keeps the empty parentheses only before `->` and `?->`. It fails the whole file on `new Foo()::BAR` and `new Foo()[0]`, and it rewrites `new Foo()()` to `new Foo()`, which drops the call. Write those three as `(new Foo)::BAR`, `(new Foo)[0]` and `(new Foo)()`. Pint keeps the line breaks of a multi-line argument list as written, so a method chain can hang from a call whose arguments span lines. Where the two disagreed, `phpcs.xml` won.
 
 Pint does not place braces or fix the spacing of a class declaration, because its `braces_position` and `class_definition` fixers are off. That lets an empty class, interface, trait or enum stay as `{}` on the line that declares it. PHPCS still reports brace placement and class-declaration spacing, and `vendor/bin/phpcbf` fixes both, including the space in `new class ()` for an anonymous class.
 

@@ -53,8 +53,8 @@ final class ReverseSync
 
     public function __construct(
         private Manifest $manifest,
-        private CheckedFile $file = new CheckedFile(),
-        private ManagedSection $section = new ManagedSection(),
+        private CheckedFile $file = new CheckedFile,
+        private ManagedSection $section = new ManagedSection,
     ) {
     }
 
@@ -134,7 +134,7 @@ final class ReverseSync
     private function candidates(string $root, array $paths): array
     {
         ['directories' => $directories, 'files' => $files] = $paths;
-        $discovery = new FileDiscovery();
+        $discovery = new FileDiscovery;
         $candidates = $discovery->trackedPaths($files);
 
         foreach ($discovery->trackedPaths($directories) as $targetDir => $sourceDir) {

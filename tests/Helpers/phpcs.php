@@ -41,7 +41,7 @@ function phpcsProject(array $relativePaths): string
 function runPhpcs(string $project): array
 {
     $phpcs = escapeshellarg(REPOSITORY_ROOT . '/vendor/bin/phpcs');
-    $result = (new SystemProcess())
+    $result = (new SystemProcess)
         ->capture(escapeshellarg(PHP_BINARY) . " {$phpcs} -q --report=json", $project);
     $report = json_decode($result->output(), associative: true);
     $root = strlen((string) realpath($project)) + 1;

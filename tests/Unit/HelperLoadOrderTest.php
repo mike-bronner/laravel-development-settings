@@ -27,7 +27,7 @@ it('loads the helpers in any order', function (array $helpers): void {
             var_export(HELPERS_LOADED, true),
         );
 
-    $result = (new SystemProcess())->capture(phpCommand($script));
+    $result = (new SystemProcess)->capture(phpCommand($script));
 
     expect($result->output())->toBe(HELPERS_LOADED)
         ->and($result->exitCode())

@@ -59,7 +59,7 @@ function syncFixture(): array
         'manifest.json' => shippedSource('manifest.json'),
         'resources/project/gitignore' => $shipped,
     ]);
-    (new SystemProcess())->run("cp -R {$sources} src", $package);
+    (new SystemProcess)->run("cp -R {$sources} src", $package);
     file_put_contents("{$project}/.gitignore", marked("{$shipped}/edited\n", "\n!AGENTS.md\n"));
 
     return [$project, $package, $shipped];
@@ -72,7 +72,7 @@ function runSyncStep(string $project): ProcessResult
 {
     $script = escapeshellarg(workflowPart(SYNC_STEP));
 
-    return (new SystemProcess())->capture(escapeshellarg(PHP_BINARY) . " -r {$script}", $project);
+    return (new SystemProcess)->capture(escapeshellarg(PHP_BINARY) . " -r {$script}", $project);
 }
 
 /**
@@ -88,7 +88,7 @@ function runDetectStep(string $project): array
     $quotedOutputFile = escapeshellarg($outputFile);
     touch($outputFile);
 
-    $result = (new SystemProcess())
+    $result = (new SystemProcess)
         ->capture("GITHUB_OUTPUT={$quotedOutputFile} bash -e -c {$script}", $project);
 
     expect($result->exitCode())->toBe(0, $result->output());

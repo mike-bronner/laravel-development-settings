@@ -71,7 +71,7 @@ it('keeps every changed file name inside the code fence of the PR body', functio
     $package = "{$this->project}/_laravel-development-settings";
     $backticks = str_repeat('`', MIN_FENCE);
     seedFiles($package, ['pint.json' => 'shipped']);
-    (new SystemProcess())->run('git init -q && git add pint.json', $package);
+    (new SystemProcess)->run('git init -q && git add pint.json', $package);
     seedFiles($package, [
         'pint.json' => 'edited',
         "a{$backticks}b.txt" => 'x',

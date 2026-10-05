@@ -16,7 +16,7 @@ const FIRST_TWO = 2;
 beforeEach(function (): void {
     $this->source = makeTempDir();
     $this->project = makeTempDir();
-    $this->output = new BufferIO();
+    $this->output = new BufferIO;
     seedFiles($this->source, ['new.md' => 'new', 'known.md' => 'v2', 'edited.md' => 'v2']);
     seedFiles($this->project, [
         'known.md' => 'v1',
@@ -63,7 +63,7 @@ it('writes the new and known-version files, and lists every file it saw', functi
 
 it('keeps what it was not allowed to change, deletes safe orphans, and counts', function (): void {
     $files = $this->files;
-    $tally = new Tally();
+    $tally = new Tally;
 
     $files->writeUnattended();
     $files->settle(new Consent($this->output), $tally);
@@ -79,7 +79,7 @@ it('keeps what it was not allowed to change, deletes safe orphans, and counts', 
 it('lists and counts a write that fails, and says why', function (): void {
     chmod("{$this->project}/known.md", MODE_READ_ONLY);
     $files = $this->files;
-    $tally = new Tally();
+    $tally = new Tally;
 
     $files->writeUnattended();
     $lines = $files->summaryLines();

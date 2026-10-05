@@ -44,7 +44,7 @@ it('ships every managed target as a source the marker can follow', function (str
     expect($sources->keys()->all())->toBe($managed);
     expect($sources->reject(fn (string $contents): bool => str_ends_with($contents, "\n"))->all())
         ->toBe([]);
-    $section = new ManagedSection();
+    $section = new ManagedSection;
 
     expect($sources->map(fn (string $contents): int => $section->markers($contents))->sum())
         ->toBe(0);
@@ -74,7 +74,7 @@ it('keeps the package files out of the tracked files and out of manifest.json', 
 it('ships a shim that carries its marker', function (): void {
     $source = (string) data_get(shippedFiles('package'), ProjectKind::ARTISAN);
 
-    expect((new ProjectKind())->isShim(shippedSource($source)))->toBeTrue();
+    expect((new ProjectKind)->isShim(shippedSource($source)))->toBeTrue();
 });
 
 /*

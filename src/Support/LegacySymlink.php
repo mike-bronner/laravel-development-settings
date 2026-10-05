@@ -28,7 +28,7 @@ final class LegacySymlink
      */
     public function __construct(
         private array $packageDirs,
-        private CheckedFile $file = new CheckedFile(),
+        private CheckedFile $file = new CheckedFile,
     ) {
     }
 

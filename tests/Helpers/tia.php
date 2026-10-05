@@ -163,7 +163,7 @@ function runTiaAction(
         ->map(fn (string $value, string $name): string => "{$name}=" . escapeshellarg($value));
     $script = escapeshellarg(TIA_ACTION . '/record.sh');
 
-    return (new SystemProcess())->capture("{$assignments->implode(' ')} bash {$script}", $project);
+    return (new SystemProcess)->capture("{$assignments->implode(' ')} bash {$script}", $project);
 }
 
 function pestRan(string $project): bool
@@ -250,6 +250,6 @@ function runTiaPhpVersionStep(
         'GITHUB_OUTPUT' => "{$project}/github-output",
     ])->map(fn (string $value, string $name): string => "{$name}=" . escapeshellarg($value));
 
-    return (new SystemProcess())
+    return (new SystemProcess)
         ->capture("{$environment->implode(' ')} bash -e -c " . escapeshellarg($script), $project);
 }

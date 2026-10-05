@@ -5,7 +5,7 @@ declare(strict_types=1);
 use MikeBronner\DevelopmentSettings\Support\Manifest;
 
 it('appends checksums to a path and dedupes', function (): void {
-    $manifest = new Manifest();
+    $manifest = new Manifest;
 
     $manifest->record('.ai/a.md', 'v1');
     $manifest->record('.ai/a.md', 'v2');
@@ -36,7 +36,7 @@ it('reports known vs unknown checksums', function (): void {
 
 it('dumps sorted keys, pretty and with unescaped slashes, ending in a newline', function (): void {
     $dir = makeTempDir();
-    $manifest = new Manifest();
+    $manifest = new Manifest;
     $manifest->record('pint.json', 'p1');
     $manifest->record('.ai/guidelines/a.md', 'a1');
 

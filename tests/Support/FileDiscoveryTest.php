@@ -19,7 +19,7 @@ it('discovers what the package ships, keyed by target', function (
 ): void {
     seedFiles($this->package, $sources);
 
-    $files = (new FileDiscovery())->discover($this->package, $paths);
+    $files = (new FileDiscovery)->discover($this->package, $paths);
 
     expect($files)->toEqual(collect($expected)
         ->map(fn (string $source): string => "{$this->package}/{$source}")
@@ -67,7 +67,7 @@ it('reads a plain entry from the path it names, never the package\'s own copy', 
         'pint.json' => '{}',
     ]);
 
-    $files = (new FileDiscovery())->discover($this->package, [
+    $files = (new FileDiscovery)->discover($this->package, [
         'files' => ['resources/project/gitignore' => '.gitignore', 'pint.json'],
     ]);
 
@@ -85,7 +85,7 @@ it('discovers nothing missing from the package or ignored', function (array $pat
         'resources/project/gitignore' => 'x',
     ]);
 
-    expect((new FileDiscovery())->discover($this->package, $paths))->toBe([]);
+    expect((new FileDiscovery)->discover($this->package, $paths))->toBe([]);
 })->with([
     'a keyed file whose source is missing' => [['files' => ['missing' => '.gitignore']]],
     'a junk directory renamed by its target' => [['directories' => ['.git' => 'settings']]],
@@ -97,14 +97,14 @@ it('discovers nothing missing from the package or ignored', function (array $pat
 it('honors a custom ignore list', function (): void {
     seedFiles($this->package, ['.ai/keep.md' => 'x', '.ai/drop.tmp' => 'x']);
 
-    $files = (new FileDiscovery())
+    $files = (new FileDiscovery)
         ->discover($this->package, ['directories' => ['.ai']], ['drop.tmp']);
 
     expect(array_keys($files))->toBe(['.ai/keep.md']);
 });
 
 it('reads a list entry as its own source, a keyed one as source to target', function (): void {
-    $tracked = (new FileDiscovery())
+    $tracked = (new FileDiscovery)
         ->trackedPaths(['pint.json', 'resources/project/gitignore' => '.gitignore']);
 
     expect($tracked)->toBe([

@@ -30,7 +30,7 @@ final class ContributionDetector
         Manifest $sources,
         array $ignore = FileDiscovery::DEFAULT_IGNORE,
     ): array {
-        $files = (new FileDiscovery())->discover(
+        $files = (new FileDiscovery)->discover(
                 packageDir: $packageDir,
                 paths: ['directories' => $directories, 'files' => []],
                 ignore: $ignore,

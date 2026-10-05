@@ -73,7 +73,7 @@ final class ManifestFiles
      */
     private function generated(): array
     {
-        $generator = new ManifestGenerator();
+        $generator = new ManifestGenerator;
 
         return collect($this->sources())
             ->map(fn (array $sources, string $file): Manifest => $generator->generate(

@@ -51,7 +51,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
      * detected. A test passes one, because the suite's own terminal is not the
      * one a real Composer run has.
      */
-    public function __construct(private Terminal $terminal = new SystemTerminal())
+    public function __construct(private Terminal $terminal = new SystemTerminal)
     {
     }
 

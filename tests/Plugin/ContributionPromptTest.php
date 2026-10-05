@@ -17,7 +17,7 @@ beforeEach(function (): void {
             'resources/boost/guidelines/02-workflow.md' => [md5("Workflow\n")],
         ],
     ]);
-    $this->output = new BufferIO();
+    $this->output = new BufferIO;
 });
 
 afterEach(function (): void {

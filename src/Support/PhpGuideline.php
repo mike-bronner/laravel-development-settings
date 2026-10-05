@@ -47,7 +47,7 @@ final class PhpGuideline
         private string $packageDir,
         private mixed $output,
         private mixed $errors,
-        private CheckedFile $file = new CheckedFile(),
+        private CheckedFile $file = new CheckedFile,
     ) {
     }
 

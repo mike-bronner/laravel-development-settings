@@ -44,7 +44,7 @@ expect($user)
 ```php
 it("throws on invalid input", function () {
     // 🧪 Arrange
-    $processor = new DataProcessor();
+    $processor = new DataProcessor;
 
     // 🧪 Act
     $process = fn () => $processor->process(data: null);
@@ -62,7 +62,7 @@ it("throws on invalid input", function () {
 ```php
 it("validates email formats", function (string $email, bool $expected) {
     // 🧪 Arrange
-    $validator = new EmailValidator();
+    $validator = new EmailValidator;
 
     // 🧪 Act
     $result = $validator->isValid(email: $email);
@@ -91,7 +91,7 @@ dataset("invalid_ssn_formats", [
 
 it("rejects invalid SSN formats", function (string $ssn) {
     // 🧪 Arrange
-    $validator = new SsnValidator();
+    $validator = new SsnValidator;
 
     // 🧪 Act
     $result = $validator->isValid(ssn: $ssn);
@@ -106,7 +106,7 @@ it("rejects invalid SSN formats", function (string $ssn) {
 ```php
 it("validates amount by currency", function (string $currency, float $amount, bool $expected) {
     // 🧪 Arrange
-    $validator = new AmountValidator();
+    $validator = new AmountValidator;
 
     // 🧪 Act
     $result = $validator->isValid(currency: $currency, amount: $amount);
@@ -333,7 +333,7 @@ tests/
 ```php
 describe("IncomeNormalizer", function () {
     beforeEach(function () {
-        $this->normalizer = new IncomeNormalizer();
+        $this->normalizer = new IncomeNormalizer;
     });
 
     describe("normalize()", function () {

@@ -40,9 +40,9 @@ final class ManifestGenerator
     public function generate(string $packageDir, array $config, string $manifestPath): Manifest
     {
         $paths = data_get($config, 'paths');
-        $manifest = (new ManifestReader())->read($manifestPath);
+        $manifest = (new ManifestReader)->read($manifestPath);
 
-        $files = (new FileDiscovery())->discover(
+        $files = (new FileDiscovery)->discover(
                 packageDir: $packageDir,
                 paths: match (is_array($paths)) {
                 true => $paths,

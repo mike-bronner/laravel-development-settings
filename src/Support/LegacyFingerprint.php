@@ -21,7 +21,7 @@ final class LegacyFingerprint
 {
     public const FILE = '.dev-settings-boost';
 
-    public function __construct(private CheckedFile $file = new CheckedFile())
+    public function __construct(private CheckedFile $file = new CheckedFile)
     {
     }
 

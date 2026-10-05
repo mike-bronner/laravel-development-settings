@@ -22,7 +22,7 @@ beforeEach(function (): void {
 });
 
 it('opens the box with the title, as wide as the box', function (): void {
-    $lines = collect((new Summary())->header())
+    $lines = collect((new Summary)->header())
         ->map($this->visible)
         ->all();
 
@@ -35,7 +35,7 @@ it('opens the box with the title, as wide as the box', function (): void {
 });
 
 it('marks a line with an icon and note', function (string $type, string $icon, string $note): void {
-    $line = ($this->visible)((new Summary())->line($type, '.gitignore'));
+    $line = ($this->visible)((new Summary)->line($type, '.gitignore'));
 
     expect($line)->toStartWith("│  {$icon}  .gitignore{$note}")
         ->and($line)
@@ -53,13 +53,13 @@ it('marks a line with an icon and note', function (string $type, string $icon, s
 ]);
 
 it('pads a line to the width of the box', function (): void {
-    $line = ($this->visible)((new Summary())->line('created', 'pint.json'));
+    $line = ($this->visible)((new Summary)->line('created', 'pint.json'));
 
     expect(mb_strlen($line))->toBe(BOX_WIDTH);
 });
 
 it('cuts a path too long for the box, and marks the cut', function (): void {
-    $line = ($this->visible)((new Summary())->line('created', str_repeat('a', LONG_PATH_LENGTH)));
+    $line = ($this->visible)((new Summary)->line('created', str_repeat('a', LONG_PATH_LENGTH)));
 
     expect($line)->toContain(str_repeat('a', CUT_TO) . '... ')
         ->not
@@ -69,9 +69,9 @@ it('cuts a path too long for the box, and marks the cut', function (): void {
 });
 
 it('closes the box with every count, greyed out at zero', function (): void {
-    $tally = new Tally();
+    $tally = new Tally;
     $tally->add(Tally::NEW, TWO_NEW);
-    [, $summary] = (new Summary())->footer($tally);
+    [, $summary] = (new Summary)->footer($tally);
 
     expect($summary)->toContain('<fg=bright-green;bg=green> 2 new </>', '<fg=gray>0 unchanged</>')
         ->and(($this->visible)($summary))
