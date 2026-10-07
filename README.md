@@ -36,7 +36,7 @@ This package is a Composer plugin that hooks into Composer's pre-update, post-in
 
 ### How the AI guidelines and skills reach your project
 
-The shared guidelines and skills ship at `resources/boost/guidelines/` and `resources/boost/skills/`, which is Laravel Boost's own convention for a package. Boost finds them in vendor and composes them into your agent files (`CLAUDE.md`, `.claude/skills/`, …) alongside its own. Nothing is copied or symlinked into your project.
+The shared guidelines and skills ship at `resources/boost/guidelines/` and `resources/boost/skills/`, which is Laravel Boost's own convention for a package. Boost finds them in vendor and composes them into your agent files (`AGENTS.md`, `.claude/skills/`, …) alongside its own. Nothing is copied or symlinked into your project.
 
 Two conditions have to hold, and both are enforced:
 
@@ -51,6 +51,8 @@ The same rule applies to `mike-bronner/clean-code`, which this package requires.
 
 Boost's own `php/core` guideline tells agents to prefer PHPDoc blocks and to use array shape types in them. The shipped `laravel` skill says the opposite: no comments or docblocks unless asked. So this package replaces it. Its Laravel service provider, discovered automatically, adds `php` to `boost.guidelines.exclude`, and keeps any guidelines your app already excludes there. The shipped `05-php` guideline then carries every other rule of Boost's `php/core` unchanged, plus the no-docblocks rule.
 
+The same provider sets `boost.agents.claude_code.guidelines_path` to `AGENTS.md` when your app sets no path of its own, so Boost composes Claude Code's guidelines into `AGENTS.md`, the file every other agent reads, rather than into `CLAUDE.md`. A path you set in `config/boost.php` is kept.
+
 Nothing is written to your `.ai` directory or to `config/boost.php`. If you turn off package discovery for this package (`extra.laravel.dont-discover`), Boost composes its own `php/core` again. The plugin then reports the Boost run as failed, names the agent file, and says why.
 
 ### Packages
@@ -59,7 +61,15 @@ A package has no `artisan` of its own. This package does not install Orchestra T
 
 Before each Boost run in a package, the plugin runs `php artisan package:discover` through the shim. Laravel reads your repository's `bootstrap/cache/packages.php` and builds it only when it is missing, so without this step a service provider installed after the first run would never load. The `testbench package:discover` in your own `post-autoload-dump` script does not help here: it is not rooted at your repository. A failed refresh is reported with its output, and Boost still runs.
 
-Commit the shim. Its first comment line marks it as this package's file: an `artisan` without that line is an app's and is never touched. The plugin updates a shim it shipped before and keeps one you edited, listing it as locally modified. The shim creates `bootstrap/cache` and `storage/framework/views` on each run, because Testbench cannot boot rooted without them. The shipped `.gitignore` ignores both. Without Testbench installed, the shim stops with an error that names the missing dependency.
+Commit the shim.
+It declares the constant `LARAVEL_DEVELOPMENT_SETTINGS_ARTISAN_SHIM`, and uses it in its own error message, which marks it as this package's file.
+Shims from earlier releases are recognized by their old marker comment, or by matching a version this package shipped.
+Any other `artisan` is an app's and is never touched.
+The plugin updates a shim it shipped before and keeps one you edited, listing it as locally modified.
+The shim creates `bootstrap/cache` and `storage/framework/views` on each run, because Testbench cannot boot rooted without them.
+The shipped `.gitignore` ignores what Testbench writes there, and in `storage/logs`.
+It does not ignore Laravel's placeholder `.gitignore` files in those directories, which an application commits so they exist on a fresh clone.
+Without Testbench installed, the shim stops with an error that names the missing dependency.
 
 The shim must not reach the people who install your package, so the plugin also manages a `.gitattributes` that marks `/artisan` as `export-ignore`, keeping it out of the Composer dist archive. It works like the managed `.gitignore`: the plugin owns the lines above the sync marker, and your own rules go below it. An existing `.gitattributes` has no marker yet, so an interactive `composer update` offers to add it and moves your whole file below it. A non-interactive run only warns, and the shim stays in your archive until you accept.
 
@@ -93,6 +103,12 @@ This package composes unattended, on every install and update, at a moment you d
 - **One opening tag with no closing tag after it.** This run would compose cleanly and append a real block, which leaves two opening tags behind. The run looks successful and arms the next one, so it is refused now.
 
 The run names the file and the reason, and changes nothing. Fix the file yourself — remove or rephrase the prose mention, or close the tag — then run Composer again. The package will not repair it for you: where your own writing ends cannot be read from the file, and guessing wrong destroys the content the check exists to save.
+
+### AGENTS.md and CLAUDE.md
+
+`AGENTS.md` is the agents' `CONTRIBUTING.md`: commit it, and keep your own hand-written prose in it, outside Boost's block. `CLAUDE.md` is a thin file that imports it with the line `@AGENTS.md`, because Claude Code reads `CLAUDE.md`. The shipped `.gitignore` ignores neither.
+
+After a Boost run that composed, a project with no `CLAUDE.md` gets one holding only `@AGENTS.md`, and the run says so. Commit it. An existing `CLAUDE.md` is never changed. When it does not import `AGENTS.md`, and Boost did not compose into it, each run says to add the `@AGENTS.md` line and to remove any Boost block it still holds, which Boost no longer updates.
 
 ### Your project's own guidelines
 
@@ -152,10 +168,12 @@ The shipped `.gitignore` ends with one marker line:
 # mike-bronner/laravel-development-settings: project entries go below this line. Anything above it is lost on the next sync.
 ```
 
-The package owns everything above that line and replaces it on every sync. Everything below it is yours: the sync never changes it, and the upstream workflow never proposes it. Put your own rules there. Because they come last, they win, so `!AGENTS.md` below the marker keeps a hand-written `AGENTS.md` in git even though the shipped rules ignore it.
+The package owns everything above that line and replaces it on every sync. Everything below it is yours: the sync never changes it, and the upstream workflow never proposes it. Put your own rules there. Because they come last, they win: `!GEMINI.md` below the marker keeps a hand-written `GEMINI.md` in git even though the shipped rules ignore it.
+
+The same rule lets an old line below the marker undo the shipped block. Each run lists, by line number, every line below the marker that ignores something the shipped rules leave tracked on purpose (`.ai`, `AGENTS.md`, `CLAUDE.md`, and Laravel's placeholder `.gitignore` files in `bootstrap/cache`, `storage/framework` and `storage/logs`), and every line that repeats a shipped rule. Those lines are yours, so they are never changed: delete the ones you did not mean to keep. A file that already tracks a path is not untracked by any of this. Run `git rm --cached` on it yourself.
 
 - A `.gitignore` with no marker that is exactly a version this package shipped gets the marker automatically.
-- A `.gitignore` with no marker and your own edits is left alone. An interactive `composer update` offers to add the marker (default no), and moves your whole file, unchanged, below it. A non-interactive run only warns. Nothing is proposed upstream from it either way.
+- A `.gitignore` with no marker and your own edits is left alone. An interactive `composer update` offers to add the marker (default no), and moves your whole file, unchanged, below it. Old shipped rules in it then sit below the marker, and each run lists the ones that override the shipped block. A non-interactive run only warns. Nothing is proposed upstream from it either way.
 - A `.gitignore` holding the marker twice is not touched at all, because the sync cannot tell where your part starts. Keep one marker line and run `composer update` again.
 - An edit above the marker is treated like any other local modification: flagged, kept unless you choose to overwrite it, and proposed upstream. Overwriting replaces only the part above the marker.
 - If the package stops shipping a file with a marker, it is removed only when the part above the marker is a version this package shipped and nothing sits below it. With your own rules below the marker, it is kept, and an interactive `composer update` asks whether to delete it.

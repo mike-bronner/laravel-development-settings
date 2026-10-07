@@ -43,3 +43,37 @@ it('leaves the rest of the Boost config alone', function (): void {
 
     expect(($this->boot)($config)->get('boost.enabled'))->toBeTrue();
 });
+
+it('points Claude Code\'s guidelines at AGENTS.md when the app sets no path', function (
+    array $config,
+): void {
+    expect(($this->boot)($config)->get('boost.agents.claude_code.guidelines_path'))
+        ->toBe('AGENTS.md');
+})->with([
+    'no boost config' => [[]],
+    'no Claude Code config' => [
+        ['boost' => ['agents' => ['cursor' => ['guidelines_path' => 'X.md']]]],
+    ],
+    'an empty path, which Boost treats as unset' => [
+        ['boost' => ['agents' => ['claude_code' => ['guidelines_path' => '']]]],
+    ],
+    'a null path' => [['boost' => ['agents' => ['claude_code' => ['guidelines_path' => null]]]]],
+]);
+
+it('keeps a Claude Code guidelines path the app set', function (): void {
+    $config = ['boost' => ['agents' => ['claude_code' => [
+        'guidelines_path' => 'CLAUDE.md',
+        'skills_path' => '.claude/skills',
+    ]]]];
+
+    expect(data_get(($this->boot)($config)->all(), 'boost.agents'))->toBe([
+        'claude_code' => ['guidelines_path' => 'CLAUDE.md', 'skills_path' => '.claude/skills'],
+    ]);
+});
+
+it('leaves other agents\' config alone', function (): void {
+    $config = ['boost' => ['agents' => ['cursor' => ['guidelines_path' => 'X.md']]]];
+
+    expect(data_get(($this->boot)($config)->all(), 'boost.agents.cursor'))
+        ->toBe(['guidelines_path' => 'X.md']);
+});

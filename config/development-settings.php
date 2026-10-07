@@ -95,7 +95,7 @@ return [
         'files' => [
             // Shipped separately from this repository's own `.gitignore` so the
             // two can differ. They served one file until they collided: the
-            // shipped rules ignore the composed agent files, and this
+            // shipped rules ignored the composed agent files, and this
             // repository's `CLAUDE.md` is hand-written. The source deliberately
             // sits outside `resources/boost` (Boost scans that for package
             // guidelines and skills) and deliberately carries no leading dot (a

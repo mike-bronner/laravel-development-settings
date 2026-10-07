@@ -28,6 +28,36 @@ it('rebuilds a package\'s discovery cache through the shim before Boost runs', f
     expect($output)->toContain('Rebuilding the package discovery cache... done');
 })->with([NON_INTERACTIVE, INTERACTIVE_ON_A_TERMINAL]);
 
+it('rebuilds the cache through a shim an agent edited', function (
+    string $artisan,
+    string $kept,
+    string $line,
+): void {
+    [$this->project] = makeConsumer(['app' => false, 'testbench' => true, 'voice' => SILENT]);
+    seedFiles($this->project, [
+        'artisan' => $artisan,
+        'bootstrap/cache/packages.php' => STALE_CACHE,
+    ]);
+
+    $output = publishIn($this->project);
+
+    expect(discoveryRun($this->project))
+        ->toBe(['arguments' => ['package:discover'], 'boost ran' => false]);
+    expect(file_get_contents("{$this->project}/artisan"))->toBe($kept);
+    expect($output)->toContain('Rebuilding the package discovery cache... done', $line);
+})->with([
+    'the 0.3.4 shim, its marker comment stripped' => [
+        strippedShim(),
+        shimSource(),
+        '↻  artisan',
+    ],
+    'the shim with a line added' => [
+        shimSource() . "// Mine.\n",
+        shimSource() . "// Mine.\n",
+        'artisan (locally modified)',
+    ],
+]);
+
 it('runs no package discovery in an app', function (): void {
     [$this->project] = makeConsumer(['testbench' => true]);
     $artisan = <<<PHP

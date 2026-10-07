@@ -14,7 +14,8 @@ use MikeBronner\DevelopmentSettings\Support\Terminal;
  * Publishes the installed package into the project, after `composer install`
  * and `composer update`: removes what earlier releases left behind, syncs the
  * tracked files, registers the package with Laravel Boost, prints the summary
- * box, and runs Boost.
+ * box and the `.gitignore` lines that override the shipped ones, runs Boost,
+ * and then sees that Claude Code reads what Boost composed.
  */
 final class Publisher
 {
@@ -67,8 +68,10 @@ final class Publisher
         $tally->add(Tally::REMOVED, count($legacyLines));
         $boost->count($tally);
         $this->writeLines($this->summary->footer($tally));
+        $trackedFiles->warnOverrides();
 
         $boost->run();
+        (new ClaudeNotice($this->inputOutput, $this->projectDir))->settle($boost->composedFiles());
     }
 
     /**

@@ -126,6 +126,17 @@ it('updates a shim it shipped before, and keeps an edited one', function (
     'an edited shim' => ["// Mine.\n", '/artisan \(locally modified\)/', "// Mine.\n"],
 ]);
 
+it('updates the shim releases from 0.3.4 shipped, its marker comment included', function (): void {
+    [$this->project] = makeConsumer(['app' => false, 'testbench' => true]);
+    file_put_contents("{$this->project}/artisan", previouslyShippedShim());
+
+    $output = publishIn($this->project);
+
+    expect(file_get_contents("{$this->project}/artisan"))->toBe(shimSource());
+    expect($output)->toMatch('/↻  artisan /');
+    expect(boostRan($this->project))->toBeTrue();
+});
+
 it('neither composes nor registers where Testbench is missing, and says so', function (
     array $files,
 ): void {

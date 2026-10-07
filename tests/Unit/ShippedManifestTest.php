@@ -71,10 +71,21 @@ it('keeps the package files out of the tracked files and out of manifest.json', 
     expect(array_intersect($targets, shippedManifest()->paths()))->toBe([]);
 });
 
-it('ships a shim that carries its marker', function (): void {
+it('ships a shim that carries the shim constant', function (): void {
     $source = (string) data_get(shippedFiles('package'), ProjectKind::ARTISAN);
+    $withoutChecksums = new ProjectKind(manifestFile: REPOSITORY_ROOT . '/missing.json');
 
-    expect((new ProjectKind)->isShim(shippedSource($source)))->toBeTrue();
+    expect($withoutChecksums->isShim(shippedSource($source)))->toBeTrue();
+});
+
+it('knows every shim checksum, the copy stripped of its marker included', function (): void {
+    $known = shippedManifest(ProjectKind::MANIFEST_FILE)->knownChecksums(ProjectKind::ARTISAN);
+
+    expect($known)->toContain(
+            md5(previouslyShippedShim()),
+            md5(strippedShim()),
+            md5(shimSource()),
+        );
 });
 
 /*

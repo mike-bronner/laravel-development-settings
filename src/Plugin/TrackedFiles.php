@@ -49,6 +49,11 @@ final class TrackedFiles
      */
     private array $failedWrites = [];
 
+    /**
+     * @var array<string, string> targetPath => absoluteSourcePath
+     */
+    private array $files = [];
+
     public function __construct(
         private FileSync $fileSync,
         private string $projectDir,
@@ -66,6 +71,7 @@ final class TrackedFiles
     public function classify(array $files): void
     {
         $fileSync = $this->fileSync;
+        $this->files = $files;
         $this->scan = $fileSync->classify($this->projectDir, $files);
         $this->safeOrphans = $fileSync->safeOrphans($this->projectDir, $files);
         $this->protectedOrphans = $fileSync->protectedOrphans($this->projectDir, $files);
@@ -126,6 +132,15 @@ final class TrackedFiles
         ]);
         $this->reportFailures();
         $this->removeOrphans($tally, $orphansToDelete);
+    }
+
+    /**
+     * List the project's own `.gitignore` lines that override the shipped
+     * ones, once the file is in its final state.
+     */
+    public function warnOverrides(): void
+    {
+        (new IgnoreOverrideNotice($this->inputOutput, $this->projectDir))->warn($this->files);
     }
 
     /**

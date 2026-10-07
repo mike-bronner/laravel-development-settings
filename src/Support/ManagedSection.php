@@ -14,7 +14,7 @@ use LogicException;
  * Everything below it is the project's, and the sync never reads it as an edit
  * to the source and never rewrites it. The project's part comes last on
  * purpose: in an ignore file the last matching rule wins, so a project line
- * such as `!AGENTS.md` overrides the shipped rule it names.
+ * such as `!GEMINI.md` overrides the shipped rule it names.
  *
  * The marker is recognised only as a whole line, so a comment that merely
  * mentions it is not one. A file holding it more than once has no answer to

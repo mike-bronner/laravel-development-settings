@@ -11,7 +11,7 @@ beforeEach(function (): void {
     $this->package = makeTempDir();
     seedFiles($this->package, [
         'pint.json' => '{}',
-        'resources/project/artisan' => ProjectKind::SHIM_MARKER,
+        'resources/project/artisan' => shimSource(),
         SyncPlan::MANIFEST_FILE => json_encode(['pint.json' => ['p']]),
         ProjectKind::MANIFEST_FILE => json_encode(['artisan' => ['a']]),
     ]);

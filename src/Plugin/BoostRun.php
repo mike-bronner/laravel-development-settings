@@ -84,8 +84,12 @@ final class BoostRun
             . " agent to compose for. Run \"%s\" and choose your agents.",
         'php core composed' => 'Laravel Boost composed its own PHP guideline, which asks for'
             . " PHPDoc blocks, into %s. This package's service provider leaves that guideline"
-            . " out by adding \"%s\" to boost.guidelines.exclude, and it did not run. Check that"
-            . ' package discovery is not turned off for %s.',
+            . " out by adding \"%s\" to boost.guidelines.exclude, and it did not run. In a package"
+            . ' repository, bootstrap/cache/packages.php is most likely older than the provider:'
+            . ' this package rebuilds it before Boost runs only when it recognizes artisan as its'
+            . ' shim. If artisan is an edited copy of the shim, delete it and run the Composer'
+            . ' command again to have the shim written back. Otherwise, check that package'
+            . ' discovery is not turned off for %s.',
         'clean-code not direct' => 'This project does not require %s in its own composer.json,'
             . ' so Laravel Boost composes none of its guidelines.'
             . " Run \"composer require --dev %s\".",
@@ -101,6 +105,13 @@ final class BoostRun
      * What `register()` did to `boost.json`, or null when it did not run.
      */
     private ?string $registration = null;
+
+    /**
+     * The agent files a clean Boost run composed, or null when none did.
+     *
+     * @var list<string>|null
+     */
+    private ?array $composedFiles = null;
 
     /**
      * @param  list<string>  $directRequirements  the packages the project's own
@@ -165,6 +176,14 @@ final class BoostRun
             BoostRegistrar::UNREADABLE => $tally->add(Tally::SKIPPED),
             default => null,
         };
+    }
+
+    /**
+     * @return list<string>|null
+     */
+    public function composedFiles(): ?array
+    {
+        return $this->composedFiles;
     }
 
     /**
@@ -374,9 +393,20 @@ final class BoostRun
                 ),
                 $result,
             ),
-            default => $this->inputOutput
-                ->write($this->style->wrap('info', 'done')),
+            default => $this->done(array_keys($blocks)),
         };
+    }
+
+    /**
+     * Only a run that composed cleanly records what it composed.
+     *
+     * @param  list<string>  $composedFiles
+     */
+    private function done(array $composedFiles): void
+    {
+        $this->composedFiles = $composedFiles;
+        $this->inputOutput
+            ->write($this->style->wrap('info', 'done'));
     }
 
     /**

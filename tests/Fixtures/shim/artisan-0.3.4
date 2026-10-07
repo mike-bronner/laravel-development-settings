@@ -1,12 +1,12 @@
 #!/usr/bin/env php
 <?php
 
+// Written by mike-bronner/laravel-development-settings: runs Artisan through Orchestra Testbench, rooted at this repository.
+
 declare(strict_types=1);
 
-const LARAVEL_DEVELOPMENT_SETTINGS_ARTISAN_SHIM = 'mike-bronner/laravel-development-settings';
-
 if (! is_file(__DIR__ . '/vendor/bin/testbench')) {
-    fwrite(STDERR, 'This artisan is the ' . LARAVEL_DEVELOPMENT_SETTINGS_ARTISAN_SHIM . " shim. It runs through Orchestra Testbench, which is not installed. Run composer install, or require orchestra/testbench as a dev dependency.\n");
+    fwrite(STDERR, "This artisan runs through Orchestra Testbench, which is not installed. Run composer install, or require orchestra/testbench as a dev dependency.\n");
 
     exit(1);
 }

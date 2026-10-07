@@ -138,3 +138,34 @@ it('shows only the one summary line when a captured Boost run succeeds', functio
     expect($output)->not
         ->toContain('Boost stand-in composed AGENTS.md', '    │ ');
 });
+
+it('writes a missing CLAUDE.md that imports AGENTS.md, once Boost composed', function (
+    string $run,
+): void {
+    [$this->project] = makeConsumer();
+
+    $output = publishIn($this->project, $run);
+
+    expect(file_get_contents("{$this->project}/CLAUDE.md"))->toBe("@AGENTS.md\n");
+    expect($output)->toContain('Wrote CLAUDE.md, which imports AGENTS.md');
+})->with([NON_INTERACTIVE, INTERACTIVE_ON_A_TERMINAL]);
+
+it('writes no CLAUDE.md after a Boost run that failed', function (string $boost): void {
+    [$this->project] = makeConsumer(['boost' => $boost]);
+
+    $output = publishIn($this->project);
+
+    expect(file_exists("{$this->project}/CLAUDE.md"))->toBeFalse();
+    expect($output)->not
+        ->toContain('CLAUDE.md');
+})->with([COMPOSES_NOTHING, EXITS_WITH_ERROR]);
+
+it('keeps a CLAUDE.md of the project, and says it does not import AGENTS.md', function (): void {
+    [$this->project] = makeConsumer();
+    file_put_contents("{$this->project}/CLAUDE.md", "Ours.\n");
+
+    $output = publishIn($this->project);
+
+    expect(file_get_contents("{$this->project}/CLAUDE.md"))->toBe("Ours.\n");
+    expect($output)->toContain('CLAUDE.md does not import AGENTS.md');
+});

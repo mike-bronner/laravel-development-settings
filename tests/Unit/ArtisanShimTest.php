@@ -32,7 +32,7 @@ afterEach(function (): void {
     removeTempDir($this->project);
 });
 
-it('carries the marker that tells it from an app artisan', function (): void {
+it('is told from an app artisan', function (): void {
     expect((new ProjectKind)->isApp($this->project))->toBeFalse();
 });
 
@@ -65,10 +65,28 @@ it('fails with the next step, and creates nothing, when Testbench is missing', f
 
     expect($result->exitCode())->toBe(1);
     expect($result->output())
-        ->toContain('This artisan runs through Orchestra Testbench, which is not installed.')
+        ->toContain(
+            'This artisan is the mike-bronner/laravel-development-settings shim. It runs'
+                . ' through Orchestra Testbench, which is not installed.',
+        )
         ->not
         ->toContain('Fatal');
     expect(glob("{$this->project}/{bootstrap,storage}", GLOB_BRACE))->toBe([]);
+});
+
+it('needs the shim constant it is recognized by, so it is not dead code', function (): void {
+    $artisan = (string) file_get_contents("{$this->project}/artisan");
+    $constant = ProjectKind::SHIM_CONSTANT;
+    $declaration = "const {$constant} = 'mike-bronner/laravel-development-settings';\n";
+    $withoutDeclaration = str_replace($declaration, '', $artisan, $removed);
+    file_put_contents("{$this->project}/artisan", $withoutDeclaration);
+
+    $result = ($this->runShim)();
+
+    expect($removed)->toBe(1);
+    expect($result->exitCode())->not
+        ->toBe(0);
+    expect($result->output())->toContain("Undefined constant \"{$constant}\"");
 });
 
 it('stays out of the dist archive under the .gitattributes the sync writes', function (): void {

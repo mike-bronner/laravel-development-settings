@@ -83,8 +83,10 @@ _ide_helper*.php
 composer.lock
 
 # ignore the composed agent files, have laravel boost manage them and the
-# developer choose their setup. `.ai` itself is NOT ignored: it is where a
-# project keeps its own guidelines, skills and rules, and they belong in git.
+# developer choose their setup. `.ai`, `AGENTS.md` and `CLAUDE.md` are NOT
+# ignored: `.ai` holds the project's own guidelines, skills and rules,
+# `AGENTS.md` is the agents' CONTRIBUTING.md, with hand-written prose around
+# Boost's block, and `CLAUDE.md` imports it with `@AGENTS.md`.
 .agentic-tools-mcp
 .agents
 .claude
@@ -102,16 +104,18 @@ composer.lock
 .pi
 .vscode/mcp.json
 .zed
-AGENTS.md
-CLAUDE.md
 GEMINI.md
 boost.json
 opencode.json
 
-# Directories Testbench needs to boot rooted at a package. The artisan shim
-# creates them on every run, and earlier releases created them too. They are
-# never removed, because a project may keep its own files there, so they stay
-# ignored.
-/bootstrap/cache
-/storage/framework
-/storage/logs
+# What Testbench writes when it boots rooted at a package: the artisan shim
+# creates these directories on every run, and earlier releases created them
+# too. Their contents stay ignored, but not Laravel's placeholder .gitignore
+# files, which an app commits so the directories exist on a fresh clone.
+/bootstrap/cache/*
+!/bootstrap/cache/.gitignore
+/storage/framework/**
+!/storage/framework/**/
+!/storage/framework/**/.gitignore
+/storage/logs/*
+!/storage/logs/.gitignore

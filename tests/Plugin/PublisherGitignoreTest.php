@@ -137,3 +137,18 @@ it('does not touch a .gitignore holding the sync marker twice, and says why', fu
             '1 skipped',
         );
 });
+
+it('lists the project lines that override the shipped rules, and keeps them', function (): void {
+    $local = marked(GITIGNORE_V2, "\n.ai\nAGENTS.md\n/vendor\n!AGENTS.md\n/deprecations.log\n");
+    $this->project = gitignoreConsumer($local);
+
+    $output = publishIn($this->project);
+
+    expect(file_get_contents("{$this->project}/.gitignore"))->toBe($local);
+    expect($output)->toContain(
+            'line 4: .ai (ignores .ai/, which the shipped rules leave tracked)',
+            'line 6: /vendor (repeats a shipped rule)',
+        );
+    expect($output)->not
+        ->toContain('line 5:', 'line 7:', 'line 8:');
+});

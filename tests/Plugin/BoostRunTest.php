@@ -122,8 +122,15 @@ it('fails a run that composed Boost\'s PHPDoc rule, naming the exclusion', funct
             'failed',
             'into AGENTS.md',
             "\"php\" to boost.guidelines.exclude",
+            'In a package repository, bootstrap/cache/packages.php is most likely older than the'
+                . ' provider',
+            'only when it recognizes artisan as its shim',
+            'If artisan is an edited copy of the shim, delete it',
             'package discovery is not turned off for mike-bronner/laravel-development-settings',
         );
+    expect(strpos($output, 'bootstrap/cache/packages.php is most likely older'))
+        ->toBeInt()
+        ->toBeLessThan(strpos($output, 'package discovery is not turned off'));
     expect($output)->not
         ->toContain('done');
 });
