@@ -26,8 +26,6 @@ runs:
         TIA_BASELINE_ARGUMENTS: ${{ inputs.arguments }}
       run: bash "$GITHUB_ACTION_PATH/record.sh"
 
-    # Pest downloads the artifact by this exact name and reads graph.json from
-    # its root. A run that uploads nothing must fail, never pass.
     - name: Upload the Pest TIA baseline
       uses: actions/upload-artifact@v4
       with:

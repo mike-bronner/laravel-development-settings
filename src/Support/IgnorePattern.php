@@ -4,17 +4,6 @@ declare(strict_types=1);
 
 namespace MikeBronner\DevelopmentSettings\Support;
 
-/**
- * One rule of an ignore file, read the way git reads it: a leading `!`
- * negates it, a trailing `/` limits it to directories, a `/` anywhere else
- * anchors it at the root, and `*`, `?`, `**`, bracket expressions and
- * backslash escapes match as git matches them.
- *
- * A rule is project text, and reading it must never stop a publish: under
- * Composer, a PCRE warning becomes an exception. So every character that is
- * not a wildcard is quoted, and a bracket expression with a range out of
- * order, or with no character at all, makes the rule match nothing.
- */
 final class IgnorePattern
 {
     private const DELIMITER = '#';
@@ -41,10 +30,6 @@ final class IgnorePattern
     {
     }
 
-    /**
-     * The rule as git reads it: without a carriage return, and without the
-     * trailing spaces a backslash does not escape.
-     */
     public function rule(): string
     {
         return (string) preg_replace(self::TRAILING_SPACES, '', rtrim($this->rule, "\r"));
@@ -55,9 +40,6 @@ final class IgnorePattern
         return str_starts_with($this->rule(), '!');
     }
 
-    /**
-     * Whether the rule matches the path. A directory ends with a slash.
-     */
     public function matches(string $path): bool
     {
         $body = $this->body();
@@ -73,9 +55,6 @@ final class IgnorePattern
         return $regex !== null && $isAllowed && preg_match($regex, $subject) === 1;
     }
 
-    /**
-     * The rule without the `!` that negates it.
-     */
     private function body(): string
     {
         return match ($this->isNegation()) {
@@ -108,10 +87,6 @@ final class IgnorePattern
         };
     }
 
-    /**
-     * A bracket expression as a character class, or null when it holds no
-     * character or a range out of order.
-     */
     private function bracket(string $token): ?string
     {
         preg_match(self::BRACKET, $token, $parts);

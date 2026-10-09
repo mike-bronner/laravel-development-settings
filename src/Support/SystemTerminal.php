@@ -8,10 +8,6 @@ use Override;
 
 final class SystemTerminal implements Terminal
 {
-    /**
-     * Whether this process reads from and writes to a terminal, the same test
-     * Composer makes before it gives a script the TTY.
-     */
     #[Override]
     public function isAttached(): bool
     {

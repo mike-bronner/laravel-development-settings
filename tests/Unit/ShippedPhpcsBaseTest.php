@@ -10,7 +10,7 @@ afterEach(function (): void {
 
 it('ships phpcs.xml and never a ruleset copy', function (): void {
     $this->project = makeTempDir();
-    $targets = array_keys(shippedFiles('paths'));
+    $targets = array_keys(shippedFiles());
 
     expect($targets)->toContain('phpcs.xml')
         ->not
@@ -53,11 +53,6 @@ it('checks each project file with CleanCode, but not the generated directories',
     ],
 ]);
 
-/*
- * Releases before 0.3.3 shipped phpcs.xml pointing at a ruleset that no longer
- * ships. Their unmodified copies are known versions, so the sync replaces them
- * with the current file instead of keeping them as local edits.
- */
 it('replaces an unmodified phpcs.xml from an older release', function (): void {
     $this->project = makeTempDir();
     file_put_contents("{$this->project}/phpcs.xml", <<<XML

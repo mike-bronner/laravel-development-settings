@@ -11,11 +11,6 @@ use MikeBronner\DevelopmentSettings\Support\GuidelineGuard;
 use MikeBronner\DevelopmentSettings\Support\PhpGuideline;
 use MikeBronner\DevelopmentSettings\Tests\Fixtures\DetachedTerminal;
 
-/*
- * A command that only records having run stands in for the Boost command, so
- * the marker file answers whether composition was attempted.
- */
-
 beforeEach(function (): void {
     $this->project = makeTempDir('devset-boost-');
     $this->output = new BufferIO;
@@ -124,8 +119,8 @@ it('fails a run that composed Boost\'s PHPDoc rule, naming the exclusion', funct
             "\"php\" to boost.guidelines.exclude",
             'In a package repository, bootstrap/cache/packages.php is most likely older than the'
                 . ' provider',
-            'only when it recognizes artisan as its shim',
-            'If artisan is an edited copy of the shim, delete it',
+            'only when the repository has no artisan of its own',
+            'If artisan is an edited copy of the shim earlier releases wrote, delete it',
             'package discovery is not turned off for mike-bronner/laravel-development-settings',
         );
     expect(strpos($output, 'bootstrap/cache/packages.php is most likely older'))

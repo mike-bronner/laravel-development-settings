@@ -4,11 +4,6 @@ declare(strict_types=1);
 
 use Laravel\Prompts\Key;
 
-/*
- * A publish into a project whose `.gitignore` is a managed target: the package
- * owns the part above the sync marker, and the project everything below it.
- */
-
 const AGREE = [Key::SPACE, Key::ENTER];
 
 const DECLINE = [Key::ENTER];

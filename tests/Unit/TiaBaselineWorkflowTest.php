@@ -22,14 +22,10 @@ afterEach(function (): void {
 });
 
 it('ships the workflow to every consuming project as a tracked file', function (): void {
-    expect(shippedFiles('paths'))->toHaveKey(TIA_WORKFLOW_TARGET, TIA_WORKFLOW_SOURCE);
+    expect(shippedFiles())->toHaveKey(TIA_WORKFLOW_TARGET, TIA_WORKFLOW_SOURCE);
     expect(shippedManifest()->isKnown(TIA_WORKFLOW_TARGET, md5(tiaWorkflow())))->toBeTrue();
 });
 
-/*
- * This repository runs Pest below 5, on which the workflow fails. Its source
- * therefore sits where GitHub never runs a workflow.
- */
 it('keeps the workflow out of the workflows this repository runs', function (): void {
     expect(REPOSITORY_ROOT . '/' . TIA_WORKFLOW_TARGET)->not
         ->toBeFile();
@@ -37,11 +33,6 @@ it('keeps the workflow out of the workflows this repository runs', function (): 
         ->toStartWith('.github/');
 });
 
-/*
- * A copy hand-written from the 0.6.0 README has a checksum the manifest does
- * not know. The sync keeps it, until the repository moves its setup into the
- * hooks and deletes it.
- */
 it('creates, updates and protects the workflow like any tracked file', function (
     ?string $local,
     string $expected,
@@ -68,11 +59,6 @@ it('creates, updates and protects the workflow like any tracked file', function 
     ],
 ]);
 
-/*
- * Pest's lookup takes the latest successful run on any branch. The job runs
- * on the default branch alone, whatever its name, and a skipped job fails no
- * run on any other branch.
- */
 it('records on the default branch alone, on a push or a manual run', function (string $line): void {
     expect(explode("\n", tiaWorkflow()))->toContain($line);
 })->with([
@@ -88,10 +74,6 @@ it('runs on no event the shared action refuses', function (string $event): void 
         ->toContain("  {$event}:");
 })->with(['pull_request', 'pull_request_target', 'pull_request_review', 'workflow_run']);
 
-/*
- * The shared action fails on Pest below 5. Nothing in the workflow may turn
- * that failure into a green run.
- */
 it('lets a failed recording fail the run', function (): void {
     expect(tiaWorkflow())->not
         ->toContain('continue-on-error');

@@ -4,22 +4,12 @@ declare(strict_types=1);
 
 use MikeBronner\DevelopmentSettings\Support\InstalledPackage;
 
-/*
- * A publish into a project that does or does not require clean-code in its own
- * composer.json. Boost composes the guidelines of a direct dependency only, so
- * the project is told to require it, and is registered once it does.
- */
-
 const CLEAN_CODE = 'mike-bronner/clean-code';
 
 const CLEAN_CODE_NOTICE = 'This project does not require mike-bronner/clean-code in its own'
     . ' composer.json, so Laravel Boost composes none of its guidelines.'
     . " Run \"composer require --dev mike-bronner/clean-code\".";
 
-/*
- * The notice and the registration hold whether Boost runs captured or on the
- * terminal.
- */
 const EVERY_RUN = [NON_INTERACTIVE, INTERACTIVE, INTERACTIVE_ON_A_TERMINAL];
 
 afterEach(function (): void {

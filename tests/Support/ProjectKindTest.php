@@ -83,45 +83,45 @@ it('treats an artisan it cannot read as the shim as an app', function (string $s
     };
 
     expect($this->kind->isApp($this->project))->toBeTrue()
-        ->and($this->kind->receivesShim($this->project))
+        ->and($this->kind->isTestbenchPackage($this->project))
         ->toBeFalse()
         ->and($this->kind->composesBoost($this->project))
         ->toBeTrue();
 })->with(['symlink to the shim', 'dangling symlink', 'directory']);
 
-it('sends the shim only where there is no app and Testbench is installed', function (
+it('runs through Testbench only where there is no app and Testbench is installed', function (
     array $files,
     array $expected,
 ): void {
     seedFiles($this->project, $files);
 
     expect([
-        'receives shim' => $this->kind->receivesShim($this->project),
+        'Testbench package' => $this->kind->isTestbenchPackage($this->project),
         'has Testbench' => $this->kind->hasTestbench($this->project),
         'composes' => $this->kind->composesBoost($this->project),
     ])->toBe($expected);
 })->with([
     'package with Testbench' => [
         [ProjectKind::TESTBENCH => "<?php\n"],
-        ['receives shim' => true, 'has Testbench' => true, 'composes' => true],
+        ['Testbench package' => true, 'has Testbench' => true, 'composes' => true],
     ],
     'package holding the shim' => [
         ['artisan' => shimSource(), ProjectKind::TESTBENCH => "<?php\n"],
-        ['receives shim' => true, 'has Testbench' => true, 'composes' => true],
+        ['Testbench package' => true, 'has Testbench' => true, 'composes' => true],
     ],
     'package without Testbench' => [
         [],
-        ['receives shim' => false, 'has Testbench' => false, 'composes' => false],
+        ['Testbench package' => false, 'has Testbench' => false, 'composes' => false],
     ],
     'app with Testbench' => [
         ['artisan' => "<?php\n", ProjectKind::TESTBENCH => "<?php\n"],
-        ['receives shim' => false, 'has Testbench' => true, 'composes' => true],
+        ['Testbench package' => false, 'has Testbench' => true, 'composes' => true],
     ],
     'app booting Testbench itself' => [
         [
             'artisan' => "<?php\n\nrequire __DIR__ . '/vendor/bin/testbench';\n",
             ProjectKind::TESTBENCH => "<?php\n",
         ],
-        ['receives shim' => false, 'has Testbench' => true, 'composes' => true],
+        ['Testbench package' => false, 'has Testbench' => true, 'composes' => true],
     ],
 ]);

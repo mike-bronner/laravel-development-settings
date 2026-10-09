@@ -10,19 +10,8 @@ use MikeBronner\DevelopmentSettings\Support\PackageConfig;
 use MikeBronner\DevelopmentSettings\Support\SyncPlan;
 use MikeBronner\DevelopmentSettings\Support\Terminal;
 
-/**
- * Publishes the installed package into the project, after `composer install`
- * and `composer update`: removes what earlier releases left behind, syncs the
- * tracked files, registers the package with Laravel Boost, prints the summary
- * box and the `.gitignore` lines that override the shipped ones, runs Boost,
- * and then sees that Claude Code reads what Boost composed.
- */
 final class Publisher
 {
-    /**
-     * @param  list<string>  $directRequirements  the packages the project's own
-     *                                            composer.json requires, dev included
-     */
     public function __construct(
         private IOInterface $inputOutput,
         private Terminal $terminal,
@@ -74,10 +63,6 @@ final class Publisher
         (new ClaudeNotice($this->inputOutput, $this->projectDir))->settle($boost->composedFiles());
     }
 
-    /**
-     * @param  list<array{string, string}>  $lines  type => path
-     * @return list<string>
-     */
     private function summaryLines(array $lines): array
     {
         return collect($lines)
@@ -85,9 +70,6 @@ final class Publisher
             ->all();
     }
 
-    /**
-     * @param  list<string>  $lines
-     */
     private function writeLines(array $lines): void
     {
         foreach ($lines as $line) {

@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
+use MikeBronner\DevelopmentSettings\Support\BoostHooks;
 use MikeBronner\DevelopmentSettings\Support\FileDiscovery;
 use MikeBronner\DevelopmentSettings\Support\PackageConfig;
 
 it('reads each entry the config names', function (): void {
     $config = new PackageConfig([
         'capture' => ['resources/boost'],
-        'package' => ['files' => ['a' => 'b'], 'managed' => ['b']],
         'paths' => ['files' => ['pint.json'], 'managed' => ['.gitignore'], 'ignore' => ['x']],
         'hooks' => ['description' => 'Composing...'],
     ]);
@@ -16,14 +16,12 @@ it('reads each entry the config names', function (): void {
     expect([
         $config->paths(),
         $config->entries(PackageConfig::CAPTURE),
-        $config->entries(PackageConfig::PACKAGE_MANAGED),
         $config->entries(PackageConfig::MANAGED),
         $config->entries(PackageConfig::IGNORE),
         $config->hooks()->description(),
     ])->toBe([
         ['files' => ['pint.json'], 'managed' => ['.gitignore'], 'ignore' => ['x']],
         ['resources/boost'],
-        ['b'],
         ['.gitignore'],
         ['x'],
         'Composing...',
@@ -34,7 +32,7 @@ it('applies the default of an entry left out', function (string $key, array $def
     expect((new PackageConfig(['paths' => []]))->entries($key))->toBe($default);
 })->with([
     'capture' => [PackageConfig::CAPTURE, []],
-    'package' => [PackageConfig::PACKAGE, []],
+    'managed' => [PackageConfig::MANAGED, []],
     'legacy symlinks' => [PackageConfig::LEGACY_SYMLINKS, []],
     'ignore' => [PackageConfig::IGNORE, FileDiscovery::DEFAULT_IGNORE],
 ]);
@@ -51,8 +49,26 @@ it('reads the shipped config, --no-interaction on the captured command only', fu
     $config = new PackageConfig(require REPOSITORY_ROOT . '/' . PackageConfig::FILE);
 
     $hooks = $config->hooks();
+    $testbench = $hooks->throughTestbench();
 
     expect($config->entries(PackageConfig::LEGACY_SYMLINKS))->toBe(['.ai'])
         ->and([$hooks->command(), $hooks->interactiveCommand()])
-        ->toBe(['php artisan boost:install --no-interaction', 'php artisan boost:install']);
+        ->toBe(['php artisan boost:install --no-interaction', 'php artisan boost:install'])
+        ->and([
+            $testbench->command(),
+            $testbench->interactiveCommand(),
+            $testbench->discoverCommand(),
+        ])
+        ->toBe([
+            BoostHooks::TESTBENCH_INSTALL_COMMAND . ' --no-interaction',
+            BoostHooks::TESTBENCH_INSTALL_COMMAND,
+            BoostHooks::DISCOVER_COMMAND,
+        ]);
+});
+
+it('ships no file a package repository alone receives', function (): void {
+    $config = require REPOSITORY_ROOT . '/' . PackageConfig::FILE;
+
+    expect($config)->not
+        ->toHaveKey('package');
 });

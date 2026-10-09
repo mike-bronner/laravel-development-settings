@@ -12,12 +12,6 @@ beforeEach(function (): void {
         );
 });
 
-/*
- * Pest's parallel runner leaves Laravel's ParallelRunner out whenever
- * Orchestra Testbench's TestCase exists, so every worker of an application
- * shares one database. Required here, Testbench would reach every application,
- * and this repository needs none: its tests stand in for vendor/bin/testbench.
- */
 it('requires no orchestra/testbench, for projects or for itself', function (string $list): void {
     expect($this->composer[$list])
         ->not

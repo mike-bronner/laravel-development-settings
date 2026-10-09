@@ -6,12 +6,6 @@ use MikeBronner\DevelopmentSettings\Support\IgnoreOverrides;
 use MikeBronner\DevelopmentSettings\Support\ManagedSection;
 use MikeBronner\DevelopmentSettings\Support\SystemProcess;
 
-/*
- * The shipped .gitignore, read by git itself. `git check-ignore` prints
- * nothing for a tracked path even when a rule matches it, so every check runs
- * on untracked files, or with --no-index.
- */
-
 beforeEach(function (): void {
     $this->project = makeTempDir('devset-gitignore-');
     $this->shipped = shippedSource('resources/project/gitignore');

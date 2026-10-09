@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace MikeBronner\DevelopmentSettings\Support;
 
-/**
- * A captured command's exit code and output.
- */
 final readonly class ProcessResult
 {
     public function __construct(
@@ -30,11 +27,6 @@ final readonly class ProcessResult
         return $this->exitCode !== 0;
     }
 
-    /**
-     * The last lines of output, without blank lines or trailing whitespace.
-     *
-     * @return list<string>
-     */
     public function tail(int $lines = 20): array
     {
         $split = preg_split('/\R/', $this->output);

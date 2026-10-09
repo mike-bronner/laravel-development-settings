@@ -17,12 +17,6 @@ afterEach(function (): void {
     removeTempDir($this->project);
 });
 
-/*
- * The package ships the calling workflow, so it runs the reverse sync on
- * itself. Its root .gitignore differs from the shipped one on purpose, and a
- * run here proposed the root copy over the shipped source (PR #32). The guard
- * sits on the job, directly under its key, so every step is skipped.
- */
 it('skips the reverse sync when the package itself is the caller', function (): void {
     $this->project = makeTempDir();
 
@@ -31,10 +25,6 @@ it('skips the reverse sync when the package itself is the caller', function (): 
     expect(data_get($guard, 1))->toBe(InstalledPackage::NAME);
 });
 
-/*
- * The workflow's PHP step requires every class it uses, from the package
- * checkout, and writes only the managed section.
- */
 it('copies only the managed section of the .gitignore into the package', function (): void {
     [$this->project, $package, $shipped] = syncFixture();
 
@@ -62,10 +52,6 @@ it('fails the step when a changed file cannot be written to the package', functi
     expect(file_get_contents("{$package}/resources/project/gitignore"))->toBe($shipped);
 });
 
-/*
- * File names are project input, so each changed one must stay inside the
- * code fence of the PR body the change detection feeds.
- */
 it('keeps every changed file name inside the code fence of the PR body', function (): void {
     $this->project = makeTempDir('devset-detect-');
     $package = "{$this->project}/_laravel-development-settings";

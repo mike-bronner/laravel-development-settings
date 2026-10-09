@@ -15,12 +15,6 @@ const PHPCS_ELSE_SOURCE = <<<PHP
 
     PHP;
 
-/**
- * A project holding the shipped phpcs.xml, and the given files, each a PHP
- * file that breaks one CleanCode rule.
- *
- * @param  list<string>  $relativePaths
- */
 function phpcsProject(array $relativePaths): string
 {
     $project = makeTempDir('devset-phpcs-');
@@ -31,13 +25,6 @@ function phpcsProject(array $relativePaths): string
     return $project;
 }
 
-/**
- * Run PHP_CodeSniffer the way a developer does, with no arguments, so it
- * finds its ruleset and its paths on its own, and answer each checked file,
- * relative to the project, with the sniff codes reported against it.
- *
- * @return array<string, list<string>>
- */
 function runPhpcs(string $project): array
 {
     $phpcs = escapeshellarg(REPOSITORY_ROOT . '/vendor/bin/phpcs');

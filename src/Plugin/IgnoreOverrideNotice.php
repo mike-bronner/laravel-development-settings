@@ -7,11 +7,6 @@ namespace MikeBronner\DevelopmentSettings\Plugin;
 use Composer\IO\IOInterface;
 use MikeBronner\DevelopmentSettings\Support\IgnoreOverrides;
 
-/**
- * Lists, on every run, the lines below the `.gitignore` marker that override
- * the shipped rules above it. The lines are the project's, so they are named
- * and never changed.
- */
 final class IgnoreOverrideNotice
 {
     public const FILE = '.gitignore';
@@ -30,9 +25,6 @@ final class IgnoreOverrideNotice
     ) {
     }
 
-    /**
-     * @param  array<string, string>  $files  targetPath => absoluteSourcePath, as synced
-     */
     public function warn(array $files): void
     {
         $target = "{$this->projectDir}/" . self::FILE;
@@ -55,9 +47,6 @@ final class IgnoreOverrideNotice
         };
     }
 
-    /**
-     * @param  array<int, array{string, list<string>}>  $overrides
-     */
     private function list(array $overrides): void
     {
         $this->write(sprintf(self::TEXT['heading'], self::FILE));

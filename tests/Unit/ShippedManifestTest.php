@@ -8,12 +8,6 @@ use MikeBronner\DevelopmentSettings\Support\ManagedSection;
 use MikeBronner\DevelopmentSettings\Support\PackageConfig;
 use MikeBronner\DevelopmentSettings\Support\ProjectKind;
 
-/*
- * Versions shipped at release tags before manifest.json recorded them. The
- * reverse sync proposed them upstream as local edits (PRs #19 and #21), and
- * the plugin protected them as locally modified. They are the tag backfill's
- * regression guard: each was an untouched copy of a released file.
- */
 it('knows the versions older tags shipped', function (string $path, string $checksum): void {
     expect(shippedManifest()->isKnown($path, $checksum))->toBeTrue();
 })->with([
@@ -24,18 +18,9 @@ it('knows the versions older tags shipped', function (string $path, string $chec
     ],
 ]);
 
-/*
- * A managed target is written as its source plus the marker line, so it has
- * to be a tracked file, its source must end with a newline, or the marker
- * would land on its last line, and must not hold the marker itself, or every
- * project would get two and refuse the file from then on.
- */
-it('ships every managed target as a source the marker can follow', function (string $group): void {
-    $managed = match ($group) {
-        'package' => shippedConfig()->entries(PackageConfig::PACKAGE_MANAGED),
-        default => shippedConfig()->entries(PackageConfig::MANAGED),
-    };
-    $sources = collect(shippedFiles($group))
+it('ships every managed target as a source the marker can follow', function (): void {
+    $managed = shippedConfig()->entries(PackageConfig::MANAGED);
+    $sources = collect(shippedFiles())
         ->only($managed)
         ->map(fn (string $source): string => shippedSource($source));
 
@@ -48,34 +33,27 @@ it('ships every managed target as a source the marker can follow', function (str
 
     expect($sources->map(fn (string $contents): int => $section->markers($contents))->sum())
         ->toBe(0);
-})->with(['paths', 'package']);
+});
 
-it('ships no testbench.yaml, because the artisan shim does the rooting', function (): void {
-    expect(shippedFiles('paths'))->not
+it('ships no testbench.yaml, because bin/rooted-testbench.php does the rooting', function (): void {
+    expect(shippedFiles())->not
         ->toHaveKey('testbench.yaml');
     expect(shippedManifest()->paths())->not
         ->toContain('testbench.yaml');
 });
 
-/*
- * Every app holds an artisan of its own. Were the shim a tracked file, or
- * known under manifest.json, copy-sync would call every app's artisan locally
- * modified, and orphan cleanup would offer to delete it.
- */
-it('keeps the package files out of the tracked files and out of manifest.json', function (): void {
-    $targets = array_keys(shippedFiles('package'));
+it('keeps the retired package files out of the tracked files and manifest.json', function (): void {
+    $retired = shippedManifest(ProjectKind::MANIFEST_FILE)->paths();
 
-    expect($targets)->toContain(ProjectKind::ARTISAN);
-    expect(shippedManifest(ProjectKind::MANIFEST_FILE)->paths())->toEqualCanonicalizing($targets);
-    expect(array_intersect($targets, array_keys(shippedFiles('paths'))))->toBe([]);
-    expect(array_intersect($targets, shippedManifest()->paths()))->toBe([]);
+    expect($retired)->toEqualCanonicalizing([ProjectKind::ARTISAN, '.gitattributes']);
+    expect(array_intersect($retired, array_keys(shippedFiles())))->toBe([]);
+    expect(array_intersect($retired, shippedManifest()->paths()))->toBe([]);
 });
 
-it('ships a shim that carries the shim constant', function (): void {
-    $source = (string) data_get(shippedFiles('package'), ProjectKind::ARTISAN);
+it('tells the last shim it wrote by its constant alone', function (): void {
     $withoutChecksums = new ProjectKind(manifestFile: REPOSITORY_ROOT . '/missing.json');
 
-    expect($withoutChecksums->isShim(shippedSource($source)))->toBeTrue();
+    expect($withoutChecksums->isShim(shimSource()))->toBeTrue();
 });
 
 it('knows every shim checksum, the copy stripped of its marker included', function (): void {
@@ -88,11 +66,6 @@ it('knows every shim checksum, the copy stripped of its marker included', functi
         );
 });
 
-/*
- * Copy-sync and orphan cleanup read manifest.json on project paths. A
- * resources/boost key there would let cleanup delete a consuming package's
- * own resources/boost files.
- */
 it('keeps capture checksums out of the manifest copy-sync reads', function (): void {
     $prefixes = collect(shippedConfig()->entries(PackageConfig::CAPTURE))
         ->map(fn (string $directory): string => "{$directory}/")

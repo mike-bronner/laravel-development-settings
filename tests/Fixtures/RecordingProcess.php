@@ -10,30 +10,11 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use SplFileInfo;
 
-/**
- * Records every command, and answers each with the exit code of the first
- * substring it contains, or the default.
- *
- * When `git add` runs, it also records every file in the working directory
- * with its contents. The clone is deleted before `Contributor::open()`
- * returns, so this snapshot is the only evidence of where each edited file
- * landed.
- */
 final class RecordingProcess implements Process
 {
-    /**
-     * @var list<string>
-     */
     private array $commands = [];
-
-    /**
-     * @var array<string, string>|null relative path => contents, taken at `git add`
-     */
     private ?array $stagedTree = null;
 
-    /**
-     * @param  array<string, int>  $exitCodes  command substring => exit code
-     */
     public function __construct(private array $exitCodes = [], private int $default = 0)
     {
     }
@@ -55,33 +36,21 @@ final class RecordingProcess implements Process
         return $this->exitCodes[(string) $needle] ?? $this->default;
     }
 
-    /**
-     * @return list<string>
-     */
     public function commands(): array
     {
         return $this->commands;
     }
 
-    /**
-     * Every command, one per line.
-     */
     public function log(): string
     {
         return implode("\n", $this->commands);
     }
 
-    /**
-     * @return array<string, string>|null
-     */
     public function stagedTree(): ?array
     {
         return $this->stagedTree;
     }
 
-    /**
-     * @return array<string, string>
-     */
     private function treeOf(string $directory): array
     {
         $iterator = new RecursiveIteratorIterator(

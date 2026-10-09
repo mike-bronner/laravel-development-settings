@@ -9,14 +9,6 @@ use Laravel\Prompts\Prompt;
 
 use function Laravel\Prompts\multiselect;
 
-/**
- * Asks the developer which kept files a sync may change after all.
- *
- * Nothing is ever selected by default. A run that cannot ask, because
- * Composer is not interactive, changes nothing it would have asked about, and
- * says what it kept and why. Each question has its label, its hint, and what
- * a run that cannot ask says instead.
- */
 final class Consent
 {
     private const COMMENT = <<<TEXT
@@ -47,13 +39,6 @@ final class Consent
     {
     }
 
-    /**
-     * The locally modified files to overwrite with the shipped version. A run
-     * that cannot ask selects none, silently: the summary already names them.
-     *
-     * @param  list<string>  $modified
-     * @return list<string>
-     */
     public function overwrite(array $modified): array
     {
         return match ($modified) {
@@ -62,36 +47,16 @@ final class Consent
         };
     }
 
-    /**
-     * The edited files with no sync marker to convert. An edited file with no
-     * marker cannot be split into the package's part and the project's, so it
-     * is only converted on consent. The conversion loses nothing: the whole
-     * file moves below the marker.
-     *
-     * @param  list<string>  $unmarked
-     * @return list<string>
-     */
     public function convert(array $unmarked): array
     {
         return $this->askOrKeep($unmarked, 'convert');
     }
 
-    /**
-     * The files removed upstream, but edited here, to delete.
-     *
-     * @param  list<string>  $protectedOrphans
-     * @return list<string>
-     */
     public function orphansToDelete(array $protectedOrphans): array
     {
         return $this->askOrKeep($protectedOrphans, 'delete');
     }
 
-    /**
-     * Say why each file holding the marker more than once was not touched.
-     *
-     * @param  list<string>  $refused
-     */
     public function explainRefused(array $refused): void
     {
         $inputOutput = $this->inputOutput;
@@ -101,10 +66,6 @@ final class Consent
         }
     }
 
-    /**
-     * @param  list<string>  $paths
-     * @return list<string>
-     */
     private function askOrKeep(array $paths, string $question): array
     {
         $inputOutput = $this->inputOutput;
@@ -116,10 +77,6 @@ final class Consent
         };
     }
 
-    /**
-     * @param  list<string>  $paths
-     * @return list<string>
-     */
     private function select(array $paths, string $question): array
     {
         $inputOutput = $this->inputOutput;
@@ -134,11 +91,6 @@ final class Consent
             );
     }
 
-    /**
-     * Say what was kept without asking, and select nothing.
-     *
-     * @return list<string>
-     */
     private function kept(string $message): array
     {
         $inputOutput = $this->inputOutput;

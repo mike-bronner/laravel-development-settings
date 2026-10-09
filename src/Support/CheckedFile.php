@@ -6,15 +6,6 @@ namespace MikeBronner\DevelopmentSettings\Support;
 
 use RuntimeException;
 
-/**
- * Filesystem calls that throw when they fail, instead of raising a PHP warning
- * and returning false for a caller to forget. The exception carries PHP's own
- * reason, and the warning is captured rather than printed, so the log shows
- * one message.
- *
- * The reverse sync workflow requires this file directly, with no Composer
- * install, so it stays free of dependencies.
- */
 final class CheckedFile
 {
     private const DIRECTORY_PERMISSIONS = 0755;
@@ -47,9 +38,6 @@ final class CheckedFile
             );
     }
 
-    /**
-     * Delete a file, and throw when it stays.
-     */
     public function unlink(string $path): void
     {
         $this->attempt(static fn (): bool => unlink($path), "Could not delete {$path}");
@@ -63,9 +51,6 @@ final class CheckedFile
             );
     }
 
-    /**
-     * A directory another process created meanwhile counts as created.
-     */
     private function createDirectory(string $directory): bool
     {
         return mkdir(
@@ -75,15 +60,6 @@ final class CheckedFile
             ) || is_dir($directory);
     }
 
-    /**
-     * Run the operation with PHP's warning captured, and throw with its reason
-     * when the operation answers false.
-     *
-     * @template T
-     *
-     * @param  callable(): T  $operation  answers false on failure
-     * @return T
-     */
     private function attempt(callable $operation, string $failure): mixed
     {
         $this->reason = null;
@@ -102,10 +78,6 @@ final class CheckedFile
         };
     }
 
-    /**
-     * The error handler: PHP passes the error details in its own order, and
-     * only the message, the second of them, is kept.
-     */
     private function keepReason(mixed ...$error): true
     {
         [, $this->reason] = $error;

@@ -4,27 +4,12 @@ declare(strict_types=1);
 
 namespace MikeBronner\DevelopmentSettings\Support;
 
-/**
- * The three manifests this package ships, and the sources each records:
- *
- * - `manifest.json`: the tracked `paths`, keyed on project paths.
- * - `capture-manifest.json`: the `capture` directories, keyed on package paths.
- * - `package-manifest.json`: the `package` files, keyed on project paths.
- *
- * Each is regenerated append-only from the current sources, and checked
- * against the file on disk. `composer dev-settings:manifest` writes them, and
- * CI runs the check.
- */
 final class ManifestFiles
 {
     private const SUCCEEDED = 0;
 
     private const STALE = 1;
 
-    /**
-     * @param  resource  $output
-     * @param  resource  $errors
-     */
     public function __construct(
         private string $packageDir,
         private mixed $output,
@@ -32,9 +17,6 @@ final class ManifestFiles
     ) {
     }
 
-    /**
-     * Write every manifest, and answer the exit status.
-     */
     public function regenerate(): int
     {
         foreach ($this->generated() as $file => $manifest) {
@@ -46,10 +28,6 @@ final class ManifestFiles
         return self::SUCCEEDED;
     }
 
-    /**
-     * Compare every manifest with the file on disk, and answer the exit
-     * status: a failure when any would change.
-     */
     public function check(): int
     {
         $stale = collect($this->generated())
@@ -68,9 +46,6 @@ final class ManifestFiles
         };
     }
 
-    /**
-     * @return array<string, Manifest> file => the manifest its sources produce
-     */
     private function generated(): array
     {
         $generator = new ManifestGenerator;
@@ -84,14 +59,10 @@ final class ManifestFiles
             ->all();
     }
 
-    /**
-     * @return array<string, array{paths: array<string, mixed>}> file => its sources
-     */
     private function sources(): array
     {
         $config = new PackageConfig(require "{$this->packageDir}/" . PackageConfig::FILE);
         $ignore = $config->entries(PackageConfig::IGNORE);
-        $packagePaths = $config->entries(PackageConfig::PACKAGE);
 
         return [
             SyncPlan::MANIFEST_FILE => ['paths' => $config->paths()],
@@ -102,7 +73,7 @@ final class ManifestFiles
             ]],
             ProjectKind::MANIFEST_FILE => ['paths' => [
                 'directories' => [],
-                'files' => data_get($packagePaths, 'files') ?? [],
+                'files' => [],
                 'ignore' => $ignore,
             ]],
         ];
@@ -115,9 +86,6 @@ final class ManifestFiles
         return file_exists($path) && file_get_contents($path) === $current->toJson();
     }
 
-    /**
-     * @param  resource  $stream
-     */
     private function report(mixed $stream, string $message, int $status): int
     {
         fwrite($stream, $message);

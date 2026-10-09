@@ -4,14 +4,6 @@ declare(strict_types=1);
 
 namespace MikeBronner\DevelopmentSettings\Plugin;
 
-/**
- * Renders the box a sync prints: a title, one line per file it touched or
- * kept, and a footer with the counts. Every line is a Symfony console string,
- * padded to the box width, so the output is the same whatever writes it.
- *
- * A line's type names what happened to the path, and decides its icon, its
- * colour and the note after it.
- */
 final class Summary
 {
     private const BOX_WIDTH = 80;
@@ -32,10 +24,6 @@ final class Summary
 
     private const MIN_PADDING = 1;
 
-    /**
-     * Each count in the footer: its label, background colour and the
-     * foreground colour it is written in when it is not zero.
-     */
     private const ITEMS = [
         Tally::NEW => ['green', 'bright-green'],
         Tally::UPDATED => ['yellow', 'bright-yellow'],
@@ -44,9 +32,6 @@ final class Summary
         Tally::REMOVED => ['magenta', 'bright-magenta'],
     ];
 
-    /**
-     * @return list<string>
-     */
     public function header(): array
     {
         $rule = str_repeat('─', self::RULE_WIDTH);
@@ -60,10 +45,6 @@ final class Summary
         ];
     }
 
-    /**
-     * One line of the box: the icon for the type, the path with its note, cut
-     * to fit, and the right border.
-     */
     public function line(string $type, string $path): string
     {
         $style = $this->style($type);
@@ -77,9 +58,6 @@ final class Summary
         return "<fg=gray>│</>  {$prefix}  {$displayPath}{$padding}  <fg=gray>│</>";
     }
 
-    /**
-     * @return list<string>
-     */
     public function footer(Tally $tally): array
     {
         $rule = str_repeat('─', self::RULE_WIDTH);

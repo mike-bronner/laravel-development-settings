@@ -1,13 +1,4 @@
 #!/usr/bin/env bash
-#
-# Records a Pest Test Impact Analysis graph and stages it for upload as the
-# pest-tia-baseline artifact. It runs in the consuming repository's root, after
-# that repository's own workflow has set up its test environment.
-#
-# Every check below fails the step. Pest downloads from the latest successful
-# run of the workflow, so a green run without the artifact would become that
-# run. A developer's `--baselined` run would then either stop with an error or
-# record the graph locally, the slow run, depending on the message gh gives.
 
 set -euo pipefail
 
@@ -16,17 +7,11 @@ fail() {
     exit 1
 }
 
-# Under pull_request_target, GITHUB_REF names the base branch while the
-# checkout can hold the pull request's code. So only events that run the
-# default branch's own code may record: push, workflow_dispatch and schedule.
 case "${GITHUB_EVENT_NAME:-}" in
     push | workflow_dispatch | schedule) ;;
     *) fail "This run was triggered by ${GITHUB_EVENT_NAME:-an unknown event}. Record the baseline on push, workflow_dispatch or schedule only." ;;
 esac
 
-# Pest finds the run with `gh run list --workflow tia-baseline.yml`, which does
-# not filter by branch. A run on any other branch would publish its graph as
-# the baseline, so recording runs on the default branch only.
 default_branch=$(php <<'PHP'
 <?php
 $path = getenv('GITHUB_EVENT_PATH');
@@ -59,8 +44,6 @@ if [ "${version%%.*}" -lt 5 ]; then
     fail "Pest ${version} has no Test Impact Analysis. Require Pest 5 or later before recording a baseline."
 fi
 
-# The same test Pest makes before it records (Recorder::driverAvailable()).
-# Without a driver Pest runs the suite, records nothing and still exits 0.
 driver=$(php <<'PHP'
 <?php
 if (function_exists('pcov\start') && filter_var((string) ini_get('pcov.enabled'), FILTER_VALIDATE_BOOL)) {
@@ -75,8 +58,6 @@ if [ -z "$driver" ]; then
     fail "No coverage driver. Pest records the graph through pcov, or Xdebug in coverage mode. Set one up, for example with coverage: pcov in shivammathur/setup-php."
 fi
 
-# `--baseline` prints the directory the graph is written to, after Pest has
-# read tests/Pest.php, so a `pest()->tia()->directory()` setting is honored.
 storage=$(vendor/bin/pest --baseline | tail -n 1) || fail "vendor/bin/pest --baseline failed."
 
 if [ -z "$storage" ]; then

@@ -5,13 +5,6 @@ declare(strict_types=1);
 use MikeBronner\DevelopmentSettings\Support\ProcessResult;
 use MikeBronner\DevelopmentSettings\Support\SystemProcess;
 
-/*
- * The shared Pest TIA baseline action, run in a stand-in consuming
- * repository: a fake vendor/bin/pest, and a `php` on the PATH whose coverage
- * driver the test chooses. And the shipped workflow that calls it, read as
- * text and run one step at a time.
- */
-
 const TIA_ACTION = __DIR__ . '/../../.github/actions/tia-baseline';
 
 const TIA_GRAPH = <<<JSON
@@ -45,15 +38,6 @@ const TIA_DEFAULTS = [
     'event' => ['repository' => ['default_branch' => TIA_DEFAULT_BRANCH]],
 ];
 
-/**
- * A consuming repository with Pest installed, answered as its root. Each
- * option replaces one default: the Pest version, the coverage driver, the
- * graph the Pest run writes (`null` for none), its exit code, the exit code of
- * `--version`, and the event payload. `printedStorage` replaces the directory
- * `--baseline` prints.
- *
- * @param  array<string, mixed>  $options
- */
 function tiaProject(array $options = []): string
 {
     $settings = [...TIA_DEFAULTS, ...$options];
@@ -76,11 +60,6 @@ function tiaProject(array $options = []): string
     return $project;
 }
 
-/**
- * A `php` that runs this PHP binary with the coverage driver the test chose.
- * `-n` drops every real extension, so only the fake Xdebug functions are
- * there. The pcov cases need the real extension and keep the loaded ini.
- */
 function fakePhp(string $driver, string $project): string
 {
     $binary = escapeshellarg(PHP_BINARY);
@@ -96,9 +75,6 @@ function fakePhp(string $driver, string $project): string
     return "#!/bin/sh\nexec {$binary} {$options} \"\$@\"\n";
 }
 
-/**
- * The Xdebug functions Pest checks for, reporting the mode the test chose.
- */
 function fakeXdebug(string $mode): string
 {
     $modes = var_export([$mode], true);
@@ -110,13 +86,6 @@ function fakeXdebug(string $mode): string
         PHP;
 }
 
-/**
- * A vendor/bin/pest that prints the version as Pest does, colors included,
- * prints the storage directory for `--baseline`, and otherwise records its
- * arguments, writes the graph and exits as the test chose.
- *
- * @param  array<string, mixed>  $settings
- */
 function fakePest(array $settings, string $storage): string
 {
     $version = escapeshellarg((string) data_get($settings, 'pest'));
@@ -140,10 +109,6 @@ function fakePest(array $settings, string $storage): string
         BASH;
 }
 
-/**
- * Run the action's script in the project as GitHub runs it, on a push unless
- * the test names another event.
- */
 function runTiaAction(
     string $project,
     string $arguments = '',
@@ -171,9 +136,6 @@ function pestRan(string $project): bool
     return is_file("{$project}/pest-arguments");
 }
 
-/**
- * The arguments the Pest run was given.
- */
 function pestRunArguments(string $project): string
 {
     return trim((string) file_get_contents("{$project}/pest-arguments"));
@@ -184,9 +146,6 @@ function stagedBaseline(string $project): string
     return "{$project}/runner/pest-tia-baseline";
 }
 
-/**
- * One step of the action, without its name line.
- */
 function actionStep(string $name): string
 {
     $pattern = '/^    - name: ' . preg_quote($name, '/') . '\n(.*?)(?:\n\n|\z)/ms';
@@ -196,32 +155,20 @@ function actionStep(string $name): string
     return (string) data_get($step, 1);
 }
 
-/**
- * The shipped Pest TIA baseline workflow, as a consuming project receives it.
- */
 function tiaWorkflow(): string
 {
     return shippedSource(TIA_WORKFLOW_SOURCE);
 }
 
-/**
- * One step of the shipped workflow, without its name line, up to the step or
- * comment after it. A run block may hold blank lines of its own.
- */
 function tiaWorkflowStep(string $name): string
 {
-    $pattern = '/^      - name: ' . preg_quote($name, '/') . '\n(.*?)(?=\n+      [-#]|\n*\z)/ms';
+    $pattern = '/^      - name: ' . preg_quote($name, '/') . '\n(.*?)(?=\n+      -|\n*\z)/ms';
 
     preg_match($pattern, tiaWorkflow(), $step);
 
     return (string) data_get($step, 1);
 }
 
-/**
- * The lines of one step of the shipped workflow, trimmed.
- *
- * @return list<string>
- */
 function tiaWorkflowStepLines(string $name): array
 {
     return collect(explode("\n", tiaWorkflowStep($name)))
@@ -229,10 +176,6 @@ function tiaWorkflowStepLines(string $name): array
         ->all();
 }
 
-/**
- * Run the workflow's PHP version step in a project holding the given
- * composer.json, with the version the before-install hook put out.
- */
 function runTiaPhpVersionStep(
     string $project,
     string $composerJson,

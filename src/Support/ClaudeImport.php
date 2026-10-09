@@ -6,16 +6,6 @@ namespace MikeBronner\DevelopmentSettings\Support;
 
 use RuntimeException;
 
-/**
- * Keeps Claude Code reading the guidelines Boost composes into `AGENTS.md`.
- *
- * The service provider points Boost's Claude Code guidelines at `AGENTS.md`,
- * the file every agent reads, but Claude Code reads `CLAUDE.md`. So a project
- * with no `CLAUDE.md` gets one that only imports `AGENTS.md`. An existing
- * `CLAUDE.md` is the project's and is never written: when it does not import
- * `AGENTS.md`, and Boost did not compose into it during the run, the caller
- * says so instead.
- */
 final class ClaudeImport
 {
     public const FILE = 'CLAUDE.md';
@@ -30,12 +20,6 @@ final class ClaudeImport
 
     private const IMPORT = '@' . self::TARGET;
 
-    /**
-     * What was done or found: one of the constants above, or null when
-     * nothing needs saying.
-     *
-     * @param  list<string>  $composedFiles  the agent files Boost composed this run
-     */
     public function settle(string $projectDir, array $composedFiles): ?string
     {
         $claude = "{$projectDir}/" . self::FILE;
@@ -51,10 +35,6 @@ final class ClaudeImport
         };
     }
 
-    /**
-     * Only once Boost has written `AGENTS.md`: an import of a file that does
-     * not exist would give Claude Code nothing.
-     */
     private function create(string $projectDir): ?string
     {
         return match (is_file("{$projectDir}/" . self::TARGET)) {

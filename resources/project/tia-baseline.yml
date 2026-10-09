@@ -1,17 +1,3 @@
-# Shared Pest TIA baseline workflow, synced by
-# mike-bronner/laravel-development-settings. Do not edit it: an edited copy
-# stops receiving updates and is proposed back upstream. Put this repository's
-# own test setup in the optional hooks instead:
-#
-#   .github/actions/tia-baseline-before-install/action.yml
-#     Runs before PHP and Composer are set up: services, environment variables,
-#     Composer credentials. Its outputs choose php-version, php-extensions,
-#     php-ini-values and pest-arguments.
-#   .github/actions/tia-baseline-after-install/action.yml
-#     Runs after `composer install`: .env, npm builds, browsers, migrations.
-#
-# Both receive every secret of the repository as the JSON input `secrets`.
-# Pest finds the baseline by this file's name, so it stays tia-baseline.yml.
 name: TIA Baseline
 
 on:
@@ -21,9 +7,6 @@ on:
 
 jobs:
   baseline:
-    # Pest downloads the latest successful run of this workflow on any branch,
-    # so the job records on the default branch alone and is skipped on every
-    # other one.
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     permissions:
@@ -40,8 +23,6 @@ jobs:
         with:
           secrets: ${{ toJSON(secrets) }}
 
-      # Pest's fingerprint holds the PHP minor version, so the baseline records
-      # on the one developers use: the hook's php-version, else composer.json.
       - name: Choose the PHP version
         id: php
         env:

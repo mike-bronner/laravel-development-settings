@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace MikeBronner\DevelopmentSettings\Plugin;
 
-/**
- * The counts one sync reports in its summary line.
- */
 final class Tally
 {
     public const NEW = 'new';
@@ -19,9 +16,6 @@ final class Tally
 
     public const REMOVED = 'removed';
 
-    /**
-     * @var array<string, int>
-     */
     private array $counts = [
         self::NEW => 0,
         self::UPDATED => 0,

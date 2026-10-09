@@ -29,9 +29,9 @@ If your application's own `composer.json` lists `orchestra/testbench`, `pest --p
 This package is a Composer plugin that hooks into Composer's pre-update, post-install and post-update events. Before an update, it offers to contribute any edits you made to its installed guidelines and skills (see "Contributing edits made in vendor" below). After an install or update, it:
 
 1. **Syncs tracked config files** (`pint.json`, `phpcs.xml`, …) from the package into your project
-2. **Registers itself with Laravel Boost** by adding its name to the `packages` list in your `boost.json` (wherever Boost can run: an application, or a package with Orchestra Testbench installed). It adds `mike-bronner/clean-code` too, when your `composer.json` requires it, and otherwise tells you to require it. In a package it also writes an `artisan` shim and a managed `.gitattributes` (see "Packages" below)
+2. **Registers itself with Laravel Boost** by adding its name to the `packages` list in your `boost.json` (wherever Boost can run: an application, or a package with Orchestra Testbench installed). It adds `mike-bronner/clean-code` too, when your `composer.json` requires it, and otherwise tells you to require it
 3. **Preserves local modifications** — changed files aren't overwritten, and removed-upstream files you customized aren't deleted without asking
-4. **Composes Laravel Boost** — an interactive `composer` run on a terminal runs `php artisan boost:install` on that terminal: Boost's own prompts choose the features, packages and agents, you see its output, and Boost saves your agents to `boost.json`. Any other run, CI and `--no-interaction` included, runs `php artisan boost:install --no-interaction` with `--guidelines --skills --mcp`, whatever your `boost.json` says, and shows only a one-line result; packages run the same command through the `artisan` shim (see "Packages" below). Composition is refused, by file and with the reason, when it would overwrite hand-written content (see "Why a run can refuse to compose" below). A run that composes nothing is reported as failed (see "Choosing your agents" below)
+4. **Composes Laravel Boost** — an interactive `composer` run on a terminal runs `php artisan boost:install` on that terminal: Boost's own prompts choose the features, packages and agents, you see its output, and Boost saves your agents to `boost.json`. Any other run, CI and `--no-interaction` included, runs `php artisan boost:install --no-interaction` with `--guidelines --skills --mcp`, whatever your `boost.json` says, and shows only a one-line result; packages run the same command through Testbench, rooted at the repository (see "Packages" below). Composition is refused, by file and with the reason, when it would overwrite hand-written content (see "Why a run can refuse to compose" below). A run that composes nothing is reported as failed (see "Choosing your agents" below)
 5. **Removes the legacy `.ai` symlink and `.dev-settings-boost` file** left by releases before the move to `resources/boost` (see "Upgrading" below)
 
 ### How the AI guidelines and skills reach your project
@@ -57,25 +57,21 @@ Nothing is written to your `.ai` directory or to `config/boost.php`. If you turn
 
 ### Packages
 
-A package has no `artisan` of its own. This package does not install Orchestra Testbench, so require it yourself: `composer require --dev orchestra/testbench`. When Testbench is installed (`vendor/bin/testbench`), the plugin writes an `artisan`: a short shim that boots Testbench rooted at your repository. From then on the package runs Boost the way an app does. `composer update` runs `php artisan boost:install`, Boost writes `boost.json`, the skills, the agent files and `php artisan boost:mcp` MCP entries into your repository, and every MCP tool works, `record-rule` included. MCP entries an earlier release pointed at `vendor/bin/testbench` are rewritten by the same run. Choose your agents with `php artisan boost:install`, as in an app.
+A package has no `artisan` of its own, and the plugin writes none. This package does not install Orchestra Testbench, so require it yourself: `composer require --dev orchestra/testbench`. When Testbench is installed (`vendor/bin/testbench`), `composer install` and `composer update` run Boost through `bin/rooted-testbench.php`, a script in this package that boots Testbench rooted at your repository. Boost then writes `boost.json`, the skills and the agent files into your repository, as in an app. Choose your agents by running Boost yourself, from the repository root:
 
-Before each Boost run in a package, the plugin runs `php artisan package:discover` through the shim. Laravel reads your repository's `bootstrap/cache/packages.php` and builds it only when it is missing, so without this step a service provider installed after the first run would never load. The `testbench package:discover` in your own `post-autoload-dump` script does not help here: it is not rooted at your repository. A failed refresh is reported with its output, and Boost still runs.
+```bash
+php vendor/mike-bronner/laravel-development-settings/bin/rooted-testbench.php boost:install
+```
 
-Commit the shim.
-It declares the constant `LARAVEL_DEVELOPMENT_SETTINGS_ARTISAN_SHIM`, and uses it in its own error message, which marks it as this package's file.
-Shims from earlier releases are recognized by their old marker comment, or by matching a version this package shipped.
-Any other `artisan` is an app's and is never touched.
-The plugin updates a shim it shipped before and keeps one you edited, listing it as locally modified.
-The shim creates `bootstrap/cache` and `storage/framework/views` on each run, because Testbench cannot boot rooted without them.
-The shipped `.gitignore` ignores what Testbench writes there, and in `storage/logs`.
-It does not ignore Laravel's placeholder `.gitignore` files in those directories, which an application commits so they exist on a fresh clone.
-Without Testbench installed, the shim stops with an error that names the missing dependency.
+The script sets `APP_BASE_PATH` to the repository, `APP_ENV` to `local` unless you set it, and `TESTBENCH_WORKING_PATH`. It creates `bootstrap/cache` and `storage/framework/views`, because Testbench cannot boot rooted without them. The shipped `.gitignore` ignores what Testbench writes there, and in `storage/logs`. It does not ignore Laravel's placeholder `.gitignore` files in those directories, which an application commits so they exist on a fresh clone.
 
-The shim must not reach the people who install your package, so the plugin also manages a `.gitattributes` that marks `/artisan` as `export-ignore`, keeping it out of the Composer dist archive. It works like the managed `.gitignore`: the plugin owns the lines above the sync marker, and your own rules go below it. An existing `.gitattributes` has no marker yet, so an interactive `composer update` offers to add it and moves your whole file below it. A non-interactive run only warns, and the shim stays in your archive until you accept.
+Before each Boost run in a package, the plugin runs `package:discover` through the same script. Laravel reads your repository's `bootstrap/cache/packages.php` and builds it only when it is missing, so without this step a service provider installed after the first run would never load. The `testbench package:discover` in your own `post-autoload-dump` script does not help here: it is not rooted at your repository. A failed refresh is reported with its output, and Boost still runs.
 
-`php artisan test` runs your suite rooted at the repository, like every Artisan command. `vendor/bin/phpunit` is unaffected.
+**Boost's MCP server does not work in a package.** Boost writes `php artisan boost:mcp` into `.mcp.json` and each agent's MCP config, and runs every tool as `php artisan boost:execute-tool`. With no `artisan`, the server does not start, and a server started by hand fails every tool call.
 
-A package without `vendor/bin/testbench` (it does not require Testbench, its install is incomplete, or it uses a custom Composer `bin-dir`) gets no shim and is not composed. The run says so, and names the command that installs Testbench.
+Earlier releases wrote an `artisan` shim and a managed `.gitattributes` into packages. The plugin now removes a shim or `.gitattributes` it wrote and you did not change. One you edited, or a `.gitattributes` with your own rules below the sync marker, is kept and listed as removed upstream. Delete it yourself when you no longer need it. The shim is recognized by its `LARAVEL_DEVELOPMENT_SETTINGS_ARTISAN_SHIM` constant, by the marker comment of older releases, or by matching a version this package shipped. Any other `artisan` is an app's and is never touched.
+
+A package without `vendor/bin/testbench` (it does not require Testbench, its install is incomplete, or it uses a custom Composer `bin-dir`) is not composed. The run says so, and names the command that installs Testbench.
 
 ### Choosing your agents
 
@@ -86,6 +82,8 @@ Run non-interactively, `boost:install` composes for the agents `boost.json` name
 ```bash
 php artisan boost:install
 ```
+
+In a package, run it through the rooted Testbench instead (see "Packages" above).
 
 An interactive run also shows Boost's list of third-party packages. If you untick this package there, Boost composes none of its guidelines or skills for that run, and the next `composer` run adds it back to `boost.json`.
 
@@ -427,7 +425,7 @@ When releasing a new version:
 3. Run `composer dev-settings:manifest` to regenerate `manifest.json`, `capture-manifest.json` and `package-manifest.json`
 4. Commit and tag a new release
 
-`capture-manifest.json` is its sibling for the guideline and skill sources under `resources/boost`, keyed on package paths. It only feeds the edit check above. It is kept out of `manifest.json` on purpose: copy-sync and orphan cleanup read that file on project paths, and a `resources/boost/…` key there would let cleanup delete a consuming package's own `resources/boost` files. `package-manifest.json` holds the known versions of the files only a package receives: the `artisan` shim and the `.gitattributes`. The plugin reads it only in a package with Testbench. Kept in `manifest.json`, the `artisan` key would reach every app, where copy-sync would call the app's own `artisan` locally modified and orphan cleanup would offer to delete it. The same command generates all three, append-only.
+`capture-manifest.json` is its sibling for the guideline and skill sources under `resources/boost`, keyed on package paths. It only feeds the edit check above. It is kept out of `manifest.json` on purpose: copy-sync and orphan cleanup read that file on project paths, and a `resources/boost/…` key there would let cleanup delete a consuming package's own `resources/boost` files. `package-manifest.json` holds the known versions of the files earlier releases wrote only into packages: the `artisan` shim and the `.gitattributes`. Nothing ships them now, so it changes no more, and the plugin reads it only in a package with Testbench, where orphan cleanup removes the unmodified copies. Kept in `manifest.json`, the `artisan` key would reach every app, where orphan cleanup would offer to delete the app's own `artisan`. The same command generates all three, append-only.
 
 CI can guard against a stale manifest with `php bin/generate-manifest.php --check` (exits non-zero if regenerating any of the files would change anything). `php bin/generate-guideline.php --check` does the same for the PHP guideline against the installed Boost. It also fails when Boost's `php/core` no longer holds either PHPDoc line verbatim, and the generator then writes nothing. CI runs both on every pull request, on every push to `main`, and weekly, so a new Boost release is caught even when nothing here changed.
 

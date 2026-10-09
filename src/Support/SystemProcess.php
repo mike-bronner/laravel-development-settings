@@ -24,15 +24,7 @@ final class SystemProcess implements Process
         return $result->exitCode();
     }
 
-    // phpcs:disable CleanCode.Pattern.AvoidDuplicateCodeBlocks.Found -- One proc_open each way.
-    /**
-     * Run a command with its output captured.
-     *
-     * Stderr is redirected into the stdout pipe, so the output keeps the order
-     * it was written in, and there is only one pipe to drain. Two pipes read
-     * one after the other deadlock once the child fills the one not being
-     * read.
-     */
+    // phpcs:disable CleanCode.Pattern.AvoidDuplicateCodeBlocks.Found
     public function capture(string $command, ?string $workingDirectory = null): ProcessResult
     {
         $process = proc_open(
@@ -57,11 +49,6 @@ final class SystemProcess implements Process
         };
     }
 
-    /**
-     * Run a command on this process's own stdin, stdout and stderr, and answer
-     * its exit code. Where those are a terminal, the command gets the terminal
-     * and can prompt. Nothing is captured: the output goes straight to the user.
-     */
     public function passthru(string $command, ?string $workingDirectory = null): int
     {
         $process = proc_open(
@@ -78,12 +65,6 @@ final class SystemProcess implements Process
     }
     // phpcs:enable CleanCode.Pattern.AvoidDuplicateCodeBlocks.Found
 
-    /**
-     * Close the child's stdin, read its output to the end, and wait for it.
-     *
-     * @param  resource  $process
-     * @param  array<int, resource>  $pipes
-     */
     private function drain(mixed $process, array $pipes): ProcessResult
     {
         [self::INPUT => $input, self::OUTPUT => $output] = $pipes;

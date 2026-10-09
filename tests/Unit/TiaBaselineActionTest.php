@@ -6,11 +6,6 @@ afterEach(function (): void {
     isset($this->project) && removeTempDir($this->project);
 });
 
-/*
- * Pest downloads the artifact named pest-tia-baseline from the latest
- * successful run, and reads graph.json from its root. The script stages the
- * graph alone in a directory the upload step then sends whole.
- */
 it('records with a fresh TIA run and stages the graph at the artifact root', function (): void {
     $this->project = tiaProject();
 
@@ -44,13 +39,6 @@ it('fails when Pest is not installed', function (): void {
     expect($result->output())->toContain('vendor/bin/pest is missing.');
 });
 
-/*
- * Each guard stops the script before the Pest run, with an error annotation.
- * Pest's run lookup does not filter by branch, so a run off the default branch
- * would publish the graph every developer downloads. Under
- * pull_request_target the ref names the base branch while the checkout can
- * hold the pull request's code, so the event is checked too.
- */
 it('fails before the run', function (array $options, array $run, string $message): void {
     $this->project = tiaProject($options);
 
@@ -116,12 +104,6 @@ it('records through pcov when it is enabled, and fails when it is not', function
         'Needs the pcov extension, without Xdebug.',
     );
 
-/*
- * A failed run on the default branch is not a successful run, so Pest keeps
- * the last successful baseline. Pest records nothing under a coverage report
- * option or a partial selection, and still exits 0. Either way a graph left
- * from an earlier run must not stand in for the one this run did not write.
- */
 it('stages nothing when the run writes no graph', function (array $options, string $cause): void {
     $this->project = tiaProject($options);
     seedFiles("{$this->project}/storage", ['graph.json' => 'stale']);
@@ -137,11 +119,6 @@ it('stages nothing when the run writes no graph', function (array $options, stri
     'a run that writes an empty graph' => [['graph' => ''], 'Pest wrote no graph.json to'],
 ]);
 
-/*
- * The record step hands the script the arguments input. The upload step sends
- * what the script staged under the name Pest downloads, and fails when the
- * script staged nothing.
- */
 it('wires the record and upload steps of the action', function (string $name, string $line): void {
     $lines = collect(explode("\n", actionStep($name)))
         ->map(fn (string $stepLine): string => trim($stepLine));

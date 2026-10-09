@@ -11,17 +11,17 @@ beforeEach(function (): void {
     $this->package = makeTempDir();
     seedFiles($this->package, [
         'pint.json' => '{}',
-        'resources/project/artisan' => shimSource(),
         SyncPlan::MANIFEST_FILE => json_encode(['pint.json' => ['p']]),
         ProjectKind::MANIFEST_FILE => json_encode(['artisan' => ['a']]),
     ]);
     $this->config = new PackageConfig([
         'paths' => ['files' => ['pint.json'], 'managed' => ['.gitignore']],
-        'package' => [
-            'files' => ['resources/project/artisan' => 'artisan'],
-            'managed' => ['artisan'],
-        ],
     ]);
+    $this->plan = function (): array {
+        $plan = new SyncPlan($this->config, $this->package, $this->project);
+
+        return [$plan->files(), $plan->managed(), $plan->manifest()->toArray()];
+    };
 });
 
 afterEach(function (): void {
@@ -32,26 +32,32 @@ afterEach(function (): void {
 it('syncs only the tracked paths into an app', function (): void {
     seedFiles($this->project, ['artisan' => "<?php\n", ProjectKind::TESTBENCH => "<?php\n"]);
 
-    $plan = new SyncPlan($this->config, $this->package, $this->project);
-
-    expect([$plan->files(), $plan->managed(), $plan->manifest()->toArray()])->toBe([
+    expect(($this->plan)())->toBe([
         ['pint.json' => "{$this->package}/pint.json"],
         ['.gitignore'],
         ['pint.json' => ['p']],
     ]);
 });
 
-it('adds the package files to a package repository with Testbench', function (): void {
-    seedFiles($this->project, [ProjectKind::TESTBENCH => "<?php\n"]);
+it('knows the shim in a package repository with Testbench, and ships it nothing', function (
+    array $files,
+): void {
+    seedFiles($this->project, [ProjectKind::TESTBENCH => "<?php\n", ...$files]);
 
-    $plan = new SyncPlan($this->config, $this->package, $this->project);
-
-    expect([$plan->files(), $plan->managed(), $plan->manifest()->toArray()])->toBe([
-        [
-            'pint.json' => "{$this->package}/pint.json",
-            'artisan' => "{$this->package}/resources/project/artisan",
-        ],
-        ['.gitignore', 'artisan'],
+    expect(($this->plan)())->toBe([
+        ['pint.json' => "{$this->package}/pint.json"],
+        ['.gitignore'],
         ['artisan' => ['a'], 'pint.json' => ['p']],
     ]);
+})->with([
+    'no artisan' => [[]],
+    'the shim' => [['artisan' => shimSource()]],
+]);
+
+it('leaves the shim unknown in a package repository without Testbench', function (): void {
+    seedFiles($this->project, ['artisan' => shimSource()]);
+
+    [, , $manifest] = ($this->plan)();
+
+    expect($manifest)->toBe(['pint.json' => ['p']]);
 });

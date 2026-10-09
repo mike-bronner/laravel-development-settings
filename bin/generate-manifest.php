@@ -3,11 +3,6 @@
 
 declare(strict_types=1);
 
-/*
- * Regenerates the three shipped manifests from the current sources, or, with
- * `--check`, fails when any of them is out of date.
- */
-
 use MikeBronner\DevelopmentSettings\Support\ManifestFiles;
 
 $packageDir = dirname(__DIR__);

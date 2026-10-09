@@ -12,10 +12,6 @@ const SHIPPED_RULES = <<<GITIGNORE
 
     GITIGNORE;
 
-/*
- * The shipped rules take four lines and the marker the fifth, so the first
- * project line is the sixth line of the file.
- */
 const FIRST_PROJECT_LINE = 6;
 
 beforeEach(function (): void {
@@ -43,10 +39,6 @@ it('finds no override in a project part that overrides nothing', function (strin
     'a directory ignored, then re-included' => [".ai/\n!.ai/\n"],
 ]);
 
-/*
- * Composer's error handler turns a PCRE warning into an exception, so the
- * test does too: a line the matcher cannot compile must not stop a publish.
- */
 it('reads a line it cannot compile as matching nothing', function (string $line): void {
     $overrides = throwingOnWarnings(fn (): array => ($this->find)("{$line}\nAGENTS.md\n"));
 

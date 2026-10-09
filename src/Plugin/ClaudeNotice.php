@@ -7,12 +7,6 @@ namespace MikeBronner\DevelopmentSettings\Plugin;
 use Composer\IO\IOInterface;
 use MikeBronner\DevelopmentSettings\Support\ClaudeImport;
 
-/**
- * After a clean Boost run, writes a missing `CLAUDE.md` as an import of
- * `AGENTS.md`, or says that an existing one does not import it. Claude Code
- * reads `CLAUDE.md`, and the provider points Boost's Claude Code guidelines at
- * `AGENTS.md`.
- */
 final class ClaudeNotice
 {
     private const TEXT = [
@@ -42,9 +36,6 @@ final class ClaudeNotice
     ) {
     }
 
-    /**
-     * @param  list<string>|null  $composedFiles  what a clean Boost run composed, or null
-     */
     public function settle(?array $composedFiles): void
     {
         $outcome = match ($composedFiles) {

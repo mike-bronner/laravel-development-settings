@@ -67,10 +67,6 @@ it('matches nothing, and raises nothing, for a rule it cannot compile', function
     'only an anchor' => ['/', 'x'],
 ]);
 
-/*
- * Every character an ignore rule can make special in a regular expression,
- * in random rules from a fixed seed: none may raise a PCRE warning.
- */
 it('compiles every rule without a warning', function (): void {
     $characters = collect(str_split('#[]!^-\\*?/a.$()|{}+ '));
     mt_srand(seed: FUZZ_SEED);

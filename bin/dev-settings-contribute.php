@@ -3,16 +3,6 @@
 
 declare(strict_types=1);
 
-/*
- * Contributes local edits to this package's installed guideline and skill
- * sources (`resources/boost/…` inside vendor, which no commit in the consuming
- * project carries) back to the development-settings repository as a pull
- * request.
- *
- * Run from a consuming project: `vendor/bin/dev-settings-contribute.php`.
- * Auth: GITHUB token via DEVELOPER_SETTINGS_TOKEN, or a `gh`-authenticated git.
- */
-
 use MikeBronner\DevelopmentSettings\Support\ContributeCommand;
 
 $projectDir = (string) getcwd();

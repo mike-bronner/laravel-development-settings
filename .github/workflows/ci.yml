@@ -4,8 +4,6 @@ on:
   pull_request:
   push:
     branches: [main]
-  # Weekly, so a new laravel/boost release that changes its php/core guideline
-  # fails the replacement check even when nothing here was pushed.
   schedule:
     - cron: '0 6 * * 1'
 
@@ -13,8 +11,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
-    # PHP 8.6 is unreleased and setup-php installs a nightly build for it. A
-    # nightly can break for upstream reasons, so its job warns, never blocks.
     continue-on-error: ${{ matrix.experimental }}
 
     strategy:
@@ -38,16 +34,9 @@ jobs:
           php-version: ${{ matrix.php }}
           coverage: none
 
-      # No lock is committed, so each job resolves the dependencies its own
-      # PHP version allows, as a consuming project on that version would.
-      # Only the nightly job ignores upper PHP bounds, which dependencies may
-      # not have raised for an unreleased version yet. Every other job keeps
-      # the platform check, because it proves the declared range installs.
       - name: Install dependencies
         run: composer update --no-interaction --no-progress ${{ matrix.experimental && '--ignore-platform-req=php+' || '' }}
 
-      # The replacement for Boost's php/core is generated from the Boost this
-      # job just resolved, so a new Boost release shows up here.
       - name: PHP guideline is up to date
         run: php bin/generate-guideline.php --check
 
@@ -57,8 +46,6 @@ jobs:
       - name: Lint (Pint)
         run: ./vendor/bin/pint --test
 
-      # The phpcs.xml this package ships, run on the package itself: the
-      # repository meets the standard it hands every consuming project.
       - name: Lint (PHP_CodeSniffer)
         run: ./vendor/bin/phpcs
 

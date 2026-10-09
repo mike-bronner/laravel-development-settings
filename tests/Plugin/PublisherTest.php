@@ -5,12 +5,6 @@ declare(strict_types=1);
 use MikeBronner\DevelopmentSettings\Support\LegacyFingerprint;
 use MikeBronner\DevelopmentSettings\Support\PackageConfig;
 
-/*
- * These tests drive a whole publish, the Composer hook after an install or an
- * update, against a consuming project on disk: see makeConsumer(). The shim,
- * the Boost run and the managed .gitignore have test files of their own.
- */
-
 const REGISTERED_PACKAGES = ['packages' => ['mike-bronner/laravel-development-settings']];
 
 afterEach(function (): void {

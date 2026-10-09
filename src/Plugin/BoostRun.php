@@ -15,39 +15,6 @@ use MikeBronner\DevelopmentSettings\Support\ProjectKind;
 use MikeBronner\DevelopmentSettings\Support\SystemProcess;
 use MikeBronner\DevelopmentSettings\Support\Terminal;
 
-/**
- * Install Laravel Boost through the project's `artisan`: an app's own, or the
- * shim a package repository receives. A captured run installs the guidelines,
- * skills and MCP entries whatever `boost.json` says. A run on the terminal
- * lets Boost's own prompts choose, and saves the choice.
- *
- * Boost composes from this package's `resources/boost` in vendor *and* from
- * the project's own `.ai`, so the run is unconditional: the package sources
- * alone can no longer tell us whether the output would change.
- *
- * Every composition passes through here, so this is where the agent files are
- * checked first. Boost overwrites hand-written content whenever a file names
- * its opening marker tag more than once, or leaves one unclosed, and this
- * package composes unattended at a moment the project's author did not pick.
- * `GuidelineGuard` carries the rule and the reasoning.
- *
- * An interactive Composer run on a terminal hands Boost the terminal, as
- * Composer does for a script, with no feature flags: with any of them, Boost
- * asks for agents but does not save the answer. Its output then goes to the
- * user, not to the plugin. Anything else, CI included, runs captured, never
- * prompts, and passes every feature explicitly, so a leftover `boost.json`
- * setting can never turn one off: Boost ignores `boost.json` once a flag is
- * given.
- *
- * In a package repository, the package discovery cache is rebuilt first,
- * captured, on both paths. The shim roots the app at the repository, so
- * Laravel reads the repository's `bootstrap/cache/packages.php`, and builds
- * that file only when it is missing: a provider installed after the first
- * Artisan run, this package's own included, would never load. The
- * repository's own Composer scripts cannot fix it, because their
- * `testbench package:discover` is not rooted. An app's own scripts run its
- * discovery, so an app gets none here.
- */
 final class BoostRun
 {
     private const FEATURES = ' --guidelines --skills --mcp';
@@ -86,37 +53,20 @@ final class BoostRun
             . " PHPDoc blocks, into %s. This package's service provider leaves that guideline"
             . " out by adding \"%s\" to boost.guidelines.exclude, and it did not run. In a package"
             . ' repository, bootstrap/cache/packages.php is most likely older than the provider:'
-            . ' this package rebuilds it before Boost runs only when it recognizes artisan as its'
-            . ' shim. If artisan is an edited copy of the shim, delete it and run the Composer'
-            . ' command again to have the shim written back. Otherwise, check that package'
-            . ' discovery is not turned off for %s.',
+            . ' this package rebuilds it before Boost runs only when the repository has no'
+            . ' artisan of its own. If artisan is an edited copy of the shim earlier releases'
+            . ' wrote, delete it and run the Composer command again. Otherwise, check that'
+            . ' package discovery is not turned off for %s.',
         'clean-code not direct' => 'This project does not require %s in its own composer.json,'
             . ' so Laravel Boost composes none of its guidelines.'
             . " Run \"composer require --dev %s\".",
     ];
 
-    /**
-     * Its guidelines compose only when the project requires it directly: Boost
-     * skips the guidelines of a transitive dependency.
-     */
     private const CLEAN_CODE = 'mike-bronner/clean-code';
 
-    /**
-     * What `register()` did to `boost.json`, or null when it did not run.
-     */
     private ?string $registration = null;
-
-    /**
-     * The agent files a clean Boost run composed, or null when none did.
-     *
-     * @var list<string>|null
-     */
     private ?array $composedFiles = null;
 
-    /**
-     * @param  list<string>  $directRequirements  the packages the project's own
-     *                                            composer.json requires, dev included
-     */
     public function __construct(
         private IOInterface $inputOutput,
         private Terminal $terminal,
@@ -127,13 +77,6 @@ final class BoostRun
     ) {
     }
 
-    /**
-     * Name this package in `boost.json`, only where Boost can actually
-     * compose: an app, or a package whose artisan shim has a Testbench to
-     * boot. Anywhere else, registering would write a config file nothing ever
-     * reads. Clean-code is named beside it only when the project requires it
-     * directly: Boost never composes a transitive dependency, listed or not.
-     */
     public function register(): void
     {
         $registrar = new BoostRegistrar;
@@ -151,11 +94,6 @@ final class BoostRun
         };
     }
 
-    /**
-     * The summary line for the registration, when it wrote `boost.json`.
-     *
-     * @return list<array{string, string}> type => path
-     */
     public function summaryLines(): array
     {
         return match ($this->registration) {
@@ -164,10 +102,6 @@ final class BoostRun
         };
     }
 
-    /**
-     * Count the registration: a new entry, an unchanged one, or a `boost.json`
-     * skipped because it could not be read.
-     */
     public function count(Tally $tally): void
     {
         match ($this->registration) {
@@ -178,25 +112,11 @@ final class BoostRun
         };
     }
 
-    /**
-     * @return list<string>|null
-     */
     public function composedFiles(): ?array
     {
         return $this->composedFiles;
     }
 
-    /**
-     * Run Boost, unless it cannot run here, `boost.json` could not be read, or
-     * composing would damage an agent file. Boost is not run over a
-     * `boost.json` this package cannot read: `boost:install` treats it as
-     * empty and writes a fresh config over it, destroying the developer's
-     * agent, guideline and MCP settings. A shim that could not be written was
-     * reported with its cause, so a missing artisan is passed over in silence.
-     *
-     * A project that does not require clean-code directly is told to, first,
-     * whatever happens next: the plugin never edits composer.json itself.
-     */
     public function run(): void
     {
         $requiresCleanCode = in_array(self::CLEAN_CODE, $this->directRequirements, strict: true);
@@ -219,7 +139,6 @@ final class BoostRun
         match (true) {
             $isUnreadable => $this->writeError('error', $unreadable),
             ! $composes => $this->writeError('comment', $notComposable),
-            ! file_exists("{$this->projectDir}/" . ProjectKind::ARTISAN) => null,
             default => $this->guardAndCompose(),
         };
     }
@@ -239,28 +158,30 @@ final class BoostRun
         $isAttached = $this->inputOutput
             ->isInteractive() && $this->terminal
             ->isAttached();
+        $isTestbenchPackage = (new ProjectKind)->isTestbenchPackage($this->projectDir);
+        $hooks = match ($isTestbenchPackage) {
+            true => $this->hooks
+                ->throughTestbench(),
+            false => $this->hooks,
+        };
 
-        match ((new ProjectKind)->receivesShim($this->projectDir)) {
-            true => $this->discoverPackages(),
+        match ($isTestbenchPackage) {
+            true => $this->discoverPackages($hooks),
             false => null,
         };
 
         match ($isAttached) {
-            true => $this->composeAttached(),
-            false => $this->composeCaptured(),
+            true => $this->composeAttached($hooks),
+            false => $this->composeCaptured($hooks),
         };
     }
 
-    /**
-     * Rebuild the package repository's discovery cache through the shim. A
-     * failure is reported with its output, and Boost still runs.
-     */
-    private function discoverPackages(): void
+    private function discoverPackages(BoostHooks $hooks): void
     {
         $this->inputOutput
             ->write("{$this->line(self::DISCOVERY['running'])} ", newline: false);
         $result = (new SystemProcess)->capture(
-                command: $this->hooks->discoverCommand(),
+                command: $hooks->discoverCommand(),
                 workingDirectory: $this->projectDir,
             );
         $failure = sprintf(self::DISCOVERY['failed'], BoostHooks::DISCOVER_COMMAND);
@@ -272,15 +193,6 @@ final class BoostRun
         };
     }
 
-    /**
-     * Report the agent files composing would damage, and say what to do.
-     *
-     * The files are left exactly as they are. Repairing one means guessing
-     * where its hand-written section ends, and a wrong guess destroys the
-     * content this check exists to save.
-     *
-     * @param  array<string, string>  $hazards  relativePath => reason
-     */
     private function refuse(array $hazards): void
     {
         $this->writeError('error', self::REFUSAL['refused']);
@@ -292,43 +204,30 @@ final class BoostRun
         $this->writeError('comment', self::REFUSAL['no repair']);
     }
 
-    /**
-     * Boost on the terminal asks for the agents and saves them, so it needs
-     * no warning about them. The user watched the run, so its output is
-     * already on screen.
-     */
-    private function composeAttached(): void
+    private function composeAttached(BoostHooks $hooks): void
     {
         $inputOutput = $this->inputOutput;
         $startedAt = time();
 
-        $inputOutput->write($this->line($this->hooks->description()));
-        $exitCode = (new SystemProcess)->passthru($this->hooks->interactiveCommand());
+        $inputOutput->write($this->line($hooks->description()));
+        $exitCode = (new SystemProcess)->passthru($hooks->interactiveCommand(), $this->projectDir);
         $inputOutput->write('  Laravel Boost ', newline: false);
 
         $this->verify(
                 new ProcessResult(exitCode: $exitCode, output: ''),
                 $startedAt,
                 self::TEXT['attached next step'],
-                self::TEXT['attached nothing composed'],
+                sprintf(self::TEXT['attached nothing composed'], $hooks->installCommand()),
             );
     }
 
-    // phpcs:disable CleanCode.Pattern.AvoidDuplicateCodeBlocks.Found -- Line shapes match by chance.
-    /**
-     * A fresh clone has no `boost.json` agents: the file is gitignored, and a
-     * captured install never records the agents it picks. Boost then composes
-     * for whatever it detects on this machine, which may be nothing at all.
-     */
-    private function composeCaptured(): void
+    // phpcs:disable CleanCode.Pattern.AvoidDuplicateCodeBlocks.Found
+    private function composeCaptured(BoostHooks $hooks): void
     {
         $inputOutput = $this->inputOutput;
         $hasAgents = (new BoostRegistrar)->hasAgents($this->projectDir);
-        $noAgents = sprintf(
-                self::TEXT['no agents'],
-                BoostRegistrar::FILE,
-                BoostHooks::INSTALL_COMMAND,
-            );
+        $installCommand = $hooks->installCommand();
+        $noAgents = sprintf(self::TEXT['no agents'], BoostRegistrar::FILE, $installCommand);
 
         match ($hasAgents) {
             true => null,
@@ -336,22 +235,20 @@ final class BoostRun
         };
 
         $startedAt = time();
-        $description = $this->line($this->hooks->description());
+        $description = $this->line($hooks->description());
         $inputOutput->write("{$description} ", newline: false);
 
         $this->verify(
-                (new SystemProcess)->capture(command: $this->hooks->command() . self::FEATURES),
+                (new SystemProcess)->capture(
+                        command: $hooks->command() . self::FEATURES,
+                        workingDirectory: $this->projectDir,
+                    ),
                 $startedAt,
-                sprintf(self::TEXT['captured next step'], BoostHooks::INSTALL_COMMAND),
-                self::TEXT['captured nothing composed'],
+                sprintf(self::TEXT['captured next step'], $installCommand),
+                sprintf(self::TEXT['captured nothing composed'], $installCommand),
             );
     }
 
-    /**
-     * Report the run as done only when it both exited cleanly and composed.
-     * Boost exits successfully when it found no agent to compose for, so a
-     * zero exit alone would report "done" for a run that wrote nothing.
-     */
     private function verify(
         ProcessResult $result,
         int $startedAt,
@@ -380,10 +277,7 @@ final class BoostRun
             ->all();
 
         match (true) {
-            $blocks === [] => $this->fail(
-                sprintf($nothingComposed, BoostHooks::INSTALL_COMMAND),
-                $result,
-            ),
+            $blocks === [] => $this->fail($nothingComposed, $result),
             $phpCoreFiles !== [] => $this->fail(
                 sprintf(
                     self::TEXT['php core composed'],
@@ -397,11 +291,6 @@ final class BoostRun
         };
     }
 
-    /**
-     * Only a run that composed cleanly records what it composed.
-     *
-     * @param  list<string>  $composedFiles
-     */
     private function done(array $composedFiles): void
     {
         $this->composedFiles = $composedFiles;
@@ -409,10 +298,6 @@ final class BoostRun
             ->write($this->style->wrap('info', 'done'));
     }
 
-    /**
-     * Only a failure shows the command's output: a successful run stays one
-     * summary line. The output is escaped, so a tag it prints is not styled.
-     */
     private function fail(string $message, ProcessResult $result): void
     {
         $this->inputOutput
@@ -425,9 +310,6 @@ final class BoostRun
         }
     }
 
-    /**
-     * The description of a run, as it opens the run's line.
-     */
     private function line(string $description): string
     {
         return <<<TEXT

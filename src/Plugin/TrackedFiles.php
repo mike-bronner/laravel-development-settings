@@ -9,17 +9,6 @@ use MikeBronner\DevelopmentSettings\Support\FileSync;
 use MikeBronner\DevelopmentSettings\Support\OrphanRemover;
 use RuntimeException;
 
-/**
- * One sync of the tracked files into a project: classify them, write what
- * needs no answer, list what happened, ask about the rest, and count it all.
- *
- * New and known-version files need no answer from the user, so they are
- * written before the summary lists them: a write that fails is listed as
- * failed, never as created or updated. As with a failed Boost run, the
- * failure is reported with its cause and the run carries on.
- *
- * @phpstan-import-type Scan from FileSync
- */
 final class TrackedFiles
 {
     private const ERROR = <<<TEXT
@@ -29,29 +18,10 @@ final class TrackedFiles
     private const NOT_UPDATED = '%s was not updated. %s'
         . ' Fix the cause, then run the Composer command again.';
 
-    /**
-     * @var Scan
-     */
     private array $scan;
-
-    /**
-     * @var list<string>
-     */
     private array $safeOrphans = [];
-
-    /**
-     * @var list<string>
-     */
     private array $protectedOrphans = [];
-
-    /**
-     * @var array<string, string> path => why its write failed
-     */
     private array $failedWrites = [];
-
-    /**
-     * @var array<string, string> targetPath => absoluteSourcePath
-     */
     private array $files = [];
 
     public function __construct(
@@ -62,12 +32,6 @@ final class TrackedFiles
     ) {
     }
 
-    /**
-     * Classify the files against the project, and find the orphans, before
-     * anything is written.
-     *
-     * @param  array<string, string>  $files  targetPath => absoluteSourcePath
-     */
     public function classify(array $files): void
     {
         $fileSync = $this->fileSync;
@@ -77,10 +41,6 @@ final class TrackedFiles
         $this->protectedOrphans = $fileSync->protectedOrphans($this->projectDir, $files);
     }
 
-    /**
-     * Write the new and the known-version files. One that cannot be written
-     * leaves its group, and is listed and counted as failed instead.
-     */
     public function writeUnattended(): void
     {
         foreach ([FileSync::NEW, FileSync::UPDATABLE] as $group) {
@@ -90,11 +50,6 @@ final class TrackedFiles
         }
     }
 
-    /**
-     * What happened to each file, in the order the summary lists them.
-     *
-     * @return list<array{string, string}> type => path
-     */
     public function summaryLines(): array
     {
         return [
@@ -109,10 +64,6 @@ final class TrackedFiles
         ];
     }
 
-    /**
-     * Ask about every file kept so far, write and delete what was agreed,
-     * report every failed write, and count the outcome.
-     */
     public function settle(Consent $consent, Tally $tally): void
     {
         [
@@ -134,19 +85,11 @@ final class TrackedFiles
         $this->removeOrphans($tally, $orphansToDelete);
     }
 
-    /**
-     * List the project's own `.gitignore` lines that override the shipped
-     * ones, once the file is in its final state.
-     */
     public function warnOverrides(): void
     {
         (new IgnoreOverrideNotice($this->inputOutput, $this->projectDir))->warn($this->files);
     }
 
-    /**
-     * @param  list<string>  $paths
-     * @return list<array{string, string}>
-     */
     private function lines(string $type, array $paths): array
     {
         return collect($paths)
@@ -164,12 +107,6 @@ final class TrackedFiles
         $tally->add(Tally::SKIPPED, $skipped);
     }
 
-    /**
-     * Write the agreed files among the kept ones. A kept file that was not
-     * agreed to, or whose write fails, is skipped.
-     *
-     * @param  array<string, string>  $consented  path => absoluteSourcePath
-     */
     private function writeConsented(Tally $tally, array $consented): void
     {
         $kept = [...$this->scan[FileSync::MODIFIED], ...$this->scan[FileSync::UNMARKED]];
@@ -183,9 +120,6 @@ final class TrackedFiles
         }
     }
 
-    /**
-     * Write one tracked file, and record why it failed when it does.
-     */
     private function written(string $path, string $sourceFile): bool
     {
         try {
@@ -211,11 +145,6 @@ final class TrackedFiles
         }
     }
 
-    /**
-     * Delete every safe orphan, and each protected one the user chose.
-     *
-     * @param  list<string>  $orphansToDelete
-     */
     private function removeOrphans(Tally $tally, array $orphansToDelete): void
     {
         $chosen = array_intersect($this->protectedOrphans, $orphansToDelete);

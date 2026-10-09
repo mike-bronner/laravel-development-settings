@@ -6,25 +6,8 @@ namespace MikeBronner\DevelopmentSettings\Support;
 
 use Illuminate\Support\Collection;
 
-/**
- * Finds the lines below the marker of a managed `.gitignore` that override
- * the shipped rules above it. The last matching rule wins in an ignore file,
- * so a project line can undo what the shipped block leaves tracked on purpose.
- * Converting an edited file moves the whole old file below the marker, old
- * shipped rules included, which is how most of these lines get there.
- *
- * Nothing is changed: every line below the marker is the project's. Each
- * rule is read by `IgnorePattern`. As in git, the directories above a path
- * are decided first, from the top: once the last project line matching one
- * of them ignores it, nothing below it can be re-included. Otherwise the last
- * project line matching the path itself decides it.
- */
 final class IgnoreOverrides
 {
-    /**
-     * What the shipped `.gitignore` leaves tracked on purpose, each with a
-     * path inside it to test the rules against.
-     */
     public const TRACKED_ON_PURPOSE = [
         '.ai/' => '.ai/guidelines/example.md',
         'AGENTS.md' => 'AGENTS.md',
@@ -39,12 +22,6 @@ final class IgnoreOverrides
 
     public const IGNORES = 'ignores %s, which the shipped rules leave tracked';
 
-    /**
-     * The overriding lines, by their line number in the whole file. A file
-     * without exactly one marker has no project part, and yields none.
-     *
-     * @return array<int, array{string, list<string>}> lineNumber => [line, reasons]
-     */
     public function find(string $contents, string $shipped): array
     {
         $split = (new ManagedSection)->split($contents);
@@ -59,11 +36,6 @@ final class IgnoreOverrides
         };
     }
 
-    /**
-     * @param  array<int, string>  $project  lineNumber => rule
-     * @param  array<int, string>  $shipped  lineNumber => rule
-     * @return array<int, array{string, list<string>}>
-     */
     private function overrides(array $project, array $shipped): array
     {
         $patterns = collect($project)
@@ -81,11 +53,6 @@ final class IgnoreOverrides
             ->all();
     }
 
-    /**
-     * @param  array<int, string>  $shipped
-     * @param  Collection<string, list<int>>  $ignoring  label => the lines ignoring it
-     * @return list<string>
-     */
     private function reasons(string $rule, int $line, array $shipped, Collection $ignoring): array
     {
         $repeats = match (in_array($rule, $shipped, strict: true)) {
@@ -101,14 +68,6 @@ final class IgnoreOverrides
         return [...$repeats, ...$ignored];
     }
 
-    /**
-     * Every project line that ignores the path or a directory above it, when
-     * the project's lines leave the path ignored. A later negation that
-     * re-includes the path, or the directory above it, leaves none.
-     *
-     * @param  array<int, IgnorePattern>  $patterns  lineNumber => pattern
-     * @return list<int>
-     */
     private function ignoringLines(array $patterns, string $path): array
     {
         $candidates = $this->candidates($path);
@@ -128,18 +87,12 @@ final class IgnoreOverrides
         };
     }
 
-    /**
-     * @param  list<string>  $candidates
-     */
     private function matchesAny(IgnorePattern $pattern, array $candidates): bool
     {
         return collect($candidates)
             ->contains(fn (string $candidate): bool => $pattern->matches($candidate));
     }
 
-    /**
-     * @param  array<int, IgnorePattern>  $patterns
-     */
     private function isExcluded(array $patterns, string $candidate): bool
     {
         $deciding = collect($patterns)
@@ -149,11 +102,6 @@ final class IgnoreOverrides
         return $deciding instanceof IgnorePattern && ! $deciding->isNegation();
     }
 
-    /**
-     * The rules of an ignore file, without blank lines and comments.
-     *
-     * @return array<int, string> lineNumber => rule
-     */
     private function rules(string $contents, int $firstLine): array
     {
         return collect(explode("\n", $contents))
@@ -164,12 +112,6 @@ final class IgnoreOverrides
             ->all();
     }
 
-    /**
-     * The path and every directory above it, which a rule can ignore it by.
-     * A directory ends with a slash.
-     *
-     * @return list<string>
-     */
     private function candidates(string $path): array
     {
         $segments = explode('/', $path);

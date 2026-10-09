@@ -4,15 +4,6 @@ declare(strict_types=1);
 
 namespace MikeBronner\DevelopmentSettings\Support;
 
-/**
- * `vendor/bin/dev-settings-contribute.php`: contributes local edits to this
- * package's installed guideline and skill sources (`resources/boost/…`
- * inside vendor, which no commit in the consuming project carries) back to
- * the development-settings repository as a pull request.
- *
- * Auth: a GitHub token in DEVELOPER_SETTINGS_TOKEN, or a `gh`-authenticated
- * git.
- */
 final class ContributeCommand
 {
     private const NOTHING = "No local development-settings edits to contribute.\n";
@@ -21,10 +12,6 @@ final class ContributeCommand
 
     private const SUCCEEDED = 0;
 
-    /**
-     * @param  resource  $output
-     * @param  resource  $errors
-     */
     public function __construct(
         private string $projectDir,
         private string $packageDir,
@@ -34,9 +21,6 @@ final class ContributeCommand
     ) {
     }
 
-    /**
-     * Open the pull request, and answer the exit status.
-     */
     public function run(): int
     {
         $config = (new InstalledPackage($this->projectDir))->config($this->packageDir);
@@ -61,9 +45,6 @@ final class ContributeCommand
         return self::SUCCEEDED;
     }
 
-    /**
-     * @param  array<string, string>  $modified
-     */
     private function contribute(array $modified): int
     {
         $contributor = new Contributor($this->process);

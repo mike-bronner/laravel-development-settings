@@ -15,14 +15,6 @@ use MikeBronner\DevelopmentSettings\Support\SystemProcess;
 
 use function Laravel\Prompts\confirm;
 
-/**
- * Before an update, names the installed guideline and skill sources the
- * developer edited in place, which the update would overwrite.
- *
- * An interactive run offers to contribute them upstream, and the default is
- * no. A run that cannot ask names the files and the command to run instead.
- * Nothing is opened without consent.
- */
 final class ContributionPrompt
 {
     private const COMMAND = 'vendor/bin/dev-settings-contribute.php';
@@ -63,9 +55,6 @@ final class ContributionPrompt
         };
     }
 
-    /**
-     * @param  array<string, string>  $modified
-     */
     private function announce(array $modified): void
     {
         $inputOutput = $this->inputOutput;
@@ -82,9 +71,6 @@ final class ContributionPrompt
         };
     }
 
-    /**
-     * @param  array<string, string>  $modified
-     */
     private function ask(array $modified): void
     {
         Prompt::interactive(true);
@@ -96,9 +82,6 @@ final class ContributionPrompt
         };
     }
 
-    /**
-     * @param  array<string, string>  $modified
-     */
     private function contribute(array $modified): void
     {
         $contributor = new Contributor(new SystemProcess);
@@ -118,9 +101,6 @@ final class ContributionPrompt
             });
     }
 
-    /**
-     * One of the texts naming the contribute command, as a comment.
-     */
     private function commented(string $text): string
     {
         return $this->comment(sprintf($text, self::COMMAND));

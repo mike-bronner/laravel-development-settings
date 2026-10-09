@@ -2,11 +2,6 @@
 
 declare(strict_types=1);
 
-/*
- * How a publish runs Laravel Boost and reports the run: captured, or handed
- * the terminal, and done only when it composed an agent file.
- */
-
 const STALE_BY = 60;
 
 const EXITED = 'Laravel Boost exited with an error';
@@ -82,18 +77,13 @@ it('hands Boost the terminal, with no feature flags, when it has one', function 
         ->toContain("Composing Laravel Boost guidelines and skills...\n", 'Laravel Boost done');
 });
 
-it('runs the attached command through the shim in a package, rooted there', function (): void {
-    [$this->project] = makeConsumer([
-        'app' => false,
-        'testbench' => true,
-        'voice' => SILENT,
-        'interactiveCommand' => escapeshellarg(PHP_BINARY) . ' artisan boost:install',
-    ]);
+it('runs the attached command through the rooted Testbench in a package', function (): void {
+    [$this->project] = makeConsumer(['app' => false, 'testbench' => true, 'voice' => SILENT]);
 
     $output = publishIn($this->project, INTERACTIVE_ON_A_TERMINAL);
 
     expect(boostRun($this->project))
-        ->toMatchArray(['APP_BASE_PATH' => realpath($this->project)]);
+        ->toMatchArray(['APP_BASE_PATH' => realpath($this->project), 'directories' => true]);
     expect(data_get(boostRun($this->project), 'arguments'))->toBe(['boost:install']);
     expect(boostSharedOurStdout($this->project))->toBeTrue();
     expect($output)->toContain('Laravel Boost done');

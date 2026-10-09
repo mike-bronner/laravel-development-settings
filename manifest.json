@@ -223,7 +223,8 @@
         "31a038fc542f212d6511a7f70fd04fc0"
     ],
     ".github/workflows/tia-baseline.yml": [
-        "7e50d1b16619067f30a662f77766e629"
+        "7e50d1b16619067f30a662f77766e629",
+        "581bc47c69b7a111f91b82ca0f40da99"
     ],
     ".gitignore": [
         "427bb566b7c2a25c556f9105ea2dbc01",
@@ -238,7 +239,9 @@
         "9032a913ee09131c74234ac5488eb4b4",
         "91990d02db276ed5bd7a21f2780db4e3",
         "7c0bf627851fe5246cb3382f166d8dc4",
-        "e37b47f14c82be507304da28a6107c45"
+        "e37b47f14c82be507304da28a6107c45",
+        "586f1758f376c67d5d26d5f21311832c",
+        "2a4242c3a492d88d02f5348943209ed5"
     ],
     ".php-codesniffer/Insight/Sniffs/NamingConventions/UpperCaseEnumCaseSniff.php": [
         "927b4c76c15b2280ae54fc540f11c8ac"
@@ -256,7 +259,8 @@
     "phpcs.xml": [
         "992e3c5d1d7863fcf21d73374254a46a",
         "9bf0a70ded72dd725a68407c309cb349",
-        "ecebb3f4500837d493676f0b6a4f711f"
+        "ecebb3f4500837d493676f0b6a4f711f",
+        "780fd6173882da6508803aed2efcb862"
     ],
     "phpmd.xml": [
         "a2d80f6b94db829aa45205ea0f42ce5e",

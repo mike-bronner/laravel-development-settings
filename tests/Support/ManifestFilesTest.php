@@ -14,12 +14,11 @@ beforeEach(function (): void {
     seedFiles($this->package, [
         PackageConfig::FILE => '<?php return ' . var_export([
             'capture' => ['resources/boost'],
-            'package' => ['files' => ['resources/project/artisan' => 'artisan']],
             'paths' => ['files' => ['pint.json'], 'ignore' => ['.DS_Store']],
         ], true) . ';',
         'pint.json' => '{}',
         'resources/boost/guide.md' => 'guide',
-        'resources/project/artisan' => 'shim',
+        'package-manifest.json' => json_encode(['artisan' => [md5('shim')]]),
         'resources/boost/.DS_Store' => 'junk',
     ]);
     $this->manifests = new ManifestFiles($this->package, $this->output, $this->errors);
@@ -33,7 +32,7 @@ afterEach(function (): void {
     removeTempDir($this->package);
 });
 
-it('writes each manifest from the sources it records, and says so', function (): void {
+it('writes each manifest from its sources, keeping retired ones, and says so', function (): void {
     $status = $this->manifests
         ->regenerate();
     $read = fn (string $file): array => json_decode(

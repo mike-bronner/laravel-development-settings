@@ -6,10 +6,6 @@ namespace MikeBronner\DevelopmentSettings\Support;
 
 use FilesystemIterator;
 
-/**
- * Deletes an orphaned tracked file from the project, then every directory it
- * leaves empty on the way up to the project root.
- */
 final class OrphanRemover
 {
     public function remove(string $projectDir, string $orphanPath): void
