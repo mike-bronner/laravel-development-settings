@@ -17,6 +17,8 @@ const BEFORE_INSTALL_HOOK = '.github/actions/tia-baseline-before-install';
 
 const AFTER_INSTALL_HOOK = '.github/actions/tia-baseline-after-install';
 
+const SECRET_PIN = 4_821;
+
 afterEach(function (): void {
     isset($this->project) && removeTempDir($this->project);
 });
@@ -86,17 +88,75 @@ it('runs each project-owned hook only when the project has it', function (
     expect(tiaWorkflowStepLines($step))->toContain(
             "if: hashFiles('{$hook}/action.yml', '{$hook}/action.yaml') != ''",
             "uses: ./{$hook}",
-            'secrets: ${{ toJSON(secrets) }}',
+            "secrets: \${{ secrets.TIA_BASELINE_SECRETS || '{}' }}",
         );
 })->with([
     'before Composer' => ['Set up the project before Composer', BEFORE_INSTALL_HOOK],
     'after Composer' => ['Set up the project after Composer', AFTER_INSTALL_HOOK],
 ]);
 
+it('hands the hooks no secret but TIA_BASELINE_SECRETS', function (): void {
+    preg_match_all('/\$\{\{.*?\}\}/', tiaWorkflow(), $expressions);
+    $expressionText = implode("\n", (array) data_get($expressions, 0));
+    preg_match_all('/\bsecrets\b(\.\w+)?/', $expressionText, $references);
+
+    expect(array_values(array_unique((array) data_get($references, 0))))
+        ->toBe(['secrets.TIA_BASELINE_SECRETS']);
+});
+
+it('hands the mask step the secret through env alone', function (): void {
+    expect(tiaWorkflowStepLines('Mask the hook secrets'))
+        ->toContain('TIA_BASELINE_SECRETS: ${{ secrets.TIA_BASELINE_SECRETS }}');
+    expect(tiaWorkflowStepScript('Mask the hook secrets'))->not
+        ->toContain('${{');
+});
+
+it('masks every line of every value in the secret object', function (
+    string $secret,
+    string $expected,
+): void {
+    $result = runTiaMaskStep($secret);
+
+    expect($result->exitCode())->toBe(0, $result->output());
+    expect($result->output())->toBe($expected);
+})->with([
+    'flat values' => [
+        (string) json_encode(['WORKFLOW_PAT' => 'ghp_abc', 'PIN' => SECRET_PIN]),
+        "::add-mask::ghp_abc\n::add-mask::4821\n",
+    ],
+    'nested values' => [
+        (string) json_encode(['aws' => ['key' => 'AKIA1', 'ids' => ['one', 'two']]]),
+        "::add-mask::AKIA1\n::add-mask::one\n::add-mask::two\n",
+    ],
+    'a multi-line value, line by line' => [
+        (string) json_encode(['KEY' => "-----BEGIN-----\r\nbody\n\n   \n-----END-----\n"]),
+        "::add-mask::-----BEGIN-----\n::add-mask::body\n::add-mask::-----END-----\n",
+    ],
+    'percent and carriage return escaped' => [
+        (string) json_encode(['KEY' => "50%off\rnow"]),
+        "::add-mask::50%25off%0Dnow\n",
+    ],
+    'no keys, booleans or nulls' => [(string) json_encode(['SECRET' => true, 'OTHER' => null]), ''],
+]);
+
+it('passes without printing a secret that is not a JSON object', function (string $secret): void {
+    $result = runTiaMaskStep($secret);
+
+    expect($result->exitCode())->toBe(0);
+    expect($result->output())->toBe('');
+})->with([
+    'undefined or empty' => [''],
+    'a string' => [(string) json_encode('hunter2')],
+    'an array' => [(string) json_encode(['hunter2'])],
+    'invalid JSON' => ['hunter2 {'],
+    'a bare word' => ['hunter2'],
+]);
+
 it('runs the generic steps in order, with each hook in its place', function (): void {
     preg_match_all('/^      - name: (.+)$/m', tiaWorkflow(), $names);
 
     expect(implode("\n", (array) data_get($names, 1)))->toBe(<<<TEXT
+        Mask the hook secrets
         Checkout
         Set up the project before Composer
         Choose the PHP version

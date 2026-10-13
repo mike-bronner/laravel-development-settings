@@ -122,6 +122,15 @@ function boostStandIn(string $behaviour, string $voice = ''): string
     return escapeshellarg(PHP_BINARY) . " -r {$script} --";
 }
 
+function boostComposingClaude(int $exitCode): string
+{
+    $block = var_export(agentBlock(), true);
+    $script = "file_put_contents('AGENTS.md', {$block});"
+        . " file_put_contents('CLAUDE.md', {$block}); exit({$exitCode});";
+
+    return escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg($script) . ' --';
+}
+
 function makeConsumer(array $options = []): array
 {
     $project = makeTempDir('devset-publish-');

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace MikeBronner\DevelopmentSettings\Laravel;
 
 use Illuminate\Support\ServiceProvider;
-use MikeBronner\DevelopmentSettings\Support\ClaudeImport;
+use MikeBronner\DevelopmentSettings\Support\ClaudeRemoval;
 use MikeBronner\DevelopmentSettings\Support\PhpGuideline;
 
 final class GuidelineServiceProvider extends ServiceProvider
@@ -28,7 +28,7 @@ final class GuidelineServiceProvider extends ServiceProvider
         $guidelinesPath = $config->get(self::CLAUDE_CODE_GUIDELINES_PATH);
 
         match (empty($guidelinesPath)) {
-            true => $config->set(self::CLAUDE_CODE_GUIDELINES_PATH, ClaudeImport::TARGET),
+            true => $config->set(self::CLAUDE_CODE_GUIDELINES_PATH, ClaudeRemoval::GUIDELINES),
             false => null,
         };
     }

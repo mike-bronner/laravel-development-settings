@@ -176,17 +176,30 @@ function tiaWorkflowStepLines(string $name): array
         ->all();
 }
 
+function tiaWorkflowStepScript(string $name): string
+{
+    $matched = preg_match('/^        run: \|\n(.*)/ms', tiaWorkflowStep($name), $match);
+
+    expect($matched)->toBe(1);
+
+    return (string) preg_replace('/^ {10}/m', '', (string) data_get($match, 1));
+}
+
+function runTiaMaskStep(string $secret): ProcessResult
+{
+    $script = escapeshellarg(tiaWorkflowStepScript('Mask the hook secrets'));
+    $environment = 'TIA_BASELINE_SECRETS=' . escapeshellarg($secret);
+
+    return (new SystemProcess)
+        ->capture("{$environment} bash -e -o pipefail -c {$script}", sys_get_temp_dir());
+}
+
 function runTiaPhpVersionStep(
     string $project,
     string $composerJson,
     string $hookVersion = '',
 ): ProcessResult {
-    $step = tiaWorkflowStep('Choose the PHP version');
-    $matched = preg_match('/^        run: \|\n(.*)/ms', $step, $match);
-
-    expect($matched)->toBe(1);
-
-    $script = (string) preg_replace('/^ {10}/m', '', (string) data_get($match, 1));
+    $script = tiaWorkflowStepScript('Choose the PHP version');
     seedFiles($project, ['composer.json' => $composerJson, 'github-output' => '']);
     $environment = collect([
         'HOOK_PHP_VERSION' => $hookVersion,

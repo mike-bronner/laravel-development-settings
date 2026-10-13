@@ -104,9 +104,9 @@ The run names the file and the reason, and changes nothing. Fix the file yoursel
 
 ### AGENTS.md and CLAUDE.md
 
-`AGENTS.md` is the agents' `CONTRIBUTING.md`: commit it, and keep your own hand-written prose in it, outside Boost's block. `CLAUDE.md` is a thin file that imports it with the line `@AGENTS.md`, because Claude Code reads `CLAUDE.md`. The shipped `.gitignore` ignores neither.
+`AGENTS.md` is the agents' `CONTRIBUTING.md`: commit it, and keep your own hand-written prose in it, outside Boost's block. Claude Code reads `AGENTS.md` itself, but only when no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` exists. So this package deletes the project's root `CLAUDE.md` on every install and update, whatever it holds, and the run says so. If git tracks it, commit the deletion. The package never touches `.claude/CLAUDE.md` or `CLAUDE.local.md`, and either one makes Claude Code skip `AGENTS.md` again. A `CLAUDE.md` link is removed as a link, and a `CLAUDE.md` directory is left alone.
 
-After a Boost run that composed, a project with no `CLAUDE.md` gets one holding only `@AGENTS.md`, and the run says so. Commit it. An existing `CLAUDE.md` is never changed. When it does not import `AGENTS.md`, and Boost did not compose into it, each run says to add the `@AGENTS.md` line and to remove any Boost block it still holds, which Boost no longer updates.
+If your app points Claude Code's guidelines at `CLAUDE.md` in `config/boost.php`, Boost composes into it, and a `CLAUDE.md` composed during the run is kept.
 
 ### Your project's own guidelines
 
@@ -168,7 +168,7 @@ The shipped `.gitignore` ends with one marker line:
 
 The package owns everything above that line and replaces it on every sync. Everything below it is yours: the sync never changes it, and the upstream workflow never proposes it. Put your own rules there. Because they come last, they win: `!GEMINI.md` below the marker keeps a hand-written `GEMINI.md` in git even though the shipped rules ignore it.
 
-The same rule lets an old line below the marker undo the shipped block. Each run lists, by line number, every line below the marker that ignores something the shipped rules leave tracked on purpose (`.ai`, `AGENTS.md`, `CLAUDE.md`, and Laravel's placeholder `.gitignore` files in `bootstrap/cache`, `storage/framework` and `storage/logs`), and every line that repeats a shipped rule. Those lines are yours, so they are never changed: delete the ones you did not mean to keep. A file that already tracks a path is not untracked by any of this. Run `git rm --cached` on it yourself.
+The same rule lets an old line below the marker undo the shipped block. Each run lists, by line number, every line below the marker that ignores something the shipped rules leave tracked on purpose (`.ai`, `AGENTS.md`, and Laravel's placeholder `.gitignore` files in `bootstrap/cache`, `storage/framework` and `storage/logs`), and every line that repeats a shipped rule. Those lines are yours, so they are never changed: delete the ones you did not mean to keep. A file that already tracks a path is not untracked by any of this. Run `git rm --cached` on it yourself.
 
 - A `.gitignore` with no marker that is exactly a version this package shipped gets the marker automatically.
 - A `.gitignore` with no marker and your own edits is left alone. An interactive `composer update` offers to add the marker (default no), and moves your whole file, unchanged, below it. Old shipped rules in it then sit below the marker, and each run lists the ones that override the shipped block. A non-interactive run only warns. Nothing is proposed upstream from it either way.
@@ -307,7 +307,7 @@ Each hook is a composite action that the repository owns: an `action.yml` in its
 | `tia-baseline-before-install` | before PHP and Composer are set up | services such as Postgres or Redis, environment variables, Composer credentials, the PHP choices below |
 | `tia-baseline-after-install` | after `composer install` | the environment file, npm builds, Playwright browsers, directory permissions, migrations |
 
-Both hooks receive every secret of the repository as one JSON input named `secrets`. Declare that input, and read a secret with `fromJSON(inputs.secrets).NAME`. A composite action cannot read the `secrets` context itself.
+Both hooks receive one JSON input named `secrets`: the value of the repository secret `TIA_BASELINE_SECRETS`, or `{}` when the repository does not define it. Put the secrets your hooks need in `TIA_BASELINE_SECRETS` as one JSON object, such as `{"WORKFLOW_PAT": "..."}`. Declare the input, and read a secret with `fromJSON(inputs.secrets).NAME`. A composite action cannot read the `secrets` context itself, and the workflow does not pass the whole context, because CodeQL flags that as excessive secrets exposure. Before either hook runs, the workflow registers every line of every string or number in that object as a log mask, so no value shows in clear text in a later step's log.
 
 To set a variable for every later step, write it to `$GITHUB_ENV`. A composite action cannot declare `services:`, so start a database with `docker run` instead.
 
@@ -329,7 +329,7 @@ description: Postgres, environment and Composer credentials for the TIA baseline
 
 inputs:
   secrets:
-    description: Every secret of the repository, as JSON.
+    description: The TIA_BASELINE_SECRETS object, as JSON.
     required: true
 
 outputs:
@@ -370,7 +370,7 @@ description: Environment file and front-end build for the TIA baseline.
 
 inputs:
   secrets:
-    description: Every secret of the repository, as JSON.
+    description: The TIA_BASELINE_SECRETS object, as JSON.
     required: true
 
 runs:

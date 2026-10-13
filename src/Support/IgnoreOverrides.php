@@ -11,7 +11,6 @@ final class IgnoreOverrides
     public const TRACKED_ON_PURPOSE = [
         '.ai/' => '.ai/guidelines/example.md',
         'AGENTS.md' => 'AGENTS.md',
-        'CLAUDE.md' => 'CLAUDE.md',
         'bootstrap/cache/.gitignore' => 'bootstrap/cache/.gitignore',
         'storage/framework/.gitignore' => 'storage/framework/.gitignore',
         'storage/framework/views/.gitignore' => 'storage/framework/views/.gitignore',

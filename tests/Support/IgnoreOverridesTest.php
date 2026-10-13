@@ -34,6 +34,7 @@ it('finds no override in a project part that overrides nothing', function (strin
     'an ignore undone by a later negation' => ["AGENTS.md\n!AGENTS.md\n"],
     'a near miss of a tracked path' => ["AGENTS.md.bak\n/docs/CLAUDE.md\n.aider\n"],
     'a directory rule over a file' => ["CLAUDE.md/\n"],
+    'CLAUDE.md, which the plugin deletes' => ["/CLAUDE.md\nCLAUDE.m?\nCLAUDE.[mM]d\n"],
     'an escaped negation, alone' => ["\\!AGENTS.md\n"],
     'an escaped trailing space' => ["AGENTS.md\\ \n"],
     'a directory ignored, then re-included' => [".ai/\n!.ai/\n"],
@@ -88,9 +89,6 @@ it('names every line that ignores what the shipped rules leave tracked', functio
     'the .ai directory, as a directory' => ['/.ai/', '.ai/'],
     'the .ai contents' => ['.ai/*', '.ai/'],
     'AGENTS.md' => ['AGENTS.md', 'AGENTS.md'],
-    'CLAUDE.md, anchored' => ['/CLAUDE.md', 'CLAUDE.md'],
-    'CLAUDE.md, by a wildcard' => ['CLAUDE.m?', 'CLAUDE.md'],
-    'CLAUDE.md, by a class' => ['CLAUDE.[mM]d', 'CLAUDE.md'],
     'the bootstrap cache directory' => ['/bootstrap/cache', 'bootstrap/cache/.gitignore'],
     'placeholders by name' => ['**/storage/logs/.gitignore', 'storage/logs/.gitignore'],
 ]);

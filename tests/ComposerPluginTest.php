@@ -62,8 +62,10 @@ it('publishes nothing into its own repository', function (): void {
     $this->project = makeTempDir();
     $composerJson = json_encode(['name' => InstalledPackage::NAME]);
     file_put_contents("{$this->project}/composer.json", $composerJson);
+    file_put_contents("{$this->project}/CLAUDE.md", "Maintainer notes.\n");
 
     expect(publishIn($this->project))->toBe('');
+    expect(file_get_contents("{$this->project}/CLAUDE.md"))->toBe("Maintainer notes.\n");
 });
 
 it('names edited sources before an update, and nothing without the package', function (): void {

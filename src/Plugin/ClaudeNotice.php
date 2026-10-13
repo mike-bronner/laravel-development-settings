@@ -5,29 +5,17 @@ declare(strict_types=1);
 namespace MikeBronner\DevelopmentSettings\Plugin;
 
 use Composer\IO\IOInterface;
-use MikeBronner\DevelopmentSettings\Support\ClaudeImport;
+use MikeBronner\DevelopmentSettings\Support\ClaudeRemoval;
+use RuntimeException;
 
 final class ClaudeNotice
 {
-    private const TEXT = [
-        ClaudeImport::CREATED => [
-            'info',
-            "Wrote CLAUDE.md, which imports AGENTS.md: Laravel Boost composes Claude Code's"
-                . ' guidelines into AGENTS.md, and Claude Code reads CLAUDE.md. Commit it.',
-        ],
-        ClaudeImport::NOT_IMPORTED => [
-            'comment',
-            "CLAUDE.md does not import AGENTS.md, where this package points Laravel Boost's"
-                . ' Claude Code guidelines, so Claude Code does not read them. Add the line'
-                . " \"@AGENTS.md\" to CLAUDE.md, and remove any Laravel Boost block it still holds:"
-                . ' Boost no longer updates it.',
-        ],
-        ClaudeImport::FAILED => [
-            'error',
-            'CLAUDE.md could not be written, so Claude Code does not read the guidelines Laravel'
-                . " Boost composed into AGENTS.md. Create it with the line \"@AGENTS.md\".",
-        ],
-    ];
+    private const REMOVED = 'Deleted CLAUDE.md: Laravel Boost composes the guidelines of'
+        . ' Claude Code into AGENTS.md, and Claude Code reads AGENTS.md only when no CLAUDE.md'
+        . ' exists. If git tracks CLAUDE.md, commit the deletion.';
+
+    private const FAILED = 'CLAUDE.md could not be deleted, so Claude Code does not read AGENTS.md,'
+        . ' where Laravel Boost composes its guidelines. Delete CLAUDE.md yourself. %s';
 
     public function __construct(
         private IOInterface $inputOutput,
@@ -36,18 +24,32 @@ final class ClaudeNotice
     ) {
     }
 
-    public function settle(?array $composedFiles): void
+    public function settle(array $composedFiles): void
     {
-        $outcome = match ($composedFiles) {
-            null => null,
-            default => (new ClaudeImport)->settle($this->projectDir, $composedFiles),
-        };
-        [$style, $message] = data_get(self::TEXT, $outcome ?? '', [null, null]);
+        $removal = new ClaudeRemoval;
 
-        match ($message) {
-            null => null,
-            default => $this->inputOutput
-                ->writeError($this->style->wrap($style, "  {$message}")),
+        match ($removal->isRemovable($this->projectDir, $composedFiles)) {
+            true => $this->remove($removal),
+            false => null,
         };
+    }
+
+    private function remove(ClaudeRemoval $removal): void
+    {
+        try {
+            $removal->remove($this->projectDir);
+        } catch (RuntimeException $exception) {
+            $this->write('error', sprintf(self::FAILED, $exception->getMessage()));
+
+            return;
+        }
+
+        $this->write('info', self::REMOVED);
+    }
+
+    private function write(string $style, string $message): void
+    {
+        $this->inputOutput
+            ->writeError($this->style->wrap($style, "  {$this->style->escape($message)}"));
     }
 }

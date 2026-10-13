@@ -65,7 +65,7 @@ final class BoostRun
     private const CLEAN_CODE = 'mike-bronner/clean-code';
 
     private ?string $registration = null;
-    private ?array $composedFiles = null;
+    private array $composedFiles = [];
 
     public function __construct(
         private IOInterface $inputOutput,
@@ -112,7 +112,7 @@ final class BoostRun
         };
     }
 
-    public function composedFiles(): ?array
+    public function composedFiles(): array
     {
         return $this->composedFiles;
     }
@@ -255,10 +255,13 @@ final class BoostRun
         string $nextStep,
         string $nothingComposed,
     ): void {
+        $blocks = (new GuidelineGuard)->composedBlocks($this->projectDir, $startedAt);
+        $this->composedFiles = array_keys($blocks);
+
         match ($result->failed()) {
             true => $this->fail(sprintf(self::TEXT['exited'], $nextStep), $result),
             false => $this->verifyComposed(
-                (new GuidelineGuard)->composedBlocks($this->projectDir, $startedAt),
+                $blocks,
                 $result,
                 $nothingComposed,
             ),
@@ -287,13 +290,12 @@ final class BoostRun
                 ),
                 $result,
             ),
-            default => $this->done(array_keys($blocks)),
+            default => $this->done(),
         };
     }
 
-    private function done(array $composedFiles): void
+    private function done(): void
     {
-        $this->composedFiles = $composedFiles;
         $this->inputOutput
             ->write($this->style->wrap('info', 'done'));
     }
