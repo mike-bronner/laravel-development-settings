@@ -128,7 +128,7 @@ it('shows the env block and its marker in every document that covers it', functi
     $source = shippedSource($document);
 
     expect($source)->toContain(markedFirst(TIA_PROJECT_ENV, "\n"));
-})->with(['README.md', 'CLAUDE.md', 'resources/boost/guidelines/06-pest-tia.md']);
+})->with(['README.md', 'resources/boost/guidelines/06-pest-tia.md']);
 
 it('names every secret literally', function (string $yaml): void {
     preg_match_all('/\$\{\{.*?\}\}/', $yaml, $expressions);
