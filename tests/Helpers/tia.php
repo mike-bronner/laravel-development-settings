@@ -35,6 +35,16 @@ const TIA_PROJECT_ENV = <<<YAML
 
     YAML;
 
+const TIA_OVERRIDE_ENV = <<<YAML
+    env:
+      TIA_POSTGRES_VERSION: '16'
+      TIA_REDIS_VERSION: '7.4'
+      DB_DATABASE: app_testing
+      DB_USERNAME: app
+      DB_PASSWORD: secret
+
+    YAML;
+
 const TIA_EXECUTABLE = 0755;
 
 const XDEBUG_COVERAGE = 'coverage';

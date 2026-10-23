@@ -74,8 +74,8 @@ function runDetectStep(string $project): array
 
 function stepOutputs(string $written): array
 {
-    preg_match_all('/^(\w+)=(.*)$/m', $written, $pairs);
-    preg_match_all('/^(\w+)<<(\S+)\n(.*?)\n\2$/ms', $written, $blocks);
+    preg_match_all('/^([\w-]+)=(.*)$/m', $written, $pairs);
+    preg_match_all('/^([\w-]+)<<(\S+)\n(.*?)\n\2$/ms', $written, $blocks);
     [, $pairNames, $pairValues] = $pairs;
     [, $blockNames, , $blockValues] = $blocks;
 

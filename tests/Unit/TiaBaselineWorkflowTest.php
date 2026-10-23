@@ -127,7 +127,8 @@ it('shows the env block and its marker in every document that covers it', functi
 ): void {
     $source = shippedSource($document);
 
-    expect($source)->toContain(markedFirst(TIA_PROJECT_ENV, "\n"));
+    expect($source)->toContain(markedFirst(TIA_PROJECT_ENV, "\n"))
+        ->toContain(markedFirst(TIA_OVERRIDE_ENV, "\n"));
 })->with(['README.md', 'resources/boost/guidelines/06-pest-tia.md']);
 
 it('names every secret literally', function (string $yaml): void {
@@ -242,20 +243,84 @@ it('runs the generic steps in order, with each hook in its place', function (): 
         Mask the hook secrets
         Checkout
         Set up the project before Composer
+        Detect the test environment
+        Start the database and Redis
+        Create the SQLite database
+        Copy the environment file
         Choose the PHP version
         Set up PHP
         Install Composer dependencies
+        Generate the application key
+        Install npm dependencies
+        Build the front end
+        Install the Playwright browser
+        Make storage and bootstrap/cache writable
         Set up the project after Composer
         Record and publish the baseline
         TEXT);
 });
+
+it('runs each setup step only when the repository needs it', function (
+    string $step,
+    array $lines,
+): void {
+    expect(tiaWorkflowStepLines($step))->toContain(...$lines);
+})->with([
+    'the database and Redis' => [TIA_SERVICES_STEP, [
+        "if: steps.environment.outputs.database-image != ''"
+            . " || steps.environment.outputs.redis == 'true'",
+    ]],
+    'the SQLite file' => [TIA_SQLITE_STEP, [
+        "if: steps.environment.outputs.sqlite-file != ''",
+        'TIA_SQLITE_FILE: ${{ steps.environment.outputs.sqlite-file }}',
+    ]],
+    'the environment file' => ['Copy the environment file', [
+        "if: steps.environment.outputs.env-file == 'true'",
+        'run: cp .env.example .env',
+    ]],
+    'the application key' => ['Generate the application key', [
+        "if: steps.environment.outputs.app-key == 'true'",
+        'run: php artisan key:generate --force',
+    ]],
+    'npm' => ['Install npm dependencies', [
+        "if: steps.environment.outputs.npm == 'true'",
+        'run: npm ci',
+    ]],
+    'the build' => ['Build the front end', [
+        "if: steps.environment.outputs.build == 'true'",
+        'run: npm run build',
+    ]],
+    'the browser' => ['Install the Playwright browser', [
+        "if: steps.environment.outputs.browsers == 'true'",
+        'run: npx --no playwright install --with-deps chromium',
+    ]],
+    'the writable directories' => [TIA_WRITABLE_STEP, [
+        "if: steps.environment.outputs.writable != ''",
+        'TIA_WRITABLE: ${{ steps.environment.outputs.writable }}',
+    ]],
+]);
+
+it('detects the test environment with the runner PHP, before it sets PHP up', function (): void {
+    expect(tiaWorkflowStepLines(TIA_DETECT_STEP))->toContain('shell: php {0}');
+});
+
+it('hands every detected setting to the services step', function (string $input): void {
+    $output = strtolower(str_replace(['TIA_', '_'], ['', '-'], $input));
+
+    expect(tiaWorkflowStepLines(TIA_SERVICES_STEP))
+        ->toContain("{$input}: \${{ steps.environment.outputs.{$output} }}");
+})->with(TIA_SERVICE_INPUTS);
 
 it('hands the choices of the before-install hook on', function (string $step, string $line): void {
     expect(tiaWorkflowStepLines($step))->toContain($line);
 })->with([
     ['Choose the PHP version', 'HOOK_PHP_VERSION: ${{ steps.before-install.outputs.php-version }}'],
     ['Set up PHP', 'php-version: ${{ steps.php.outputs.version }}'],
-    ['Set up PHP', 'extensions: ${{ steps.before-install.outputs.php-extensions }}'],
+    [
+        'Detect the test environment',
+        'HOOK_PHP_EXTENSIONS: ${{ steps.before-install.outputs.php-extensions }}',
+    ],
+    ['Set up PHP', 'extensions: ${{ steps.environment.outputs.php-extensions }}'],
     ['Set up PHP', 'ini-values: ${{ steps.before-install.outputs.php-ini-values }}'],
     ['Set up PHP', 'coverage: pcov'],
     [

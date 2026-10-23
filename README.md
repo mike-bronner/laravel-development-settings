@@ -288,19 +288,69 @@ Run `vendor/bin/dev-settings-contribute.php` (or `composer dev-settings:contribu
 
 Pest 5's Test Impact Analysis (`--tia`) records a dependency graph on its first run, and that run is slow. Pest can download a graph that CI recorded instead (`--tia --baselined`). The plugin syncs the workflow that records and publishes that graph, `.github/workflows/tia-baseline.yml`, into every consuming project, as it syncs `pint.json`. The workflow calls the shared action in this repository, `.github/actions/tia-baseline`. The shipped guideline `resources/boost/guidelines/06-pest-tia.md` tells developers and agents how to use the baseline.
 
-**Edit `tia-baseline.yml` above its marker line only.** The synced file starts with one marker line, and the package owns everything below it. Above it, you can add a workflow-level `env:` block (see [Your own env block](#your-own-env-block)). An edit below the marker is kept as locally modified, stops receiving updates, and is proposed back to this package. Everything else that differs between repositories goes in two optional hooks and in the PHP version choice below. This package keeps the workflow's source at `resources/project/tia-baseline.yml`, outside `.github/workflows`, so this repository never runs it.
+**Edit `tia-baseline.yml` above its marker line only.** The synced file starts with one marker line, and the package owns everything below it. Above it, you can add a workflow-level `env:` block (see [Your own env block](#your-own-env-block)). An edit below the marker is kept as locally modified, stops receiving updates, and is proposed back to this package. The workflow detects and sets up the usual Laravel test environment itself (see [What the workflow sets up](#what-the-workflow-sets-up)). Anything else a repository needs goes in two optional hooks and in the PHP version choice below. This package keeps the workflow's source at `resources/project/tia-baseline.yml`, outside `.github/workflows`, so this repository never runs it.
 
 ### What the workflow runs
 
 1. Check out the repository.
 2. Run the hook `.github/actions/tia-baseline-before-install`, when the repository has one.
-3. Choose the PHP version.
-4. Set up PHP with pcov, plus the extensions and ini values the before-install hook names.
-5. Run `composer install`.
-6. Run the hook `.github/actions/tia-baseline-after-install`, when the repository has one.
-7. Run the shared action, which records the graph with `pest --tia --fresh` and uploads it.
+3. Detect what the test run needs (see [What the workflow sets up](#what-the-workflow-sets-up)).
+4. Start the database server and Redis, create the SQLite file, and copy `.env.example` to `.env`, each when the repository needs it.
+5. Choose the PHP version.
+6. Set up PHP with pcov, plus the extensions the before-install hook names, the extensions the database and Redis need, and the hook's ini values.
+7. Run `composer install`.
+8. Generate the application key, run `npm ci` and `npm run build`, install Playwright's Chromium, and make `storage` and `bootstrap/cache` writable, each when the repository needs it.
+9. Run the hook `.github/actions/tia-baseline-after-install`, when the repository has one.
+10. Run the shared action, which records the graph with `pest --tia --fresh` and uploads it.
 
-A repository with no hooks runs steps 1, 3, 4, 5 and 7 only.
+A repository with no hooks and none of these needs runs steps 1, 3, 5, 6, 7 and 10 only.
+
+### What the workflow sets up
+
+The workflow reads each test setting the way the test run does. It takes the first of these that sets it:
+
+1. A `<server>` entry in `phpunit.xml`, or in `phpunit.xml.dist` when there is no `phpunit.xml`.
+2. The workflow's environment: your [env block](#your-own-env-block), and anything the before-install hook wrote to `$GITHUB_ENV`.
+3. An `<env>` entry in the same file.
+4. `.env.example`.
+
+So a `<server>` entry beats your env block, as it does in the test run. To change a setting that `phpunit.xml` sets with `<server>`, change `phpunit.xml`.
+
+The detection step runs on the PHP the runner has before `setup-php`, which every GitHub-hosted Ubuntu runner has. A self-hosted runner without PHP fails at that step.
+
+| Step | Runs when | Default | Change it with |
+|------|-----------|---------|----------------|
+| Start PostgreSQL | `DB_CONNECTION` holds `pgsql` or `postgres`, such as `pgsql-testing` | `postgres:17` | `TIA_POSTGRES_VERSION` |
+| Start MySQL | `DB_CONNECTION` holds `mysql` | `mysql:8.4` | `TIA_MYSQL_VERSION` |
+| Start MariaDB | `DB_CONNECTION` holds `mariadb` | `mariadb:11` | `TIA_MARIADB_VERSION` |
+| Create the SQLite file | `DB_CONNECTION` holds `sqlite`, and `DB_DATABASE` is not `:memory:` and names no file the repository holds | `database/database.sqlite` | `DB_DATABASE` |
+| Start Redis | any one source sets a value to `redis`, or `phpunit.xml` or the workflow's environment names a `REDIS_` setting | `redis:7` | `TIA_REDIS_VERSION` |
+| Copy `.env.example` to `.env` | `.env.example` exists and `.env` does not | | |
+| Generate the application key | the repository has `artisan`, `.env.example` has an `APP_KEY` line, and no source sets a key | | |
+| `npm ci` | `package.json` and `package-lock.json` exist | | |
+| `npm run build` | as `npm ci`, and `package.json` has a `build` script | | |
+| Install Playwright's Chromium | `composer.json` requires `pestphp/pest-plugin-browser`, and `package-lock.json` locks `playwright` | | |
+| Make directories writable | `storage` or `bootstrap/cache` exists | | |
+
+The database server gets its database, user and password from `DB_DATABASE`, `DB_USERNAME` and `DB_PASSWORD`, and listens on `DB_PORT` at 127.0.0.1. When a setting is not set anywhere, the workflow uses `testing` for the database, `postgres` and `postgres` for PostgreSQL, and `root` and `password` for MySQL and MariaDB. PostgreSQL with an empty password trusts every connection, and MySQL or MariaDB as `root` with an empty password allows it. For MySQL or MariaDB with any other user, the workflow creates that user with the password, empty or not, and grants it every privilege, so `--parallel` can create its own databases. Redis listens on `REDIS_PORT` and requires `REDIS_PASSWORD` when one is set, and its health check uses that password. After a server is healthy, the workflow writes `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME` and `DB_PASSWORD`, or `REDIS_HOST` and `REDIS_PORT`, to `$GITHUB_ENV`, each one only when the environment does not set it already. So a Sail `.env.example` with `DB_HOST=pgsql` still reaches the server. The workflow also enables the PHP extension each server needs: `pdo_pgsql`, `pdo_mysql`, `pdo_sqlite`, or `redis` unless `REDIS_CLIENT` is `predis`.
+
+The workflow starts no server on a port that is in use already, for example by a server the before-install hook started. `REDIS_` settings in `.env.example` alone start no Redis, because Laravel's default `.env.example` lists them while its drivers use the database. A driver set to `redis` in any source starts it, even when another source overrides that driver.
+
+Playwright comes from the project's own npm dependency, so the browser matches the version Pest's plugin drives. When the project requires `pestphp/pest-plugin-browser` and `package-lock.json` locks no `playwright`, the run prints a warning and installs no browser. Run `npm install --save-dev playwright` and commit `package-lock.json` to fix it. When `package.json` has no `package-lock.json`, for example on pnpm or Yarn, the run prints a notice and runs no install and no build.
+
+To change a default, set the variable in your env block above the marker line. `DB_DATABASE`, `DB_USERNAME` and `DB_PASSWORD` set there reach both the server and the test run:
+
+```yaml
+env:
+  TIA_POSTGRES_VERSION: '16'
+  TIA_REDIS_VERSION: '7.4'
+  DB_DATABASE: app_testing
+  DB_USERNAME: app
+  DB_PASSWORD: secret
+# mike-bronner/laravel-development-settings: project entries go above this line. Anything below it is lost on the next sync.
+```
+
+A `REDIS_` setting there, such as `REDIS_HOST: 127.0.0.1`, always starts Redis. Set one to start Redis when no driver uses it. Keep one `env:` block for these settings and your secrets. npm is the only package manager the workflow runs: a repository on pnpm, Yarn or Bun builds in the after-install hook.
 
 The workflow runs on pushes to `main`, `master`, `develop` and `production`, and on a manual run (`workflow_dispatch`). The job runs only when the branch is the repository's default branch. On any other branch the job is skipped, and the run fails nothing. Pest downloads from the latest successful run of the workflow on any branch, so a run on another branch must never publish a graph. A repository whose default branch has another name records on a manual run only.
 
@@ -310,28 +360,28 @@ Each hook is a composite action that the repository owns: an `action.yml` in its
 
 | Hook | Runs | Use it for |
 |------|------|------------|
-| `tia-baseline-before-install` | before PHP and Composer are set up | services such as Postgres or Redis, environment variables, Composer credentials, the PHP choices below |
-| `tia-baseline-after-install` | after `composer install` | the environment file, npm builds, Playwright browsers, directory permissions, migrations |
+| `tia-baseline-before-install` | before the workflow sets anything up | services the workflow does not start, environment variables, Composer credentials, the PHP choices below |
+| `tia-baseline-after-install` | after `composer install` and the workflow's own setup | migrations, a build with another package manager, other browsers |
 
 Both hooks receive one JSON input named `secrets`: the value of the repository secret `TIA_BASELINE_SECRETS`, or `{}` when the repository does not define it. Put the secrets your hooks need in `TIA_BASELINE_SECRETS` as one JSON object, such as `{"WORKFLOW_PAT": "..."}`. Declare the input, and read a secret with `fromJSON(inputs.secrets).NAME`. A composite action cannot read the `secrets` context itself, and the workflow does not pass the whole context, because CodeQL flags that as excessive secrets exposure. Before either hook runs, the workflow registers every line of every string or number in that object as a log mask, so no value shows in clear text in a later step's log. To use secrets your repository already has instead, name them in [your own env block](#your-own-env-block).
 
-To set a variable for every later step, write it to `$GITHUB_ENV`. A composite action cannot declare `services:`, so start a database with `docker run` instead.
+To set a variable for every later step, write it to `$GITHUB_ENV`. A composite action cannot declare `services:`, so start a service the workflow does not start with `docker run` instead.
 
 The before-install hook can set these outputs. Each one is optional.
 
 | Output | Default | Effect |
 |--------|---------|--------|
 | `php-version` | from `composer.json` | the PHP version the graph is recorded on |
-| `php-extensions` | none | the `extensions` input of `shivammathur/setup-php` |
+| `php-extensions` | none | the `extensions` input of `shivammathur/setup-php`, before the extensions the workflow adds |
 | `php-ini-values` | none | the `ini-values` input of `shivammathur/setup-php`, such as `memory_limit=-1, pcov.directory=.` |
 | `pest-arguments` | none | the `arguments` input of the shared action, such as `--parallel` |
 
-An example for an application on Postgres 17 with an npm build:
+An example for an application that also needs Meilisearch, seeded data and Firefox:
 
 ```yaml
 # .github/actions/tia-baseline-before-install/action.yml
 name: TIA baseline setup before Composer
-description: Postgres, environment and Composer credentials for the TIA baseline.
+description: PHP choices, Meilisearch and Composer credentials for the TIA baseline.
 
 inputs:
   secrets:
@@ -342,7 +392,7 @@ outputs:
   php-version:
     value: '8.5'
   php-extensions:
-    value: imagick, pdo_pgsql
+    value: imagick
   php-ini-values:
     value: memory_limit=-1, pcov.directory=.
   pest-arguments:
@@ -351,28 +401,23 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Start Postgres 17
+    - name: Start Meilisearch
       shell: bash
-      run: |
-        docker run --detach --name postgres --publish 5432:5432 \
-          --env POSTGRES_DB=testing --env POSTGRES_USER=postgres --env POSTGRES_PASSWORD=postgres \
-          --health-cmd pg_isready --health-interval 2s postgres:17
-        until [ "$(docker inspect --format '{{.State.Health.Status}}' postgres)" = healthy ]; do sleep 2; done
+      run: docker run --detach --name meilisearch --publish 7700:7700 getmeili/meilisearch:v1.15
 
     - name: Set the environment
       shell: bash
       env:
         COMPOSER_TOKEN: ${{ fromJSON(inputs.secrets).WORKFLOW_PAT }}
       run: |
-        echo "DB_USERNAME=postgres" >> "$GITHUB_ENV"
-        echo "DB_PASSWORD=postgres" >> "$GITHUB_ENV"
+        echo "SCOUT_DRIVER=meilisearch" >> "$GITHUB_ENV"
         echo "COMPOSER_AUTH={\"github-oauth\": {\"github.com\": \"${COMPOSER_TOKEN}\"}}" >> "$GITHUB_ENV"
 ```
 
 ```yaml
 # .github/actions/tia-baseline-after-install/action.yml
 name: TIA baseline setup after Composer
-description: Environment file and front-end build for the TIA baseline.
+description: Seeded data and Firefox for the TIA baseline.
 
 inputs:
   secrets:
@@ -383,13 +428,10 @@ runs:
   using: composite
   steps:
     - shell: bash
-      run: cp .env.example .env
+      run: php artisan db:seed --class=ReferenceDataSeeder --force
 
     - shell: bash
-      run: npm ci && npm run build
-
-    - shell: bash
-      run: npx playwright install --with-deps chromium
+      run: npx playwright install --with-deps firefox
 ```
 
 ### Your own env block
@@ -450,9 +492,9 @@ The action fails on Pest below 5, without a coverage driver, on a failed test ru
 
 In 0.6.0, each repository wrote its own `tia-baseline.yml` from this README. The sync does not know that copy. It keeps the copy and reports it as locally modified, with no sync marker. To move to the shipped workflow:
 
-1. Move each setup step of your copy that runs before `composer install` into `.github/actions/tia-baseline-before-install/action.yml`. Turn `services:` into a `docker run` step, and job-level `env:` into lines written to `$GITHUB_ENV`. Keep an `env:` that names secrets for [your own env block](#your-own-env-block).
+1. Move each setup step of your copy that runs before `composer install` into `.github/actions/tia-baseline-before-install/action.yml`. Leave out the database, Redis, `.env`, npm, Playwright and permission steps the workflow runs itself (see [What the workflow sets up](#what-the-workflow-sets-up)). Turn any other `services:` into a `docker run` step, and job-level `env:` into lines written to `$GITHUB_ENV`. Keep an `env:` that names secrets for [your own env block](#your-own-env-block).
 2. Move the PHP version, the `extensions` and `ini-values` of `setup-php`, and the `arguments` of the action into the outputs of that hook.
-3. Move each step that runs after `composer install` into `.github/actions/tia-baseline-after-install/action.yml`.
+3. Move each other step that runs after `composer install` into `.github/actions/tia-baseline-after-install/action.yml`.
 4. Delete `.github/workflows/tia-baseline.yml`, then run `composer update`. The plugin writes the shipped workflow, with the marker line at its top. Put your env block above that line.
 5. Close any pull request the upstream workflow opened for your copy.
 
