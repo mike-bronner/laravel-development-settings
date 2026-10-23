@@ -16,12 +16,15 @@ final class PackageConfig
 
     public const MANAGED = 'paths.managed';
 
+    public const MANAGED_PROJECT_FIRST = 'paths.managed_project_first';
+
     public const LEGACY_SYMLINKS = 'paths.legacy_symlinks';
 
     private const DEFAULTS = [
         self::CAPTURE => [],
         self::IGNORE => FileDiscovery::DEFAULT_IGNORE,
         self::MANAGED => [],
+        self::MANAGED_PROJECT_FIRST => [],
         self::LEGACY_SYMLINKS => [],
     ];
 

@@ -119,6 +119,37 @@ it('refuses to hand Boost the terminal when composing would damage a file', func
         ->toContain('Composing Laravel Boost');
 });
 
+it('warns about a directory the guard cannot open, and still runs Boost', function (): void {
+    [$this->project] = makeConsumer();
+    seedFiles($this->project, ['docker/data/x' => '']);
+    chmod("{$this->project}/docker/data", MODE_UNREADABLE);
+
+    $output = publishIn($this->project);
+    chmod("{$this->project}/docker/data", TEMP_DIR_PERMISSIONS);
+
+    expect(boostRan($this->project))->toBeTrue();
+    expect($output)->toContain(
+            '  docker/data: Could not open /',
+            'Permission denied, so it was not checked',
+            'This does not stop Laravel Boost',
+            '... done',
+        );
+    expect($output)->not
+        ->toContain('overwrite hand-written content');
+});
+
+it('names a directory it cannot open beside a hazard that refuses', function (): void {
+    [$this->project] = makeConsumer();
+    seedFiles($this->project, ['CLAUDE.md' => armedAgentFile(), 'docker/data/x' => '']);
+    chmod("{$this->project}/docker/data", MODE_UNREADABLE);
+
+    $output = publishIn($this->project);
+    chmod("{$this->project}/docker/data", TEMP_DIR_PERMISSIONS);
+
+    expect(boostRan($this->project))->toBeFalse();
+    expect($output)->toContain('docker/data: Could not open', 'overwrite hand-written content');
+});
+
 it('shows only the one summary line when a captured Boost run succeeds', function (): void {
     [$this->project] = makeConsumer();
 

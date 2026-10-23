@@ -75,3 +75,32 @@ it('keeps every changed file name inside the code fence of the PR body', functio
     expect($fence)->toMatch('/^`{3,}$/');
     expect($fenced)->toBe(["{$backticks}`", "a{$backticks}b.txt", 'pint.json']);
 });
+
+it('never proposes the env block above the marker of tia-baseline.yml', function (): void {
+    [$this->project, $package] = syncFixture();
+    seedFiles($package, [TIA_WORKFLOW_SOURCE => tiaWorkflow()]);
+    seedFiles($this->project, [
+        TIA_WORKFLOW_TARGET => markedFirst(TIA_PROJECT_ENV, "\n" . tiaWorkflow()),
+    ]);
+
+    $result = runSyncStep($this->project);
+
+    expect($result->exitCode())->toBe(0, $result->output());
+    expect(file_get_contents("{$package}/" . TIA_WORKFLOW_SOURCE))->toBe(tiaWorkflow());
+    expect($result->output())->not
+        ->toContain(json_encode(TIA_WORKFLOW_TARGET) . ' -> ');
+});
+
+it('proposes only the part of tia-baseline.yml below its marker', function (): void {
+    [$this->project, $package] = syncFixture();
+    $edited = tiaWorkflow() . "# edited\n";
+    seedFiles($package, [TIA_WORKFLOW_SOURCE => tiaWorkflow()]);
+    seedFiles($this->project, [TIA_WORKFLOW_TARGET => markedFirst(TIA_PROJECT_ENV, "\n{$edited}")]);
+
+    $result = runSyncStep($this->project);
+
+    expect($result->exitCode())->toBe(0, $result->output());
+    expect(file_get_contents("{$package}/" . TIA_WORKFLOW_SOURCE))->toBe($edited);
+    expect($result->output())
+        ->toContain(json_encode(TIA_WORKFLOW_TARGET) . ' -> ' . json_encode(TIA_WORKFLOW_SOURCE));
+});

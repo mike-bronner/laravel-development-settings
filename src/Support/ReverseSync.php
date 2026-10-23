@@ -10,7 +10,12 @@ use RuntimeException;
 
 final class ReverseSync
 {
-    private const NO_PATHS = ['directories' => [], 'files' => [], 'managed' => []];
+    private const NO_PATHS = [
+        'directories' => [],
+        'files' => [],
+        'managed' => [],
+        'managed_project_first' => [],
+    ];
 
     private const EMPTY_MANIFEST = 'The manifest records no paths.'
         . ' Refusing to treat every tracked file as modified.';
@@ -18,7 +23,6 @@ final class ReverseSync
     public function __construct(
         private Manifest $manifest,
         private CheckedFile $file = new CheckedFile,
-        private ManagedSection $section = new ManagedSection,
     ) {
     }
 
@@ -43,11 +47,10 @@ final class ReverseSync
     {
         $root = $this->root($projectDir);
         $paths += self::NO_PATHS;
-        ['managed' => $managed] = $paths;
         $changed = [];
 
         foreach ($this->candidates($root, $paths) as $projectPath => $packagePath) {
-            $changed += $this->change($root, $projectPath, $packagePath, $managed);
+            $changed += $this->change($root, $projectPath, $packagePath, $paths);
         }
 
         return $changed;
@@ -84,7 +87,7 @@ final class ReverseSync
         string $root,
         string $projectPath,
         string $packagePath,
-        array $managed,
+        array $paths,
     ): array {
         $file = "{$root}/{$projectPath}";
 
@@ -94,7 +97,7 @@ final class ReverseSync
             default => $this->unknown(
                 $projectPath,
                 $packagePath,
-                $this->proposal($file, $projectPath, $managed),
+                $this->proposal($file, $projectPath, $paths),
             ),
         };
     }
@@ -110,16 +113,28 @@ final class ReverseSync
         };
     }
 
-    private function proposal(string $file, string $projectPath, array $managed): ?string
+    private function proposal(string $file, string $projectPath, array $paths): ?string
     {
         $contents = $this->file
             ->read($file);
-        $section = $this->section;
+        ['managed' => $below, 'managed_project_first' => $above] = $paths;
 
-        return match (in_array($projectPath, $managed, strict: true)) {
-            true => $section->managedPart($contents),
-            false => $contents,
+        return match (true) {
+            in_array($projectPath, $above, strict: true) => $this->packagePart(
+                $contents,
+                ManagedSection::PROJECT_ABOVE,
+            ),
+            in_array($projectPath, $below, strict: true) => $this->packagePart(
+                $contents,
+                ManagedSection::PROJECT_BELOW,
+            ),
+            default => $contents,
         };
+    }
+
+    private function packagePart(string $contents, string $project): ?string
+    {
+        return (new ManagedSection(project: $project))->managedPart($contents);
     }
 
     private function packagePaths(array $changes): array

@@ -28,7 +28,11 @@ final class Publisher
         $legacyLines = (new LegacyCleanup($this->projectDir, $this->packageDir))
             ->clean($config->entries(PackageConfig::LEGACY_SYMLINKS));
         $trackedFiles = new TrackedFiles(
-                new FileSync($plan->manifest(), managed: $plan->managed()),
+                new FileSync(
+                        $plan->manifest(),
+                        managed: $plan->managed(),
+                        projectFirst: $plan->managedProjectFirst(),
+                    ),
                 $this->projectDir,
                 $this->inputOutput,
             );
@@ -60,7 +64,7 @@ final class Publisher
         $trackedFiles->warnOverrides();
 
         $boost->run();
-        (new ClaudeNotice($this->inputOutput, $this->projectDir))->settle($boost->composedFiles());
+        (new AfterBoost($this->inputOutput, $this->projectDir, $config->hooks()))->settle($boost);
     }
 
     private function summaryLines(array $lines): array

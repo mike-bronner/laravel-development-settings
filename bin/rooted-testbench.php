@@ -5,6 +5,12 @@ declare(strict_types=1);
 
 namespace MikeBronner\DevelopmentSettings\Bin;
 
+$invokedAt = (string) reset($argv);
+$vendorPath = '/vendor/mike-bronner/laravel-development-settings/bin/rooted-testbench.php';
+$isInvokedFromVendor = str_starts_with($invokedAt, '/') && str_ends_with($invokedAt, $vendorPath);
+
+$isInvokedFromVendor && chdir(substr($invokedAt, 0, -strlen($vendorPath)));
+
 $project = (string) getcwd();
 $testbench = "{$project}/vendor/bin/testbench";
 $isInstalled = is_file($testbench);

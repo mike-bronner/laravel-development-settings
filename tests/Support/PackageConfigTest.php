@@ -33,6 +33,7 @@ it('applies the default of an entry left out', function (string $key, array $def
 })->with([
     'capture' => [PackageConfig::CAPTURE, []],
     'managed' => [PackageConfig::MANAGED, []],
+    'managed project first' => [PackageConfig::MANAGED_PROJECT_FIRST, []],
     'legacy symlinks' => [PackageConfig::LEGACY_SYMLINKS, []],
     'ignore' => [PackageConfig::IGNORE, FileDiscovery::DEFAULT_IGNORE],
 ]);
@@ -58,11 +59,13 @@ it('reads the shipped config, --no-interaction on the captured command only', fu
             $testbench->command(),
             $testbench->interactiveCommand(),
             $testbench->discoverCommand(),
+            $testbench->mcpCheckCommand(),
         ])
         ->toBe([
             BoostHooks::TESTBENCH_INSTALL_COMMAND . ' --no-interaction',
             BoostHooks::TESTBENCH_INSTALL_COMMAND,
             BoostHooks::DISCOVER_COMMAND,
+            BoostHooks::MCP_CHECK_COMMAND,
         ]);
 });
 

@@ -31,6 +31,9 @@ final class Consent
             . ' Run composer interactively to add it; your entries are kept below it.',
         'delete kept' => '%d locally-modified file(s) removed upstream were kept.'
             . ' Delete manually if no longer needed.',
+        'unconvertible' => '%s is locally modified and has no sync marker, so it was not updated.'
+            . ' To get the shipped file, delete it and run composer again,'
+            . ' then put your own lines above its marker line.',
         'refused' => '%s holds the sync marker more than once, so it was not touched.'
             . ' Keep one marker line and run composer again.',
     ];
@@ -55,6 +58,13 @@ final class Consent
     public function orphansToDelete(array $protectedOrphans): array
     {
         return $this->askOrKeep($protectedOrphans, 'delete');
+    }
+
+    public function explainUnconvertible(array $unconvertible): void
+    {
+        foreach ($unconvertible as $path) {
+            $this->kept(sprintf(self::TEXT['unconvertible'], $path));
+        }
     }
 
     public function explainRefused(array $refused): void

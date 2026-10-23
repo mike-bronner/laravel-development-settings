@@ -231,3 +231,99 @@ it('throws when a target directory cannot be created', function (): void {
 
     chmod($this->project, TEMP_DIR_PERMISSIONS);
 });
+
+const PROJECT_ENV = <<<YAML
+    env:
+      COMPOSER_AUTH: \${{ secrets.WORKFLOW_PAT }}
+
+    YAML;
+
+it('classifies a project-first file below its marker', function (
+    string $local,
+    string $group,
+): void {
+    seedFiles($this->source, ['ci.yml' => WORKFLOW_V2]);
+    seedFiles($this->project, ['ci.yml' => $local]);
+
+    $scan = projectFirstSync()
+        ->classify($this->project, ['ci.yml' => "{$this->source}/ci.yml"]);
+
+    expect(collect($scan)->filter()->keys()->all())->toBe([$group]);
+})->with([
+    'current, with project lines' => [markedFirst(PROJECT_ENV, "\n" . WORKFLOW_V2), 'unchanged'],
+    'older known, with project lines' => [
+        markedFirst(PROJECT_ENV, "\n" . WORKFLOW_V1),
+        'updatable',
+    ],
+    'edited below the marker' => [markedFirst('', "\nname: Mine\n"), 'modified'],
+    'unmarked current version' => [WORKFLOW_V2, 'updatable'],
+    'unmarked and edited' => [PROJECT_ENV . WORKFLOW_V2, 'unmarked'],
+    'the bottom marker only' => [marked(WORKFLOW_V2), 'unmarked'],
+    'marker twice' => [markedFirst(PROJECT_ENV) . markedFirst('', "\n" . WORKFLOW_V2), 'refused'],
+]);
+
+it('writes a project-first file and keeps the lines above its marker', function (
+    ?string $local,
+    string $expected,
+): void {
+    seedFiles($this->source, ['ci.yml' => WORKFLOW_V2]);
+    $local === null || seedFiles($this->project, ['ci.yml' => $local]);
+
+    projectFirstSync()->write($this->project, 'ci.yml', "{$this->source}/ci.yml");
+
+    expect(file_get_contents("{$this->project}/ci.yml"))->toBe($expected);
+})->with([
+    'missing: marker and source' => [null, markedFirst('', "\n" . WORKFLOW_V2)],
+    'marked: project lines kept' => [
+        markedFirst(PROJECT_ENV, "\n" . WORKFLOW_V1),
+        markedFirst(PROJECT_ENV, "\n" . WORKFLOW_V2),
+    ],
+    'marked, edited below: edit replaced' => [
+        markedFirst(PROJECT_ENV, "\nname: Mine\n"),
+        markedFirst(PROJECT_ENV, "\n" . WORKFLOW_V2),
+    ],
+    'unmarked known version: marker added, nothing kept' => [
+        WORKFLOW_V1,
+        markedFirst('', "\n" . WORKFLOW_V2),
+    ],
+]);
+
+it('refuses to move an edited project-first file above its marker', function (): void {
+    seedFiles($this->source, ['ci.yml' => WORKFLOW_V2]);
+    seedFiles($this->project, ['ci.yml' => PROJECT_ENV . WORKFLOW_V1]);
+
+    $source = "{$this->source}/ci.yml";
+
+    expect(fn () => projectFirstSync()->write($this->project, 'ci.yml', $source))
+        ->toThrow(LogicException::class, 'ci.yml has no sync marker')
+        ->and(file_get_contents("{$this->project}/ci.yml"))
+        ->toBe(PROJECT_ENV . WORKFLOW_V1);
+});
+
+it('says which managed files keep the project part first', function (): void {
+    $sync = new FileSync(new Manifest, managed: ['.gitignore'], projectFirst: ['ci.yml']);
+
+    expect($sync->isProjectFirst('ci.yml'))->toBeTrue()
+        ->and($sync->isProjectFirst('.gitignore'))
+        ->toBeFalse();
+});
+
+it('judges a project-first orphan below its marker', function (
+    string $local,
+    string $expected,
+): void {
+    seedFiles($this->project, ['ci.yml' => $local]);
+    $sync = new FileSync(new Manifest(['ci.yml' => [md5(WORKFLOW_V1), md5(WORKFLOW_V2)]]));
+
+    expect([
+        'safe' => $sync->safeOrphans($this->project, []),
+        'protected' => $sync->protectedOrphans($this->project, []),
+    ])->toBe([...['safe' => [], 'protected' => []], $expected => ['ci.yml']]);
+})->with([
+    'known version, nothing above' => [markedFirst('', "\n" . WORKFLOW_V1), 'safe'],
+    'known version, project lines above' => [
+        markedFirst(PROJECT_ENV, "\n" . WORKFLOW_V2),
+        'protected',
+    ],
+    'edited below the marker' => [markedFirst('', "\nname: Mine\n"), 'protected'],
+]);

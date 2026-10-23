@@ -61,3 +61,10 @@ it('leaves the shim unknown in a package repository without Testbench', function
 
     expect($manifest)->toBe(['pint.json' => ['p']]);
 });
+
+it('names the managed files whose project part comes first', function (): void {
+    $config = new PackageConfig(['paths' => ['managed_project_first' => ['ci.yml']]]);
+
+    expect((new SyncPlan($config, $this->package, $this->project))->managedProjectFirst())
+        ->toBe(['ci.yml']);
+});

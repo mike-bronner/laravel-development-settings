@@ -2,10 +2,8 @@
 
 declare(strict_types=1);
 
-const TIA_WORKFLOW_V1 = <<<YAML
-    name: TIA Baseline
-
-    YAML;
+use MikeBronner\DevelopmentSettings\Support\PackageConfig;
+use Symfony\Component\Yaml\Yaml;
 
 const TIA_HAND_WRITTEN = <<<YAML
     name: TIA Baseline
@@ -35,30 +33,115 @@ it('keeps the workflow out of the workflows this repository runs', function (): 
         ->toStartWith('.github/');
 });
 
-it('creates, updates and protects the workflow like any tracked file', function (
+it('keeps the project part of the workflow above its marker', function (): void {
+    expect(shippedConfig()->entries(PackageConfig::MANAGED_PROJECT_FIRST))
+        ->toBe([TIA_WORKFLOW_TARGET])
+        ->and(shippedConfig()->entries(PackageConfig::MANAGED))
+        ->toBe(['.gitignore']);
+});
+
+it('creates, updates and protects the workflow below its marker', function (
     ?string $local,
     string $expected,
-    string $reported,
+    array $reported,
 ): void {
-    [$this->project] = makeConsumer([
-        'manifest' => [TIA_WORKFLOW_TARGET => [md5(TIA_WORKFLOW_V1), md5(tiaWorkflow())]],
-        'sources' => [TIA_WORKFLOW_SOURCE => tiaWorkflow()],
-        'paths' => ['files' => [TIA_WORKFLOW_SOURCE => TIA_WORKFLOW_TARGET]],
-    ]);
-    $local === null || seedFiles($this->project, [TIA_WORKFLOW_TARGET => $local]);
+    $this->project = tiaWorkflowConsumer($local);
 
     $output = publishIn($this->project);
 
     expect(file_get_contents("{$this->project}/" . TIA_WORKFLOW_TARGET))->toBe($expected);
-    expect($output)->toContain($reported);
+    expect($output)->toContain(...$reported);
 })->with([
-    'missing: created' => [null, tiaWorkflow(), '+  ' . TIA_WORKFLOW_TARGET],
-    'an older version: updated' => [TIA_WORKFLOW_V1, tiaWorkflow(), '↻  ' . TIA_WORKFLOW_TARGET],
+    'missing: created' => [
+        null,
+        markedFirst('', "\n" . tiaWorkflow()),
+        ['+  ' . TIA_WORKFLOW_TARGET],
+    ],
+    'an unmarked older version: updated' => [
+        TIA_WORKFLOW_V1,
+        markedFirst('', "\n" . tiaWorkflow()),
+        ['↻  ' . TIA_WORKFLOW_TARGET],
+    ],
+    'the env block, an older version below: updated' => [
+        markedFirst(TIA_PROJECT_ENV, "\n" . TIA_WORKFLOW_V1),
+        markedFirst(TIA_PROJECT_ENV, "\n" . tiaWorkflow()),
+        ['↻  ' . TIA_WORKFLOW_TARGET, '1 updated'],
+    ],
+    'the env block, the current version below: unchanged' => [
+        markedFirst(TIA_PROJECT_ENV, "\n" . tiaWorkflow()),
+        markedFirst(TIA_PROJECT_ENV, "\n" . tiaWorkflow()),
+        ['1 unchanged'],
+    ],
     'hand-written: kept' => [
         TIA_HAND_WRITTEN,
         TIA_HAND_WRITTEN,
-        TIA_WORKFLOW_TARGET . ' (locally modified)',
+        [TIA_WORKFLOW_TARGET . ' (locally modified, no sync marker)', '1 skipped'],
     ],
+    'the marker twice: kept' => [
+        markedFirst(TIA_PROJECT_ENV) . markedFirst('', "\n" . tiaWorkflow()),
+        markedFirst(TIA_PROJECT_ENV) . markedFirst('', "\n" . tiaWorkflow()),
+        [TIA_WORKFLOW_TARGET . ' holds the sync marker more than once', '1 skipped'],
+    ],
+]);
+
+it('never reports the env block as a local modification', function (): void {
+    $this->project = tiaWorkflowConsumer(markedFirst(TIA_PROJECT_ENV, "\n" . TIA_WORKFLOW_V1));
+
+    expect(publishIn($this->project))->not
+        ->toContain('locally modified');
+});
+
+it('never offers to move an edited workflow above its marker', function (): void {
+    $this->project = tiaWorkflowConsumer(TIA_HAND_WRITTEN);
+
+    $output = withKeyPresses([], fn (): string => publishIn($this->project, INTERACTIVE));
+
+    expect(file_get_contents("{$this->project}/" . TIA_WORKFLOW_TARGET))->toBe(TIA_HAND_WRITTEN);
+    expect($output)->toContain(
+            TIA_WORKFLOW_TARGET . ' is locally modified and has no sync marker',
+            'delete it and run composer again',
+        );
+    expect($output)->not
+        ->toContain('Add the sync marker');
+});
+
+it('syncs the env block into one workflow with a top-level env', function (): void {
+    $this->project = tiaWorkflowConsumer(markedFirst(TIA_PROJECT_ENV, "\n" . TIA_WORKFLOW_V1));
+    publishIn($this->project);
+
+    $workflow = Yaml::parse((string) file_get_contents("{$this->project}/" . TIA_WORKFLOW_TARGET));
+
+    expect(array_keys($workflow))->toBe(['env', 'name', 'on', 'jobs'])
+        ->and(data_get($workflow, 'env.COMPOSER_AUTH'))
+        ->toBe(<<<JSON
+            {"github-oauth": {"github.com": "\${{ secrets.WORKFLOW_PAT }}"}}
+            JSON)
+        ->and(data_get($workflow, 'env.NOVA_USERNAME'))
+        ->toBe('${{ secrets.NOVA_USERNAME }}')
+        ->and(data_get($workflow, 'jobs.baseline.steps'))
+        ->toBe(data_get(Yaml::parse(tiaWorkflow()), 'jobs.baseline.steps'));
+});
+
+it('shows the env block and its marker in every document that covers it', function (
+    string $document,
+): void {
+    $source = shippedSource($document);
+
+    expect($source)->toContain(markedFirst(TIA_PROJECT_ENV, "\n"));
+})->with(['README.md', 'CLAUDE.md', 'resources/boost/guidelines/06-pest-tia.md']);
+
+it('names every secret literally', function (string $yaml): void {
+    preg_match_all('/\$\{\{.*?\}\}/', $yaml, $expressions);
+    $expressionText = implode("\n", (array) data_get($expressions, 0));
+
+    expect($expressionText)->toContain('secrets.')
+        ->and(preg_match('/\bsecrets\b(?!\.\w)/', $expressionText))
+        ->toBe(0);
+    expect($yaml)->not
+        ->toContain('toJSON(secrets');
+})->with([
+    'the shipped workflow' => [tiaWorkflow()],
+    'the env block the documents show' => [TIA_PROJECT_ENV],
 ]);
 
 it('records on the default branch alone, on a push or a manual run', function (string $line): void {

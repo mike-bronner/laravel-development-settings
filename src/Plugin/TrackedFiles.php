@@ -71,15 +71,22 @@ final class TrackedFiles
             FileSync::UNMARKED => $unmarked,
             FileSync::REFUSED => $refused,
         ] = $this->scan;
+        $fileSync = $this->fileSync;
+        $unconvertible = collect(array_keys($unmarked))
+            ->filter(fn (string $path): bool => $fileSync->isProjectFirst($path))
+            ->values()
+            ->all();
+        $convertible = array_diff_key($unmarked, array_flip($unconvertible));
         $overwrite = $consent->overwrite(array_keys($modified));
-        $convert = $consent->convert(array_keys($unmarked));
+        $convert = $consent->convert(array_keys($convertible));
+        $consent->explainUnconvertible($unconvertible);
         $consent->explainRefused(array_keys($refused));
         $orphansToDelete = $consent->orphansToDelete($this->protectedOrphans);
 
         $this->countUnattended($tally);
         $this->writeConsented($tally, [
             ...array_intersect_key($modified, array_flip($overwrite)),
-            ...array_intersect_key($unmarked, array_flip($convert)),
+            ...array_intersect_key($convertible, array_flip($convert)),
         ]);
         $this->reportFailures();
         $this->removeOrphans($tally, $orphansToDelete);

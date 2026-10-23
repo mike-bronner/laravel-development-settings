@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use MikeBronner\DevelopmentSettings\Support\PackageConfig;
 use MikeBronner\DevelopmentSettings\Support\ProcessResult;
 use MikeBronner\DevelopmentSettings\Support\SystemProcess;
 
@@ -16,6 +17,23 @@ const TIA_DEFAULT_BRANCH = 'main';
 const TIA_WORKFLOW_SOURCE = 'resources/project/tia-baseline.yml';
 
 const TIA_WORKFLOW_TARGET = '.github/workflows/tia-baseline.yml';
+
+const TIA_WORKFLOW_V1 = <<<YAML
+    name: TIA Baseline
+
+    YAML;
+
+const TIA_PROJECT_ENV = <<<YAML
+    env:
+      COMPOSER_AUTH: '{"github-oauth": {"github.com": "\${{ secrets.WORKFLOW_PAT }}"}}'
+      NOVA_USERNAME: \${{ secrets.NOVA_USERNAME }}
+      NOVA_LICENSE_KEY: \${{ secrets.NOVA_LICENSE_KEY }}
+      SPARK_USERNAME: \${{ secrets.SPARK_USERNAME }}
+      SPARK_API_TOKEN: \${{ secrets.SPARK_API_TOKEN }}
+      FLUX_USERNAME: \${{ secrets.FLUX_USERNAME }}
+      FLUX_LICENSE_KEY: \${{ secrets.FLUX_LICENSE_KEY }}
+
+    YAML;
 
 const TIA_EXECUTABLE = 0755;
 
@@ -208,4 +226,20 @@ function runTiaPhpVersionStep(
 
     return (new SystemProcess)
         ->capture("{$environment->implode(' ')} bash -e -c " . escapeshellarg($script), $project);
+}
+
+function tiaWorkflowConsumer(?string $local): string
+{
+    [$project] = makeConsumer([
+        'manifest' => [TIA_WORKFLOW_TARGET => [md5(TIA_WORKFLOW_V1), md5(tiaWorkflow())]],
+        'sources' => [TIA_WORKFLOW_SOURCE => tiaWorkflow()],
+        'paths' => [
+            'files' => [TIA_WORKFLOW_SOURCE => TIA_WORKFLOW_TARGET],
+            'managed_project_first' => shippedConfig()
+                ->entries(PackageConfig::MANAGED_PROJECT_FIRST),
+        ],
+    ]);
+    $local === null || seedFiles($project, [TIA_WORKFLOW_TARGET => $local]);
+
+    return $project;
 }

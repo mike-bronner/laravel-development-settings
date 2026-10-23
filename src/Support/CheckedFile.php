@@ -20,6 +20,25 @@ final class CheckedFile
             );
     }
 
+    public function readPrefix(string $path, int $length): string
+    {
+        return (string) $this->attempt(
+                static fn (): string|false => file_get_contents($path, length: $length),
+                "Could not read {$path}",
+            );
+    }
+
+    public function entries(string $directory): array
+    {
+        return array_values(array_diff(
+                (array) $this->attempt(
+                        static fn (): array|false => scandir($directory),
+                        "Could not open {$directory}",
+                    ),
+                ['.', '..'],
+            ));
+    }
+
     public function write(string $path, string $contents): void
     {
         $this->ensureDirectory(dirname($path));

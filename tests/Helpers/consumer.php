@@ -26,6 +26,8 @@ const COMPOSES = 'composes';
 
 const COMPOSES_NOTHING = 'composes nothing';
 
+const COMPOSES_WITH_MCP = 'composes, and configures MCP';
+
 const EXITS_WITH_ERROR = 'exits with an error';
 
 const SILENT = 'silent';
@@ -39,6 +41,8 @@ const INTERACTIVE = 'interactive, no terminal';
 const INTERACTIVE_ON_A_TERMINAL = 'interactive, on a terminal';
 
 const ROOTED_TESTBENCH = 'bin/rooted-testbench.php';
+
+const MCP_CHECK = 'dev-settings:mcp-executor';
 
 function boostScript(string $behaviour, string $voice = ''): string
 {
@@ -55,6 +59,7 @@ function boostScript(string $behaviour, string $voice = ''): string
 
     return $record . match ($behaviour) {
         COMPOSES => boostComposes($voice),
+        COMPOSES_WITH_MCP => boostComposes($voice) . boostConfiguresMcp(),
         COMPOSES_NOTHING => boostSays($voice, " echo 'Boost stand-in found no agent', PHP_EOL;"),
         EXITS_WITH_ERROR => boostFails($voice),
     };
@@ -66,6 +71,15 @@ function boostComposes(string $voice): string
     $saying = boostSays($voice, " echo 'Boost stand-in composed AGENTS.md', PHP_EOL;");
 
     return " file_put_contents('AGENTS.md', {$block});{$saying}";
+}
+
+function boostConfiguresMcp(): string
+{
+    $json = var_export(BOOST_MCP_JSON, true);
+    $toml = var_export(BOOST_MCP_TOML, true);
+
+    return " file_put_contents('.mcp.json', {$json}); is_dir('.codex') || mkdir('.codex');"
+        . " file_put_contents('.codex/config.toml', {$toml});";
 }
 
 function boostFails(string $voice): string
@@ -86,8 +100,12 @@ function boostSays(string $voice, string $statement): string
     };
 }
 
-function testbenchScript(string $behaviour, string $voice, int $discoveryExit): string
-{
+function testbenchScript(
+    string $behaviour,
+    string $voice,
+    int $discoveryExit,
+    int $mcpCheckExit = 0,
+): string {
     $discover = match ($discoveryExit) {
         0 => <<<PHP
             \$run = [
@@ -103,7 +121,14 @@ function testbenchScript(string $behaviour, string $voice, int $discoveryExit): 
     };
     $exit = "exit({$discoveryExit});";
 
+    $mcpCheck = <<<PHP
+        file_put_contents('mcp-check.ran', json_encode(array_slice(\$argv, 1)));
+        echo 'MCP check stand-in: <error>ToolExecutor</error> changed';
+        exit({$mcpCheckExit});
+        PHP;
+
     return "if ((\$argv[1] ?? null) === 'package:discover') { {$discover} {$exit} }\n"
+        . "if ((\$argv[1] ?? null) === '" . MCP_CHECK . "') { {$mcpCheck} }\n"
         . boostScript($behaviour, $voice);
 }
 
@@ -149,6 +174,7 @@ function makeConsumer(array $options = []): array
                 $behaviour,
                 $voice,
                 data_get($options, 'discoveryExit', 0),
+                data_get($options, 'mcpCheckExit', 0),
             )],
             false => [],
         },
@@ -176,6 +202,7 @@ function consumerConfig(array $options): array
             'testbench_command' => withThisPhp($testbench->command()),
             'testbench_interactive_command' => withThisPhp($testbench->interactiveCommand()),
             'testbench_discover_command' => withThisPhp($testbench->discoverCommand()),
+            'testbench_mcp_check_command' => withThisPhp($testbench->mcpCheckCommand()),
             'description' => 'Composing Laravel Boost guidelines and skills...',
         ],
         'capture' => ['resources/boost'],

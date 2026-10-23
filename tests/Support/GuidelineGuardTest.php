@@ -96,6 +96,23 @@ it('refuses a file it cannot read, since it cannot clear it', function (): void 
     };
 });
 
+it('lists a directory it cannot open apart from the hazards, with its cause', function (): void {
+    seedFiles($this->project, ['CLAUDE.md' => armedAgentFile(), 'docker/data/x.md' => 'x']);
+    chmod("{$this->project}/docker/data", MODE_UNREADABLE);
+
+    $inspection = (new GuidelineGuard)->inspect($this->project);
+    $hazards = (new GuidelineGuard)->hazards($this->project);
+    chmod("{$this->project}/docker/data", TEMP_DIR_PERMISSIONS);
+
+    expect(array_keys(data_get($inspection, 'hazards')))->toBe(['CLAUDE.md'])
+        ->and(array_keys($hazards))
+        ->toBe(['CLAUDE.md'])
+        ->and(array_keys(data_get($inspection, 'unopened')))
+        ->toBe(['docker/data'])
+        ->and(data_get($inspection, 'unopened')['docker/data'])
+        ->toContain("Could not open {$this->project}/docker/data");
+});
+
 it('reports nothing for a directory that does not exist', function (): void {
     expect((new GuidelineGuard)->hazards("{$this->project}/absent"))->toBe([]);
 });

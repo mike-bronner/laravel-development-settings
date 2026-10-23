@@ -57,6 +57,9 @@ final class BoostRun
             . ' artisan of its own. If artisan is an edited copy of the shim earlier releases'
             . ' wrote, delete it and run the Composer command again. Otherwise, check that'
             . ' package discovery is not turned off for %s.',
+        'unopened' => '%s: %s, so it was not checked for agent files that composing could'
+            . ' damage. This does not stop Laravel Boost: it cannot write in a directory this'
+            . ' user cannot open.',
         'clean-code not direct' => 'This project does not require %s in its own composer.json,'
             . ' so Laravel Boost composes none of its guidelines.'
             . " Run \"composer require --dev %s\".",
@@ -66,6 +69,7 @@ final class BoostRun
 
     private ?string $registration = null;
     private array $composedFiles = [];
+    private ?int $startedAt = null;
 
     public function __construct(
         private IOInterface $inputOutput,
@@ -112,6 +116,11 @@ final class BoostRun
         };
     }
 
+    public function startedAt(): ?int
+    {
+        return $this->startedAt;
+    }
+
     public function composedFiles(): array
     {
         return $this->composedFiles;
@@ -145,7 +154,14 @@ final class BoostRun
 
     private function guardAndCompose(): void
     {
-        $hazards = (new GuidelineGuard)->hazards($this->projectDir);
+        $inspection = (new GuidelineGuard)->inspect($this->projectDir);
+        $hazards = data_get($inspection, 'hazards');
+
+        collect(data_get($inspection, 'unopened'))
+            ->each(fn (string $cause, string $path): mixed => $this->writeError(
+                    'comment',
+                    sprintf(self::TEXT['unopened'], $path, $cause),
+                ));
 
         match ($hazards) {
             [] => $this->discoverAndCompose(),
@@ -255,6 +271,7 @@ final class BoostRun
         string $nextStep,
         string $nothingComposed,
     ): void {
+        $this->startedAt = $startedAt;
         $blocks = (new GuidelineGuard)->composedBlocks($this->projectDir, $startedAt);
         $this->composedFiles = array_keys($blocks);
 

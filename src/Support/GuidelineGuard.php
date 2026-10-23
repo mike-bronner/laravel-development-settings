@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace MikeBronner\DevelopmentSettings\Support;
 
-use RecursiveCallbackFilterIterator;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
 use RuntimeException;
 use SplFileInfo;
 
@@ -19,8 +16,6 @@ final class GuidelineGuard
     public const CLOSING_TAG = <<<TAG
         </laravel-boost-guidelines>
         TAG;
-
-    private const SKIP_DIRECTORIES = ['.git', 'node_modules', 'vendor'];
 
     private const EXTENSIONS = ['markdown', 'md', 'mdc'];
 
@@ -39,18 +34,28 @@ final class GuidelineGuard
 
     public function hazards(string $projectDir): array
     {
-        return collect($this->markdownFiles($projectDir))
+        return data_get($this->inspect($projectDir), 'hazards');
+    }
+
+    public function inspect(string $projectDir): array
+    {
+        $scan = (new ProjectFiles)->scan($projectDir);
+        $hazards = collect($this->markdownFiles(data_get($scan, 'files')))
             ->map(fn (string $absolutePath): ?string => $this->hazard($absolutePath))
             ->whereNotNull()
             ->sortKeys()
             ->all();
+
+        return ['hazards' => $hazards, 'unopened' => data_get($scan, 'unreadable')];
     }
 
     public function composedBlocks(string $projectDir, int $since): array
     {
         clearstatcache();
 
-        return collect($this->markdownFiles($projectDir))
+        $files = data_get((new ProjectFiles)->scan($projectDir), 'files');
+
+        return collect($this->markdownFiles($files))
             ->map(fn (string $absolutePath): ?string => $this->composedAt($absolutePath, $since))
             ->whereNotNull()
             ->sortKeys()
@@ -106,51 +111,17 @@ final class GuidelineGuard
         };
     }
 
-    private function markdownFiles(string $projectDir): array
+    private function markdownFiles(array $files): array
     {
-        return match (is_dir($projectDir)) {
-            true => $this->markdownFilesIn($projectDir),
-            false => [],
-        };
-    }
-
-    private function markdownFilesIn(string $projectDir): array
-    {
-        $prefixLength = strlen(rtrim($projectDir, '/')) + 1;
-        $iterator = new RecursiveIteratorIterator(
-                new RecursiveCallbackFilterIterator(
-                        new RecursiveDirectoryIterator(
-                                $projectDir,
-                                RecursiveDirectoryIterator::SKIP_DOTS,
-                            ),
-                        fn (SplFileInfo $entry): bool => $this->isExamined($entry),
-                    ),
-                RecursiveIteratorIterator::LEAVES_ONLY,
-            );
-
-        return collect(iterator_to_array($iterator))
-            ->filter(fn (SplFileInfo $entry): bool => $this->isMarkdown($entry))
-            ->mapWithKeys(fn (SplFileInfo $entry): array => $this->relative($entry, $prefixLength))
+        return collect($files)
+            ->filter(fn (string $absolutePath): bool => $this->isMarkdown($absolutePath))
             ->all();
     }
 
-    private function isExamined(SplFileInfo $entry): bool
+    private function isMarkdown(string $absolutePath): bool
     {
-        $isSkippedDirectory = $entry->isDir()
-            && in_array($entry->getFilename(), self::SKIP_DIRECTORIES, strict: true);
+        $extension = strtolower(pathinfo($absolutePath, PATHINFO_EXTENSION));
 
-        return ! $entry->isLink() && ! $isSkippedDirectory;
-    }
-
-    private function isMarkdown(SplFileInfo $entry): bool
-    {
-        return in_array(strtolower($entry->getExtension()), self::EXTENSIONS, strict: true);
-    }
-
-    private function relative(SplFileInfo $entry, int $prefixLength): array
-    {
-        $pathname = $entry->getPathname();
-
-        return [substr($pathname, $prefixLength) => $pathname];
+        return in_array($extension, self::EXTENSIONS, strict: true);
     }
 }

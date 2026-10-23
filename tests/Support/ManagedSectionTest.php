@@ -70,3 +70,68 @@ it('names the package and says where project entries go and what is lost', funct
 
     expect(ManagedSection::MARKER)->toBe("{$expected} Anything above it is lost on the next sync.");
 });
+
+it('splits a project-first file at its marker', function (
+    string $contents,
+    string $project,
+    string $managed,
+): void {
+    $section = new ManagedSection(project: ManagedSection::PROJECT_ABOVE);
+
+    expect($section->split($contents))->toBe(['managed' => $managed, 'project' => $project])
+        ->and($section->managedPart($contents))
+        ->toBe($managed)
+        ->and($section->projectPart($contents))
+        ->toBe($project);
+})->with([
+    'project lines above' => [
+        markedFirst("env:\n  KEY: value\n\n", "\nname: CI\n"),
+        "env:\n  KEY: value\n\n",
+        "name: CI\n",
+    ],
+    'starting at the marker' => [markedFirst('', "\nname: CI\n"), '', "name: CI\n"],
+    'trailing whitespace and a carriage return' => [
+        markedFirst("env: {}\r\n", " \r\nname: CI\r\n"),
+        "env: {}\r\n",
+        "name: CI\r\n",
+    ],
+]);
+
+it('reads only its own marker', function (string $project, string $contents): void {
+    $section = new ManagedSection(project: $project);
+
+    expect($section->markers($contents))->toBe(0)
+        ->and($section->split($contents))
+        ->toBeNull();
+})->with([
+    'a project-first file with the bottom marker' => [
+        ManagedSection::PROJECT_ABOVE,
+        marked("env: {}\n", "\nname: CI\n"),
+    ],
+    'a bottom file with the project-first marker' => [
+        ManagedSection::PROJECT_BELOW,
+        markedFirst("/vendor\n"),
+    ],
+]);
+
+it('composes the project part, the marker and the source', function (string $project): void {
+    $section = new ManagedSection(project: ManagedSection::PROJECT_ABOVE);
+    $composed = $section->compose(managed: 'name: CI', project: $project);
+
+    expect($composed)->toBe(markedFirst($project, "\nname: CI"))
+        ->and($section->split($composed))
+        ->toBe(['managed' => 'name: CI', 'project' => $project]);
+})->with(['an env block' => ["env:\n  KEY: value\n"], 'nothing' => ['']]);
+
+it('says project entries go above the project-first marker', function (): void {
+    $expected = <<<MARKER
+        # mike-bronner/laravel-development-settings: project entries go above this line.
+        MARKER;
+
+    expect(ManagedSection::PROJECT_FIRST_MARKER)
+        ->toBe("{$expected} Anything below it is lost on the next sync.")
+        ->and((new ManagedSection(project: ManagedSection::PROJECT_ABOVE))->marker())
+        ->toBe(ManagedSection::PROJECT_FIRST_MARKER)
+        ->and((new ManagedSection)->marker())
+        ->toBe(ManagedSection::MARKER);
+});

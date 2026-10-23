@@ -31,6 +31,12 @@ final class SyncPlan
             ->entries(PackageConfig::MANAGED);
     }
 
+    public function managedProjectFirst(): array
+    {
+        return $this->config
+            ->entries(PackageConfig::MANAGED_PROJECT_FIRST);
+    }
+
     public function manifest(): Manifest
     {
         $reader = new ManifestReader;

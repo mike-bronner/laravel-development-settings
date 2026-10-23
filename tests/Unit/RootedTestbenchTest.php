@@ -74,3 +74,27 @@ it('fails with the next step, and creates nothing, when Testbench is missing', f
         ->toContain('Fatal');
     expect(glob("{$this->project}/{bootstrap,storage}", GLOB_BRACE))->toBe([]);
 });
+
+it('roots at the repository it sits in when run by its absolute vendor path', function (): void {
+    ($this->installTestbench)();
+    $vendorScript = 'vendor/mike-bronner/laravel-development-settings/bin/rooted-testbench.php';
+    $script = "{$this->project}/{$vendorScript}";
+    $source = (string) file_get_contents(REPOSITORY_ROOT . '/bin/rooted-testbench.php');
+    seedFiles($this->project, [$vendorScript => $source]);
+    $elsewhere = makeTempDir('devset-rooted-elsewhere-');
+
+    try {
+        $result = (new SystemProcess)->capture(
+                escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($script) . ' boost:mcp',
+                $elsewhere,
+            );
+    } finally {
+        removeTempDir($elsewhere);
+    }
+
+    expect($result->exitCode())->toBe(0);
+    expect(($this->rooting)($result->output()))->toMatchArray([
+        'APP_BASE_PATH' => realpath($this->project),
+        'TESTBENCH_WORKING_PATH' => realpath($this->project),
+    ]);
+});

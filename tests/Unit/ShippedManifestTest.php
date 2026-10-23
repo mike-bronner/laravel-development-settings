@@ -18,8 +18,8 @@ it('knows the versions older tags shipped', function (string $path, string $chec
     ],
 ]);
 
-it('ships every managed target as a source the marker can follow', function (): void {
-    $managed = shippedConfig()->entries(PackageConfig::MANAGED);
+it('ships every managed target as a source no marker sits in', function (string $key): void {
+    $managed = shippedConfig()->entries($key);
     $sources = collect(shippedFiles())
         ->only($managed)
         ->map(fn (string $source): string => shippedSource($source));
@@ -31,9 +31,13 @@ it('ships every managed target as a source the marker can follow', function (): 
         ->toBe([]);
     $section = new ManagedSection;
 
+    $projectFirst = new ManagedSection(project: ManagedSection::PROJECT_ABOVE);
+
     expect($sources->map(fn (string $contents): int => $section->markers($contents))->sum())
         ->toBe(0);
-});
+    expect($sources->map(fn (string $contents): int => $projectFirst->markers($contents))->sum())
+        ->toBe(0);
+})->with([PackageConfig::MANAGED, PackageConfig::MANAGED_PROJECT_FIRST]);
 
 it('ships no testbench.yaml, because bin/rooted-testbench.php does the rooting', function (): void {
     expect(shippedFiles())->not

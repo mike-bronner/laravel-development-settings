@@ -27,7 +27,8 @@
         "mockery/mockery": "^1.6",
         "nunomaduro/collision": "^8.6",
         "pestphp/pest": "^3.0",
-        "composer/composer": "^2.0"
+        "composer/composer": "^2.0",
+        "symfony/yaml": "^7.2|^8.0"
     },
     "replace": {
         "mikebronner/development-settings": "self.version"

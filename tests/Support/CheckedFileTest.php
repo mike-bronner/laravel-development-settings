@@ -22,6 +22,17 @@ it('throws with the path and the reason PHP gave when a file cannot be read', fu
         ->toThrow(RuntimeException::class, "Could not read {$this->dir}/missing.txt: ");
 });
 
+it('lists the entries of a directory', function (): void {
+    mkdir("{$this->dir}/b");
+
+    expect((new CheckedFile)->entries($this->dir))->toBe(['a.txt', 'b']);
+});
+
+it('throws with the path and the reason PHP gave when a listing fails', function (): void {
+    expect(fn () => (new CheckedFile)->entries("{$this->dir}/missing"))
+        ->toThrow(RuntimeException::class, "Could not open {$this->dir}/missing: ");
+});
+
 it('writes and copies, creating the directories they need', function (string $operation): void {
     $file = new CheckedFile;
 

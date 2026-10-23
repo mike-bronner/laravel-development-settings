@@ -34,7 +34,7 @@ final class FileSync
         private Manifest $manifest,
         private array $managed = [],
         private CheckedFile $file = new CheckedFile,
-        private ManagedSection $section = new ManagedSection,
+        private array $projectFirst = [],
     ) {
     }
 
@@ -59,6 +59,11 @@ final class FileSync
             true => $file->write($target, $this->composed($relativePath, $sourceFile, $target)),
             false => $file->copy($sourceFile, $target),
         };
+    }
+
+    public function isProjectFirst(string $path): bool
+    {
+        return in_array($path, $this->projectFirst, strict: true);
     }
 
     public function orphans(string $projectDir, array $discoveredFiles): array
@@ -109,7 +114,7 @@ final class FileSync
     private function classifyManaged(string $path, string $target, string $source): string
     {
         $contents = (string) file_get_contents($target);
-        $section = $this->section;
+        $section = $this->section($path);
         $managedPart = (string) $section->managedPart($contents);
 
         return match ($section->markers($contents)) {
@@ -152,12 +157,20 @@ final class FileSync
 
     private function isManaged(string $path): bool
     {
-        return in_array($path, $this->managed, strict: true);
+        return in_array($path, $this->managed, strict: true) || $this->isProjectFirst($path);
+    }
+
+    private function section(string $path): ManagedSection
+    {
+        return new ManagedSection(project: match ($this->isProjectFirst($path)) {
+            true => ManagedSection::PROJECT_ABOVE,
+            false => ManagedSection::PROJECT_BELOW,
+        });
     }
 
     private function composed(string $path, string $source, string $target): string
     {
-        $section = $this->section;
+        $section = $this->section($path);
         $file = $this->file;
 
         return $section->compose(
@@ -178,14 +191,16 @@ final class FileSync
     {
         $contents = $this->file
             ->read($target);
-        $section = $this->section;
+        $section = $this->section($path);
         $manifest = $this->manifest;
         $refusal = "{$path} holds the sync marker more than once and must not be written.";
+        $unmarked = "{$path} has no sync marker, and its whole file cannot go above one.";
 
         return match (true) {
             $section->markers($contents) > 1 => throw new LogicException($refusal),
             $section->markers($contents) === 1 => (string) $section->projectPart($contents),
             $manifest->isKnown($path, md5($contents)) => '',
+            $this->isProjectFirst($path) => throw new LogicException($unmarked),
             default => $contents,
         };
     }
@@ -193,14 +208,16 @@ final class FileSync
     private function isLocalCopyKnown(string $projectDir, string $path): bool
     {
         $contents = (string) file_get_contents("{$projectDir}/{$path}");
-        $section = $this->section;
         $manifest = $this->manifest;
-        $managedPart = (string) $section->managedPart($contents);
+        $above = new ManagedSection(project: ManagedSection::PROJECT_ABOVE);
+        $sections = [new ManagedSection, $above];
+        $section = collect($sections)
+            ->first(fn (ManagedSection $section): bool => $section->markers($contents) === 1);
 
-        return match ($section->markers($contents)) {
-            1 => $section->projectPart($contents) === ''
-                && $manifest->isKnown($path, md5($managedPart)),
-            default => $manifest->isKnown($path, md5($contents)),
+        return match ($section) {
+            null => $manifest->isKnown($path, md5($contents)),
+            default => $section->projectPart($contents) === ''
+                && $manifest->isKnown($path, md5((string) $section->managedPart($contents))),
         };
     }
 }

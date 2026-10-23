@@ -2,9 +2,16 @@
 
 declare(strict_types=1);
 
+use Illuminate\Console\Application;
 use Illuminate\Container\Container;
+use Illuminate\Events\Dispatcher;
+use Laravel\Boost\Mcp\ToolExecutor;
 use MikeBronner\DevelopmentSettings\Laravel\GuidelineServiceProvider;
+use MikeBronner\DevelopmentSettings\Laravel\McpExecutorCheck;
+use MikeBronner\DevelopmentSettings\Laravel\RootedToolExecutor;
+use MikeBronner\DevelopmentSettings\Support\RootedTestbench;
 use MikeBronner\DevelopmentSettings\Tests\Fixtures\ArrayConfig;
+use MikeBronner\DevelopmentSettings\Tests\Fixtures\RootedApp;
 
 beforeEach(function (): void {
     $this->boot = function (array $config): ArrayConfig {
@@ -76,4 +83,58 @@ it('leaves other agents\' config alone', function (): void {
 
     expect(data_get(($this->boot)($config)->all(), 'boost.agents.cursor'))
         ->toBe(['guidelines_path' => 'X.md']);
+});
+
+describe('in a repository without artisan', function (): void {
+    beforeEach(function (): void {
+        $this->project = makeTempDir('devset-provider-');
+        $this->app = new RootedApp($this->project);
+        Container::setInstance($this->app);
+        $this->register = function (array $files): void {
+            seedFiles($this->project, $files);
+            (new GuidelineServiceProvider($this->app))->register();
+        };
+        $this->script = RootedTestbench::SCRIPT;
+    });
+
+    afterEach(function (): void {
+        Container::setInstance(null);
+        Application::forgetBootstrappers();
+        removeTempDir($this->project);
+    });
+
+    it("runs Boost's tool calls through the rooted script", function (): void {
+        ($this->register)([$this->script => '<?php']);
+
+        $executor = $this->app
+            ->make(ToolExecutor::class);
+
+        expect($executor)->toBeInstanceOf(RootedToolExecutor::class)
+            ->and($executor->probe())
+            ->toContain("{$this->project}/{$this->script}");
+    });
+
+    it('registers the check the plugin runs', function (): void {
+        ($this->register)([RootedTestbench::SCRIPT => '<?php']);
+
+        $artisan = new Application($this->app, new Dispatcher($this->app), 'testing');
+
+        expect($artisan->has(McpExecutorCheck::NAME))->toBeTrue();
+    });
+
+    it("leaves Boost's executor and commands alone", function (array $files): void {
+        ($this->register)($files);
+
+        $artisan = new Application($this->app, new Dispatcher($this->app), 'testing');
+
+        expect($this->app->make(ToolExecutor::class))->not
+            ->toBeInstanceOf(RootedToolExecutor::class)
+            ->and($artisan->has(McpExecutorCheck::NAME))
+            ->toBeFalse();
+    })->with([
+        'an app, whose artisan is real' => [
+            ['artisan' => '<?php', RootedTestbench::SCRIPT => '<?php'],
+        ],
+        'no rooted script in vendor' => [[]],
+    ]);
 });

@@ -15,6 +15,7 @@
             <directory>tests/Unit</directory>
             <directory>tests/Support</directory>
             <directory>tests/Plugin</directory>
+            <directory>tests/Laravel</directory>
             <file>tests/ComposerPluginTest.php</file>
         </testsuite>
         <testsuite name="Feature">

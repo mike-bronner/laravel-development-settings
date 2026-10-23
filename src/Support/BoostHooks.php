@@ -8,11 +8,13 @@ final class BoostHooks
 {
     public const INSTALL_COMMAND = 'php artisan boost:install';
 
-    public const TESTBENCH = 'php vendor/' . InstalledPackage::NAME . '/bin/rooted-testbench.php';
+    public const TESTBENCH = 'php ' . RootedTestbench::SCRIPT;
 
     public const TESTBENCH_INSTALL_COMMAND = self::TESTBENCH . ' boost:install';
 
     public const DISCOVER_COMMAND = self::TESTBENCH . ' package:discover';
+
+    public const MCP_CHECK_COMMAND = self::TESTBENCH . ' dev-settings:mcp-executor';
 
     private const NO_INTERACTION = ' --no-interaction';
 
@@ -52,6 +54,11 @@ final class BoostHooks
     public function discoverCommand(): string
     {
         return data_get($this->hooks, 'testbench_discover_command') ?? self::DISCOVER_COMMAND;
+    }
+
+    public function mcpCheckCommand(): string
+    {
+        return data_get($this->hooks, 'testbench_mcp_check_command') ?? self::MCP_CHECK_COMMAND;
     }
 
     public function description(): string

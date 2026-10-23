@@ -226,3 +226,61 @@ it('throws when a tracked file in the project cannot be read', function (): void
 
     chmod("{$this->project}/pint.json", MODE_WRITABLE);
 });
+
+const PROJECT_FIRST_PATHS = [
+    'files' => ['resources/project/ci.yml' => '.github/workflows/ci.yml'],
+    'managed' => ['.gitignore'],
+    'managed_project_first' => ['.github/workflows/ci.yml'],
+];
+
+const PROJECT_FIRST_ENV = <<<YAML
+    env:
+      KEY: \${{ secrets.KEY }}
+
+    YAML;
+
+it('judges a project-first file below its marker', function (
+    string $workflow,
+    array $expected,
+): void {
+    seedFiles($this->project, ['.github/workflows/ci.yml' => $workflow]);
+    $sync = new ReverseSync(new Manifest(['.github/workflows/ci.yml' => [md5(WORKFLOW_V1)]]));
+
+    expect($sync->changedFiles($this->project, PROJECT_FIRST_PATHS))
+        ->toBe($expected);
+})->with([
+    'project lines above the marker' => [markedFirst(PROJECT_FIRST_ENV, "\n" . WORKFLOW_V1), []],
+    'an edit below the marker' => [
+        markedFirst("env: {}\n", "\nname: Mine\n"),
+        ['.github/workflows/ci.yml' => 'resources/project/ci.yml'],
+    ],
+    'no marker, edited' => [PROJECT_FIRST_ENV . WORKFLOW_V1, []],
+    'the bottom marker' => [marked("name: Mine\n"), []],
+    'the marker twice' => [markedFirst('') . markedFirst('', "\nname: Mine\n"), []],
+]);
+
+it('exports only the part below the marker of a project-first file', function (): void {
+    seedFiles($this->project, [
+        '.github/workflows/ci.yml' => markedFirst("env: {}\n", "\nname: Mine\n"),
+        '.gitignore' => marked("/vendor\n/storage\n", "\n!AGENTS.md\n"),
+    ]);
+    $paths = [
+        ...PROJECT_FIRST_PATHS,
+        'files' => [
+            ...data_get(PROJECT_FIRST_PATHS, 'files'),
+            'resources/project/gitignore' => '.gitignore',
+        ],
+    ];
+
+    $sync = new ReverseSync(new Manifest(['.github/workflows/ci.yml' => [md5(WORKFLOW_V1)]]));
+    $exported = $sync->export($this->project, $this->package, $paths);
+
+    expect($exported)->toBe([
+        '.github/workflows/ci.yml' => 'resources/project/ci.yml',
+        '.gitignore' => 'resources/project/gitignore',
+    ])
+        ->and(file_get_contents("{$this->package}/resources/project/ci.yml"))
+        ->toBe("name: Mine\n")
+        ->and(file_get_contents("{$this->package}/resources/project/gitignore"))
+        ->toBe("/vendor\n/storage\n");
+});

@@ -12,6 +12,8 @@ return [
             . '/bin/rooted-testbench.php boost:install',
         'testbench_discover_command' => 'php vendor/mike-bronner/laravel-development-settings'
             . '/bin/rooted-testbench.php package:discover',
+        'testbench_mcp_check_command' => 'php vendor/mike-bronner/laravel-development-settings'
+            . '/bin/rooted-testbench.php dev-settings:mcp-executor',
         'description' => 'Composing Laravel Boost...',
     ],
 
@@ -33,6 +35,10 @@ return [
 
         'managed' => [
             '.gitignore',
+        ],
+
+        'managed_project_first' => [
+            '.github/workflows/tia-baseline.yml',
         ],
 
         'legacy_symlinks' => [

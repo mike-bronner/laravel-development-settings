@@ -67,7 +67,12 @@ The script sets `APP_BASE_PATH` to the repository, `APP_ENV` to `local` unless y
 
 Before each Boost run in a package, the plugin runs `package:discover` through the same script. Laravel reads your repository's `bootstrap/cache/packages.php` and builds it only when it is missing, so without this step a service provider installed after the first run would never load. The `testbench package:discover` in your own `post-autoload-dump` script does not help here: it is not rooted at your repository. A failed refresh is reported with its output, and Boost still runs.
 
-**Boost's MCP server does not work in a package.** Boost writes `php artisan boost:mcp` into `.mcp.json` and each agent's MCP config, and runs every tool as `php artisan boost:execute-tool`. With no `artisan`, the server does not start, and a server started by hand fails every tool call.
+**Boost's MCP server runs through the same script in a package.** Boost writes `php artisan boost:mcp` into `.mcp.json` and each agent's MCP config, and runs every tool as `php artisan boost:execute-tool`. With no `artisan`, neither works, so the plugin fixes both:
+
+- After each Boost run, it points the `laravel-boost` server in every MCP config that run wrote at `vendor/mike-bronner/laravel-development-settings/bin/rooted-testbench.php boost:mcp`. It changes that one argument and nothing else in the file, other servers included. A config Boost did not write during the run is not touched.
+- This package's service provider makes Boost run every tool call through the script too, when your repository has no `artisan`. In an app, Boost's own executor and configs stay as Boost wrote them.
+
+The plugin then checks that tool calls run through the script, because the tool-call fix relies on Boost internals that are not public API. A failed check, or a config it could not change, is reported with its cause, and the run carries on.
 
 Earlier releases wrote an `artisan` shim and a managed `.gitattributes` into packages. The plugin now removes a shim or `.gitattributes` it wrote and you did not change. One you edited, or a `.gitattributes` with your own rules below the sync marker, is kept and listed as removed upstream. Delete it yourself when you no longer need it. The shim is recognized by its `LARAVEL_DEVELOPMENT_SETTINGS_ARTISAN_SHIM` constant, by the marker comment of older releases, or by matching a version this package shipped. Any other `artisan` is an app's and is never touched.
 
@@ -176,7 +181,7 @@ The same rule lets an old line below the marker undo the shipped block. Each run
 - An edit above the marker is treated like any other local modification: flagged, kept unless you choose to overwrite it, and proposed upstream. Overwriting replaces only the part above the marker.
 - If the package stops shipping a file with a marker, it is removed only when the part above the marker is a version this package shipped and nothing sits below it. With your own rules below the marker, it is kept, and an interactive `composer update` asks whether to delete it.
 
-Which files work this way is set by `paths.managed` in the package config.
+Which files work this way is set by `paths.managed` in the package config. `.github/workflows/tia-baseline.yml` works the other way round, with your part first: see [Your own env block](#your-own-env-block).
 
 ### PHP_CodeSniffer
 
@@ -206,7 +211,8 @@ All behavior is driven by `config/development-settings.php` within the package. 
 
 - **`paths.directories`** — directories to sync (recursively)
 - **`paths.files`** — individual files to sync
-- **`paths.managed`** — tracked files the project shares with the package at one marker line (`.gitignore`)
+- **`paths.managed`** — tracked files the project shares with the package at one marker line, the project's part below it (`.gitignore`)
+- **`paths.managed_project_first`** — tracked files the project shares with the package at one marker line, the project's part above it (`.github/workflows/tia-baseline.yml`)
 - **`paths.legacy_symlinks`** — project-root symlinks from older releases, removed on upgrade
 - **`paths.ignore`** — file and directory names excluded from discovery anywhere in the tree
 - **`hooks`** — the Boost composition command and its progress label
@@ -282,7 +288,7 @@ Run `vendor/bin/dev-settings-contribute.php` (or `composer dev-settings:contribu
 
 Pest 5's Test Impact Analysis (`--tia`) records a dependency graph on its first run, and that run is slow. Pest can download a graph that CI recorded instead (`--tia --baselined`). The plugin syncs the workflow that records and publishes that graph, `.github/workflows/tia-baseline.yml`, into every consuming project, as it syncs `pint.json`. The workflow calls the shared action in this repository, `.github/actions/tia-baseline`. The shipped guideline `resources/boost/guidelines/06-pest-tia.md` tells developers and agents how to use the baseline.
 
-**Do not edit `tia-baseline.yml`.** An edited copy is kept as locally modified, stops receiving updates, and is proposed back to this package. Everything that differs between repositories goes in two optional hooks and in the PHP version choice below. This package keeps the workflow's source at `resources/project/tia-baseline.yml`, outside `.github/workflows`, so this repository never runs it.
+**Edit `tia-baseline.yml` above its marker line only.** The synced file starts with one marker line, and the package owns everything below it. Above it, you can add a workflow-level `env:` block (see [Your own env block](#your-own-env-block)). An edit below the marker is kept as locally modified, stops receiving updates, and is proposed back to this package. Everything else that differs between repositories goes in two optional hooks and in the PHP version choice below. This package keeps the workflow's source at `resources/project/tia-baseline.yml`, outside `.github/workflows`, so this repository never runs it.
 
 ### What the workflow runs
 
@@ -307,7 +313,7 @@ Each hook is a composite action that the repository owns: an `action.yml` in its
 | `tia-baseline-before-install` | before PHP and Composer are set up | services such as Postgres or Redis, environment variables, Composer credentials, the PHP choices below |
 | `tia-baseline-after-install` | after `composer install` | the environment file, npm builds, Playwright browsers, directory permissions, migrations |
 
-Both hooks receive one JSON input named `secrets`: the value of the repository secret `TIA_BASELINE_SECRETS`, or `{}` when the repository does not define it. Put the secrets your hooks need in `TIA_BASELINE_SECRETS` as one JSON object, such as `{"WORKFLOW_PAT": "..."}`. Declare the input, and read a secret with `fromJSON(inputs.secrets).NAME`. A composite action cannot read the `secrets` context itself, and the workflow does not pass the whole context, because CodeQL flags that as excessive secrets exposure. Before either hook runs, the workflow registers every line of every string or number in that object as a log mask, so no value shows in clear text in a later step's log.
+Both hooks receive one JSON input named `secrets`: the value of the repository secret `TIA_BASELINE_SECRETS`, or `{}` when the repository does not define it. Put the secrets your hooks need in `TIA_BASELINE_SECRETS` as one JSON object, such as `{"WORKFLOW_PAT": "..."}`. Declare the input, and read a secret with `fromJSON(inputs.secrets).NAME`. A composite action cannot read the `secrets` context itself, and the workflow does not pass the whole context, because CodeQL flags that as excessive secrets exposure. Before either hook runs, the workflow registers every line of every string or number in that object as a log mask, so no value shows in clear text in a later step's log. To use secrets your repository already has instead, name them in [your own env block](#your-own-env-block).
 
 To set a variable for every later step, write it to `$GITHUB_ENV`. A composite action cannot declare `services:`, so start a database with `docker run` instead.
 
@@ -386,6 +392,42 @@ runs:
       run: npx playwright install --with-deps chromium
 ```
 
+### Your own env block
+
+A composite action cannot read the `secrets` context, and GitHub passes a secret to a run only when the workflow names it. To use the repository secrets you already have, without copying them into `TIA_BASELINE_SECRETS`, name them in a workflow-level `env:` block above the marker line of your synced `tia-baseline.yml`:
+
+```yaml
+env:
+  COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.WORKFLOW_PAT }}"}}'
+  NOVA_USERNAME: ${{ secrets.NOVA_USERNAME }}
+  NOVA_LICENSE_KEY: ${{ secrets.NOVA_LICENSE_KEY }}
+  SPARK_USERNAME: ${{ secrets.SPARK_USERNAME }}
+  SPARK_API_TOKEN: ${{ secrets.SPARK_API_TOKEN }}
+  FLUX_USERNAME: ${{ secrets.FLUX_USERNAME }}
+  FLUX_LICENSE_KEY: ${{ secrets.FLUX_LICENSE_KEY }}
+# mike-bronner/laravel-development-settings: project entries go above this line. Anything below it is lost on the next sync.
+```
+
+The sync keeps every line above the marker byte for byte and refreshes everything below it. It never reports those lines as a local modification, and the upstream workflow never proposes them. Use the secret names your repository defines.
+
+The variables exist in every step of the job: in both hooks, in `composer install`, and in the test run. Composer reads `COMPOSER_AUTH` on its own. Turn the other variables into Composer credentials in the before-install hook:
+
+```yaml
+    - name: Composer credentials
+      shell: bash
+      run: |
+        composer config http-basic.nova.laravel.com "$NOVA_USERNAME" "$NOVA_LICENSE_KEY"
+        composer config http-basic.spark.laravel.com "$SPARK_USERNAME" "$SPARK_API_TOKEN"
+        composer config http-basic.composer.fluxui.dev "$FLUX_USERNAME" "$FLUX_LICENSE_KEY"
+```
+
+Rules for the block:
+
+- Name each secret literally, as `${{ secrets.NAME }}`. Never write `toJSON(secrets)` or an indexed secret such as `secrets[format(...)]`: CodeQL flags both as excessive secrets exposure.
+- Add only top-level keys the shipped workflow does not have, such as `env:`. A second `name:`, `on:` or `jobs:` makes the file invalid.
+- A synced copy with no marker gets one automatically when it is a version this package shipped. A copy with no marker and your own edits is kept and listed as locally modified, with no sync marker. The sync never moves it above a marker, because the whole old workflow there would repeat every top-level key. Delete it, run `composer update` to get the shipped file, then add your block above the marker.
+- A copy that holds the marker twice is not touched. Keep one marker line and run `composer update` again.
+
 ### The PHP version
 
 Pest's environment fingerprint holds the PHP minor version, and a baseline from another minor loses its recorded test results. So record on the minor version developers use. The workflow takes the first of these that names a version:
@@ -406,12 +448,12 @@ The action fails on Pest below 5, without a coverage driver, on a failed test ru
 
 ### Moving from a hand-written workflow
 
-In 0.6.0, each repository wrote its own `tia-baseline.yml` from this README. The sync does not know that copy. It keeps the copy and reports it as locally modified, and the upstream workflow proposes it to this package. To move to the shipped workflow:
+In 0.6.0, each repository wrote its own `tia-baseline.yml` from this README. The sync does not know that copy. It keeps the copy and reports it as locally modified, with no sync marker. To move to the shipped workflow:
 
-1. Move each setup step of your copy that runs before `composer install` into `.github/actions/tia-baseline-before-install/action.yml`. Turn `services:` into a `docker run` step, and job-level `env:` into lines written to `$GITHUB_ENV`.
+1. Move each setup step of your copy that runs before `composer install` into `.github/actions/tia-baseline-before-install/action.yml`. Turn `services:` into a `docker run` step, and job-level `env:` into lines written to `$GITHUB_ENV`. Keep an `env:` that names secrets for [your own env block](#your-own-env-block).
 2. Move the PHP version, the `extensions` and `ini-values` of `setup-php`, and the `arguments` of the action into the outputs of that hook.
 3. Move each step that runs after `composer install` into `.github/actions/tia-baseline-after-install/action.yml`.
-4. Delete `.github/workflows/tia-baseline.yml`, then run `composer update`. The plugin writes the shipped workflow.
+4. Delete `.github/workflows/tia-baseline.yml`, then run `composer update`. The plugin writes the shipped workflow, with the marker line at its top. Put your env block above that line.
 5. Close any pull request the upstream workflow opened for your copy.
 
 ## 📋 Manifest Management
