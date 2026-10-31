@@ -11,6 +11,8 @@ const NAMED_HOOKS = [
     'testbench_interactive_command' => 'testbench attached',
     'testbench_discover_command' => 'discover',
     'testbench_mcp_check_command' => 'check',
+    'flare_mcp_command' => 'flare',
+    'testbench_flare_mcp_command' => 'testbench flare',
     'description' => 'Composing...',
 ];
 
@@ -30,13 +32,22 @@ it('reads each hook from the config, or falls back to its default', function (
         $hooks->installCommand(),
         $hooks->discoverCommand(),
         $hooks->mcpCheckCommand(),
+        $hooks->flareMcpCommand(),
         $hooks->description(),
     ])->toBe($expected);
 })->with([
     'an app, named in the config' => [
         'an app',
         NAMED_HOOKS,
-        ['captured', 'attached', 'php artisan boost:install', 'discover', 'check', 'Composing...'],
+        [
+            'captured',
+            'attached',
+            'php artisan boost:install',
+            'discover',
+            'check',
+            'flare',
+            'Composing...',
+        ],
     ],
     'an app, left out' => [
         'an app',
@@ -47,6 +58,7 @@ it('reads each hook from the config, or falls back to its default', function (
             'php artisan boost:install',
             BoostHooks::DISCOVER_COMMAND,
             BoostHooks::MCP_CHECK_COMMAND,
+            BoostHooks::FLARE_MCP_COMMAND,
             'Composing Laravel Boost...',
         ],
     ],
@@ -59,6 +71,7 @@ it('reads each hook from the config, or falls back to its default', function (
             BoostHooks::TESTBENCH_INSTALL_COMMAND,
             'discover',
             'check',
+            'testbench flare',
             'Composing...',
         ],
     ],
@@ -71,6 +84,7 @@ it('reads each hook from the config, or falls back to its default', function (
             BoostHooks::TESTBENCH_INSTALL_COMMAND,
             BoostHooks::DISCOVER_COMMAND,
             BoostHooks::MCP_CHECK_COMMAND,
+            BoostHooks::TESTBENCH_FLARE_MCP_COMMAND,
             'Composing Laravel Boost...',
         ],
     ],
@@ -84,6 +98,10 @@ it('runs the rooted Testbench this package installs in vendor', function (): voi
         ->toBe("{$script} package:discover")
         ->and(BoostHooks::MCP_CHECK_COMMAND)
         ->toBe("{$script} dev-settings:mcp-executor")
+        ->and(BoostHooks::TESTBENCH_FLARE_MCP_COMMAND)
+        ->toBe("{$script} dev-settings:flare-mcp")
+        ->and(BoostHooks::FLARE_MCP_COMMAND)
+        ->toBe('php artisan dev-settings:flare-mcp')
         ->and(is_file(REPOSITORY_ROOT . '/bin/rooted-testbench.php'))
         ->toBeTrue();
 });

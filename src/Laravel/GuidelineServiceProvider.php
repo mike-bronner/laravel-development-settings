@@ -28,6 +28,8 @@ final class GuidelineServiceProvider extends ServiceProvider
             true => $this->runToolsThrough($artisan, $script),
             false => null,
         };
+
+        $this->commands([FlareMcpInstall::class]);
     }
 
     public function boot(): void

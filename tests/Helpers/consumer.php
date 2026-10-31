@@ -44,6 +44,8 @@ const ROOTED_TESTBENCH = 'bin/rooted-testbench.php';
 
 const MCP_CHECK = 'dev-settings:mcp-executor';
 
+const FLARE_MCP = 'dev-settings:flare-mcp';
+
 function boostScript(string $behaviour, string $voice = ''): string
 {
     $record = <<<PHP
@@ -105,6 +107,7 @@ function testbenchScript(
     string $voice,
     int $discoveryExit,
     int $mcpCheckExit = 0,
+    int $flareExit = 0,
 ): string {
     $discover = match ($discoveryExit) {
         0 => <<<PHP
@@ -127,8 +130,19 @@ function testbenchScript(
         exit({$mcpCheckExit});
         PHP;
 
+    $flare = <<<PHP
+        file_put_contents('flare.ran', json_encode(array_slice(\$argv, 1)));
+        \$config = json_decode((string) file_get_contents('.mcp.json'), true);
+        \$config['mcpServers']['flare'] = ['type' => 'http', 'url' => 'https://flareapp.io/mcp'];
+        \$json = json_encode(\$config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        file_put_contents('.mcp.json', \$json);
+        echo 'Flare stand-in: <error>installHttpMcp</error> failed';
+        exit({$flareExit});
+        PHP;
+
     return "if ((\$argv[1] ?? null) === 'package:discover') { {$discover} {$exit} }\n"
         . "if ((\$argv[1] ?? null) === '" . MCP_CHECK . "') { {$mcpCheck} }\n"
+        . "if ((\$argv[1] ?? null) === '" . FLARE_MCP . "') { {$flare} }\n"
         . boostScript($behaviour, $voice);
 }
 
@@ -175,6 +189,7 @@ function makeConsumer(array $options = []): array
                 $voice,
                 data_get($options, 'discoveryExit', 0),
                 data_get($options, 'mcpCheckExit', 0),
+                data_get($options, 'flareExit', 0),
             )],
             false => [],
         },
@@ -203,6 +218,7 @@ function consumerConfig(array $options): array
             'testbench_interactive_command' => withThisPhp($testbench->interactiveCommand()),
             'testbench_discover_command' => withThisPhp($testbench->discoverCommand()),
             'testbench_mcp_check_command' => withThisPhp($testbench->mcpCheckCommand()),
+            'testbench_flare_mcp_command' => withThisPhp($testbench->flareMcpCommand()),
             'description' => 'Composing Laravel Boost guidelines and skills...',
         ],
         'capture' => ['resources/boost'],

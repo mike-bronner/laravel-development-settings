@@ -20,6 +20,8 @@ final class AfterBoost
     {
         (new RootedMcp($this->inputOutput, $this->projectDir, $this->hooks))
             ->settle($boost->startedAt());
+        (new FlareMcp($this->inputOutput, $this->projectDir, $this->hooks))
+            ->settle($boost->startedAt());
         (new ClaudeNotice($this->inputOutput, $this->projectDir))->settle($boost->composedFiles());
     }
 }

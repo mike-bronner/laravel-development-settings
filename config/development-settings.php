@@ -14,6 +14,9 @@ return [
             . '/bin/rooted-testbench.php package:discover',
         'testbench_mcp_check_command' => 'php vendor/mike-bronner/laravel-development-settings'
             . '/bin/rooted-testbench.php dev-settings:mcp-executor',
+        'flare_mcp_command' => 'php artisan dev-settings:flare-mcp',
+        'testbench_flare_mcp_command' => 'php vendor/mike-bronner/laravel-development-settings'
+            . '/bin/rooted-testbench.php dev-settings:flare-mcp',
         'description' => 'Composing Laravel Boost...',
     ],
 

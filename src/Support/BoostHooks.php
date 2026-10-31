@@ -16,6 +16,10 @@ final class BoostHooks
 
     public const MCP_CHECK_COMMAND = self::TESTBENCH . ' dev-settings:mcp-executor';
 
+    public const FLARE_MCP_COMMAND = 'php artisan dev-settings:flare-mcp';
+
+    public const TESTBENCH_FLARE_MCP_COMMAND = self::TESTBENCH . ' dev-settings:flare-mcp';
+
     private const NO_INTERACTION = ' --no-interaction';
 
     private const DESCRIPTION = 'Composing Laravel Boost...';
@@ -59,6 +63,16 @@ final class BoostHooks
     public function mcpCheckCommand(): string
     {
         return data_get($this->hooks, 'testbench_mcp_check_command') ?? self::MCP_CHECK_COMMAND;
+    }
+
+    public function flareMcpCommand(): string
+    {
+        $default = match ($this->keyPrefix) {
+            self::TESTBENCH_KEYS => self::TESTBENCH_FLARE_MCP_COMMAND,
+            default => self::FLARE_MCP_COMMAND,
+        };
+
+        return data_get($this->hooks, "{$this->keyPrefix}flare_mcp_command") ?? $default;
     }
 
     public function description(): string

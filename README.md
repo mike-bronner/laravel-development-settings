@@ -96,6 +96,15 @@ When Boost detects no agent at all, it exits successfully having written nothing
 
 In an application, Boost also registers its commands only when `APP_ENV` is `local` or `APP_DEBUG` is true. On a clone with no `.env` yet, the run fails, and the next `composer install` after you create one composes.
 
+### Flare MCP server
+
+When your project has `spatie/laravel-flare` or `spatie/flare-client-php` installed, every `composer install` and `composer update` that runs Boost also adds [Flare's MCP server](https://flareapp.io/docs/flare/general/our-mcp-server.md?nav=false) as `flare`, pointing at `https://flareapp.io/mcp`, to each agent Boost configured MCP for. Each entry has the shape Boost itself writes for that agent's remote servers, as it does for Nightwatch. In a package, the step runs through the rooted Testbench.
+
+- Flare signs in with OAuth, so nothing secret is written. Authorize the server once in each agent, for example with `/mcp` in Claude Code.
+- An agent config that already holds a `flare` server is left as it is.
+- A composed guideline tells your agents to use the server when they investigate errors, logs and slow requests. It is composed only when Boost configured MCP. It names no Flare project: the agent finds yours through the server, or asks.
+- Without a Flare client, nothing is added and the run says nothing about Flare. A failed step is reported with its output, and the run carries on.
+
 ### Why a run can refuse to compose
 
 Boost writes its composed guidelines by replacing the region between an opening and a closing marker tag. The pattern is non-greedy and it anchors on the **first** opening tag anywhere in the file. So a hand-written section that names the opening tag in prose becomes the start of the match, the real block's closing tag becomes its end, and everything in between is replaced by generated content. This is a defect in Boost, not in your file. It has already cut one project's agent file from 299 lines to 125.

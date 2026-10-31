@@ -53,19 +53,25 @@ it('reads the shipped config, --no-interaction on the captured command only', fu
     $testbench = $hooks->throughTestbench();
 
     expect($config->entries(PackageConfig::LEGACY_SYMLINKS))->toBe(['.ai'])
-        ->and([$hooks->command(), $hooks->interactiveCommand()])
-        ->toBe(['php artisan boost:install --no-interaction', 'php artisan boost:install'])
+        ->and([$hooks->command(), $hooks->interactiveCommand(), $hooks->flareMcpCommand()])
+        ->toBe([
+            'php artisan boost:install --no-interaction',
+            'php artisan boost:install',
+            BoostHooks::FLARE_MCP_COMMAND,
+        ])
         ->and([
             $testbench->command(),
             $testbench->interactiveCommand(),
             $testbench->discoverCommand(),
             $testbench->mcpCheckCommand(),
+            $testbench->flareMcpCommand(),
         ])
         ->toBe([
             BoostHooks::TESTBENCH_INSTALL_COMMAND . ' --no-interaction',
             BoostHooks::TESTBENCH_INSTALL_COMMAND,
             BoostHooks::DISCOVER_COMMAND,
             BoostHooks::MCP_CHECK_COMMAND,
+            BoostHooks::TESTBENCH_FLARE_MCP_COMMAND,
         ]);
 });
 

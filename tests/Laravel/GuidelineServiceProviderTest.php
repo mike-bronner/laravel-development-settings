@@ -6,6 +6,7 @@ use Illuminate\Console\Application;
 use Illuminate\Container\Container;
 use Illuminate\Events\Dispatcher;
 use Laravel\Boost\Mcp\ToolExecutor;
+use MikeBronner\DevelopmentSettings\Laravel\FlareMcpInstall;
 use MikeBronner\DevelopmentSettings\Laravel\GuidelineServiceProvider;
 use MikeBronner\DevelopmentSettings\Laravel\McpExecutorCheck;
 use MikeBronner\DevelopmentSettings\Laravel\RootedToolExecutor;
@@ -136,5 +137,18 @@ describe('in a repository without artisan', function (): void {
             ['artisan' => '<?php', RootedTestbench::SCRIPT => '<?php'],
         ],
         'no rooted script in vendor' => [[]],
+    ]);
+
+    it('registers the Flare command the plugin runs, in an app and a package', function (
+        array $files,
+    ): void {
+        ($this->register)($files);
+
+        $artisan = new Application($this->app, new Dispatcher($this->app), 'testing');
+
+        expect($artisan->has(FlareMcpInstall::NAME))->toBeTrue();
+    })->with([
+        'an app' => [['artisan' => '<?php']],
+        'a package repository' => [[RootedTestbench::SCRIPT => '<?php']],
     ]);
 });
