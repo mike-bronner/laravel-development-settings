@@ -44,10 +44,10 @@
         "class_definition": false,
         "new_with_parentheses": {
             "named_class": false,
-            "anonymous_class": true
+            "anonymous_class": false
         },
         "single_line_empty_body": false,
-        "method_chaining_indentation": true,
+        "method_chaining_indentation": false,
         "array_indentation": false,
         "indentation_type": false,
         "statement_indentation": false,
@@ -77,9 +77,6 @@
         "unary_operator_spaces": true,
                 "types_spaces": {
             "space": "none"
-        },
-        "numeric_literal_separator": {
-            "override_existing": true
         },
         "trailing_comma_in_multiline": {
             "elements": ["arrays", "arguments", "parameters"]

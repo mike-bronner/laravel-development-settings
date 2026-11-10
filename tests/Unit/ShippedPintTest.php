@@ -75,8 +75,61 @@ it('instantiates a named class without empty parentheses', function (
     'wrapped in parentheses' => ['$id = (new Verse())->id();', '$id = (new Verse)->id();'],
     'no parentheses, unchanged' => ['$verse = new Verse;', '$verse = new Verse;'],
     'arguments, unchanged' => ['$verse = new Verse(1);', '$verse = new Verse(1);'],
-    'anonymous class, unchanged' => ['$verse = new class() {};', '$verse = new class() {};'],
 ]);
+
+it('declares an anonymous class without empty parentheses', function (
+    string $written,
+    string $formatted,
+): void {
+    $this->project = pintFiles([PINT_SOURCE_FILE => "<?php\n\n{$written}\n"]);
+
+    expect(file_get_contents("{$this->project}/" . PINT_SOURCE_FILE))
+        ->toBe("<?php\n\n{$formatted}\n");
+})->with([
+    'empty parentheses' => ['$verse = new class() {};', '$verse = new class {};'],
+    'empty parentheses before extends' => [
+        '$verse = new class() extends Verse {};',
+        '$verse = new class extends Verse {};',
+    ],
+    'no parentheses, unchanged' => ['$verse = new class {};', '$verse = new class {};'],
+    'arguments, unchanged' => ['$verse = new class (1) {};', '$verse = new class (1) {};'],
+]);
+
+it('declares an anonymous class that the shipped phpcs.xml accepts', function (
+    string $written,
+): void {
+    $this->project = pintFiles([PINT_SOURCE_FILE => "<?php\n\n{$written}\n"]);
+
+    expect(runPhpcs($this->project)[PINT_SOURCE_FILE])
+        ->not
+        ->toContain('PSR12.Classes.AnonClassDeclaration.SpaceAfterKeyword');
+})->with(['$verse = new class() {};', '$verse = new class {};']);
+
+it('leaves a numeric literal as written', function (string $literal): void {
+    $source = "<?php\n\n\$value = {$literal};\n";
+    $this->project = pintFiles([PINT_SOURCE_FILE => $source]);
+
+    expect(file_get_contents("{$this->project}/" . PINT_SOURCE_FILE))->toBe($source);
+})->with([
+    'integer' => '6048',
+    'large integer' => '1234567',
+    'hexadecimal' => '0xFFFFFF',
+    'float' => '12345.6789',
+    'separated' => '1_000',
+    'separated in other groups' => '10_00',
+]);
+
+it('keeps the CleanCode layout of chains and anonymous classes', function (): void {
+    $source = file_get_contents(REPOSITORY_ROOT . '/tests/Fixtures/pint/cleancode-layout.txt');
+    $this->project = pintFiles([PINT_SOURCE_FILE => $source]);
+
+    expect(file_get_contents("{$this->project}/" . PINT_SOURCE_FILE))->toBe($source)
+        ->and(runPhpcs($this->project)[PINT_SOURCE_FILE])
+        ->not
+        ->toContain('CleanCode.WhiteSpace.MultiLineStatementIndent.IncorrectIndent')
+        ->not
+        ->toContain('PSR12.Classes.AnonClassDeclaration.SpaceAfterKeyword');
+});
 
 it('keeps the parentheses of a new object that is dereferenced', function (string $source): void {
     $source = "<?php\n\n{$source}\n";

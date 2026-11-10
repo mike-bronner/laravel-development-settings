@@ -1,0 +1,49 @@
+<?php
+
+final class Layout
+{
+    public function wording(Collection $declared, string $rest): ?array
+    {
+        return $declared->get($rest)
+            ?? collect(self::SHAPES)
+            ->map(fn (array $shape): ?array => $this->shaped($shape, $rest))
+            ->filter()
+            ->first();
+    }
+
+    public function matches(Collection $segments, bool $opened): bool
+    {
+        return $opened
+            && $segments
+            ->slice(1)
+            ->isNotEmpty();
+    }
+
+    public function picked(Collection $items): Collection
+    {
+        return $items->isEmpty()
+            ? $items
+            ->map(fn (string $item): string => $item)
+            ->values()
+            : $items;
+    }
+
+    public function importer(): object
+    {
+        return new class extends Importer {
+            public function progress(): array
+            {
+                return [$this->total, $this->done];
+            }
+        };
+    }
+
+    public function decoder(): object
+    {
+        return $this->accept(
+                new class {
+                    use Decodes;
+                },
+            );
+    }
+}
