@@ -293,6 +293,64 @@ Run `vendor/bin/dev-settings-contribute.php` (or `composer dev-settings:contribu
 - **Edit in your repo** — quick fixes, typo corrections, rule tweaks discovered while coding
 - **Direct PR to this repo** — major additions, new guidelines, structural changes
 
+## 📝 GitHub issues
+
+The shipped `github-issues` skill tells your agents how to write, review and rewrite GitHub issues, so that a human understands each one in one pass and an agent can act on it. It covers:
+
+- the three issue types: Product Goal, Epic and PBI, with no Task type
+- one PBI to one pull request, and no sub-issues under a PBI
+- epics that never list their children and gain sub-issues as each one is understood, led by research PBIs that end when their follow-up PBIs exist
+- four flat kind labels, exactly one per PBI: `bug`, `enhancement`, `research` and `maintenance`, with native GitHub features (issue types, blocked-by relationships, project fields, close reasons) for everything else
+- the sections of each kind, observable acceptance criteria, a soft cap of about 250 words for a PBI, and writing rules with a four-question self-check
+- four workflows: write, review (report only), rewrite (the original body moves to a comment first) and a label cleanup guide for adopting the label set
+
+The plugin also syncs six Markdown issue templates into `.github/ISSUE_TEMPLATE/` as tracked files: `product-goal.md`, `epic.md`, `bug.md`, `enhancement.md`, `maintenance.md` and `research.md`. Each holds the sections its kind needs, and each PBI template sets its kind label. The templates are Markdown, not YAML issue forms. `gh issue create --template` reads only Markdown templates. An agent and `gh` therefore use the same file. `gh` takes only the template's body, so the skill tells agents to pass `--label` and `--type` themselves.
+
+The templates set no `type:`. Issue types belong to the repository's owner. A personal repository offers only GitHub's defaults: Task, Bug and Feature. A `type: PBI` there names a type that does not exist. Set the type when you create the issue. A label the template names exists only once your repository has it: create the kind labels as the skill's label cleanup guide describes.
+
+### The skill without Laravel Boost
+
+Boost delivers the skill only to a Laravel project that requires this package. Any other harness can load it by hand. The skill is a plain [Agent Skills](https://agentskills.io/specification) folder: a `SKILL.md` with `name` and `description` front matter, plus a `references/` folder. It holds no Blade.
+
+Copy the whole `github-issues` folder into one of the skills folders below. Keep the folder name. The Agent Skills specification requires it to match the skill's `name`.
+
+```bash
+git clone --depth 1 https://github.com/mike-bronner/laravel-development-settings.git
+cp -R laravel-development-settings/resources/boost/skills/github-issues <skills folder>/
+```
+
+A project folder sits in the repository and reaches everyone who works in it. A user folder sits in your home directory and reaches every project you open.
+
+| Harness | Project folder | User folder | Source |
+|---|---|---|---|
+| Claude Code | `.claude/skills/` | `~/.claude/skills/` | [Skills](https://code.claude.com/docs/en/skills) |
+| Codex | `.agents/skills/` in the repository root or in the folder you start Codex in | `~/.agents/skills/` | [Agent Skills](https://developers.openai.com/codex/skills) |
+| Cursor | `.cursor/skills/` or `.agents/skills/` | `~/.cursor/skills/` or `~/.agents/skills/` | [Agent Skills](https://cursor.com/docs/context/skills) |
+| Gemini CLI | `.gemini/skills/` or `.agents/skills/` | `~/.gemini/skills/` or `~/.agents/skills/` | [Agent Skills](https://geminicli.com/docs/cli/skills/) |
+| OpenClaw | `<workspace>/skills/` or `<workspace>/.agents/skills/` | `~/.agents/skills/` | [Skills](https://docs.openclaw.ai/tools/skills) |
+| Hermes Agent | see the linked page | `~/.hermes/skills/` | [Skills](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills) |
+
+Codex, Cursor, Gemini CLI and OpenClaw all read `~/.agents/skills/`, so one copy there serves all four. Hermes Agent can read it too: list it under `skills.external_dirs` in `~/.hermes/config.yaml`. In OpenClaw, `<workspace>` is the agent's workspace folder. Codex picks up a new skill on its own. In Gemini CLI, run `/skills reload`.
+
+Any other harness that reads the Agent Skills format loads the skill the same way. Find the folder its documentation names for skills, and copy the `github-issues` folder into it.
+
+### The issue templates without this package
+
+A repository that does not require this package can use the templates too. From the clone above, copy the six files into the repository's `.github/ISSUE_TEMPLATE/` folder, and commit them.
+
+```bash
+mkdir -p .github/ISSUE_TEMPLATE
+cp laravel-development-settings/.github/ISSUE_TEMPLATE/*.md .github/ISSUE_TEMPLATE/
+```
+
+`gh issue create --template` takes only the template's body. It applies neither the template's label nor an issue type. Pass both to `gh` yourself. `--template` takes the template's `name`, such as `Bug`:
+
+```bash
+gh issue create --template Bug --title "Import stops at Psalm 119" --label bug --type PBI
+```
+
+Leave out `--type` when your repository has no PBI type. Create the four kind labels first, as `resources/boost/skills/github-issues/references/label-cleanup.md` describes.
+
 ## 🎯 Pest TIA baseline
 
 Pest 5's Test Impact Analysis (`--tia`) records a dependency graph on its first run, and that run is slow. Pest can download a graph that CI recorded instead (`--tia --baselined`). The plugin syncs the workflow that records and publishes that graph, `.github/workflows/tia-baseline.yml`, into every consuming project, as it syncs `pint.json`. The workflow calls the shared action in this repository, `.github/actions/tia-baseline`. The shipped guideline `resources/boost/guidelines/06-pest-tia.md` tells developers and agents how to use the baseline.

@@ -34,6 +34,12 @@ return [
             'pint.json',
             '.github/workflows/sync-developer-settings.yml',
             'resources/project/tia-baseline.yml' => '.github/workflows/tia-baseline.yml',
+            '.github/ISSUE_TEMPLATE/product-goal.md',
+            '.github/ISSUE_TEMPLATE/epic.md',
+            '.github/ISSUE_TEMPLATE/bug.md',
+            '.github/ISSUE_TEMPLATE/enhancement.md',
+            '.github/ISSUE_TEMPLATE/maintenance.md',
+            '.github/ISSUE_TEMPLATE/research.md',
         ],
 
         'managed' => [
