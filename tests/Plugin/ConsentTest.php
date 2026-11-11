@@ -60,3 +60,47 @@ it('says why each file holding the marker twice was not touched', function (): v
             '.gitattributes holds the sync marker more than once, so it was not touched.',
         );
 });
+
+it('keeps the project template in a run that cannot ask, and names it', function (): void {
+    $consent = new Consent($this->output);
+
+    expect($consent->replaceTemplate('shipped.md', ['a.md', 'b/c.md'], []))->toBeFalse();
+    expect($this->output->getOutput())->toContain(
+            'shipped.md was not written, because the project has its own pull request template:'
+                . ' a.md, b/c.md. Run composer interactively to replace it with the shipped one.',
+        );
+});
+
+it('keeps the project template when the developer takes the default', function (): void {
+    $consent = new Consent($this->interactive);
+
+    $answer = withKeyPresses(
+            [Key::ENTER],
+            fn (): bool => $consent->replaceTemplate('s.md', ['a.md'], []),
+        );
+
+    expect($answer)->toBeFalse();
+    expect($this->interactive->getOutput())->toBe('');
+});
+
+it('replaces the project pull request template when the developer picks it', function (): void {
+    $consent = new Consent($this->interactive);
+
+    $answer = withKeyPresses(
+            [Key::DOWN, Key::ENTER],
+            fn (): bool => $consent->replaceTemplate('s.md', ['a.md'], []),
+        );
+
+    expect($answer)->toBeTrue();
+});
+
+it('neither asks nor replaces when a folder could not be searched', function (): void {
+    $consent = new Consent($this->interactive);
+    $unreadable = ['docs' => 'Could not open /p/docs: Permission denied'];
+
+    expect($consent->replaceTemplate('s.md', ['a.md'], $unreadable))->toBeFalse();
+    expect($this->interactive->getOutput())->toContain(
+            's.md was not written, because a folder could not be searched for the project\'s'
+                . ' own pull request template. Could not open /p/docs: Permission denied',
+        );
+});

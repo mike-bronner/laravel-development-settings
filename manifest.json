@@ -213,6 +213,27 @@
     ".ai/skills/terraform-engineer/SKILL.md": [
         "45f3cc8616b957a58fbd211650c13c82"
     ],
+    ".github/ISSUE_TEMPLATE/bug.md": [
+        "7d38da882183750ee67dc20578990279"
+    ],
+    ".github/ISSUE_TEMPLATE/enhancement.md": [
+        "1f9f6c4d4ebcdf2deb02babc80a118ae"
+    ],
+    ".github/ISSUE_TEMPLATE/epic.md": [
+        "b1e40d17dcd03ae2a4626736de13fa0b"
+    ],
+    ".github/ISSUE_TEMPLATE/maintenance.md": [
+        "0f00fe6f4b31e846ca619ad97974458a"
+    ],
+    ".github/ISSUE_TEMPLATE/product-goal.md": [
+        "11f8a0e109fcf3f61ae3cb408368e639"
+    ],
+    ".github/ISSUE_TEMPLATE/research.md": [
+        "1277916a18a6a9d83d708e3966734750"
+    ],
+    ".github/pull_request_template.md": [
+        "7f9afcc028263f3092e74eae0d11c924"
+    ],
     ".github/workflows/sync-developer-settings.yml": [
         "3ed155007d03bc3370ac7471f527e794",
         "3baa60b472b6a57f744bf306b4319b6c",

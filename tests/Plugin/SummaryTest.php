@@ -44,6 +44,8 @@ it('marks a line with an icon and note', function (string $type, string $icon, s
     'created' => ['created', '+', ' '],
     'updated' => ['updated', '↻', ' '],
     'modified' => ['modified', '⚠', ' (locally modified)'],
+    'held' => ['held', '⚠', ' (held back for a project template)'],
+    'unsearched' => ['unsearched', '⚠', ' (held back, a folder could not be searched)'],
     'unmarked' => ['unmarked', '⚠', ' (locally modified, no sync marker)'],
     'refused' => ['refused', '⚠', ' (sync marker appears twice, not touched)'],
     'failed' => ['failed', '✗', ' (write failed)'],

@@ -48,6 +48,15 @@
     "resources/boost/skills/git-commit/references/gitmoji.md": [
         "11512e3c1e306b9ce828c303fea5304f"
     ],
+    "resources/boost/skills/github-issues/SKILL.md": [
+        "0fc82814130634a2d34bb076c91d5cc8"
+    ],
+    "resources/boost/skills/github-issues/references/examples.md": [
+        "2b7e6cc7d4e3f8525a5d5f86e0ee3225"
+    ],
+    "resources/boost/skills/github-issues/references/label-cleanup.md": [
+        "1bfeeecfa83809df1bae19cbbbc4d288"
+    ],
     "resources/boost/skills/laravel/SKILL.md": [
         "d49f79c2ab9ddf7bfdd1f1a48d339259",
         "a53920aeecbd35e868598b7e7d856be8",
