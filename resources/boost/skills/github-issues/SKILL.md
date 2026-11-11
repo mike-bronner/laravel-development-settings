@@ -5,6 +5,7 @@ description: >-
   one pass and an AI agent can act on it. Use this skill whenever you create, draft,
   review, split or rewrite an issue, a PBI, a bug report, an epic or a Product Goal,
   add sub-issues to an epic, or choose, add or clean up issue labels in a repository.
+  Use it too whenever you write, fill, review or rewrite a pull request description.
 ---
 
 # GitHub Issues
@@ -328,3 +329,133 @@ where the work was done.
 
 Follow [references/label-cleanup.md](references/label-cleanup.md) to move a
 repository's old labels to the label set above.
+
+## Pull requests
+
+A pull request body tells a reviewer what changed, why, and what they must know
+before they approve. It stops there. The writing rules above apply to it too.
+
+### Title
+
+- Write the title as a Conventional Commit, such as
+  `fix: import every verse that holds two footnotes`.
+- Keep it under about 12 words.
+
+### Sections
+
+The template at `.github/pull_request_template.md` holds these sections, in this
+order.
+
+- **Related issues**: one bullet for each issue that the pull request relates
+  to, one issue per bullet. A bullet starts with a closing keyword only for an
+  issue that the pull request closes.
+- **What changed**: one to three bullets about behavior. It is never a list of
+  files.
+- **Why**: the reason for the change when the linked issue gives none. It also
+  gives a short reason for each choice that departs from the issue, from the
+  project's usual patterns or from a stated requirement. It never repeats the
+  reasoning that the issue already gives. Leave the section out when it is
+  empty.
+- **QA steps**: a numbered playbook that a human follows in the browser or the
+  console. Each step gives one action and what the human should see after it.
+  Add a screen recording for a change to the UI. Leave the section out only when
+  the change has no behavior that a human can try.
+- **Verified**: the test command and its pass count, and the CI result. It holds
+  only automated evidence.
+- **Before you approve**: breaking changes, migrations, config or cache effects,
+  a rollback that is not a plain revert, and known gaps as a short list. Leave
+  the section out when it is empty.
+
+A filled body has at most about 250 words. This is a soft cap. The QA steps do
+not count toward it, because a human needs every step. Keep each step short.
+
+### Issue keywords and the base branch
+
+- GitHub closes an issue when a bullet names it after a closing keyword: close,
+  closes, closed, fix, fixes, fixed, resolve, resolves or resolved. Letter case
+  does not matter.
+- Use `Fixes` for a bug. Use `Closes` or `Resolves` for other work. This is a
+  convention. Every keyword closes the issue the same way.
+- Give each issue its own keyword. GitHub needs the full syntax for each issue
+  that it closes.
+- A keyword closes the issue only when the pull request merges into the default
+  branch.
+- On any other base branch, GitHub ignores the keyword. It creates no link,
+  and the merge leaves the issue open. Close the issue by hand when the work
+  reaches the default branch.
+- To link an issue without closing it, write `Part of #<number>` or
+  `Related to #<number>`. The issue shows the pull request in its timeline and
+  stays open. Use this for an epic, or for an issue that the pull request only
+  advances.
+
+### Acceptance criteria stay in the issue
+
+- The acceptance criteria live only in the linked issue. The pull request body
+  never copies or restates them.
+- Whoever works the pull request ticks each criterion in the issue as soon as it
+  is met.
+- Read the issue body again just before each edit, never from an earlier copy.
+  Someone may have changed the issue since your last read, and an edit made from
+  an old copy overwrites that change. For example:
+
+  ```bash
+  gh issue view 57 --json body --jq .body > issue.md
+  # change "- [ ]" to "- [x]" on each criterion that is met
+  gh issue edit 57 --body-file issue.md
+  ```
+
+### Never in a pull request body
+
+- a copy of the acceptance criteria
+- reasoning that the linked issue already gives
+- rejected alternatives or red-then-green transcripts. They go in the commit
+  messages.
+- a checklist of what CI already enforces
+- type-of-change boxes
+- process steps
+- a request for a review, or instructions for an AI reviewer
+- a guidance line left from the template
+
+### Workflow: write a pull request
+
+1. Read the repository's pull request template. Look in `.github/`, in the root
+   and in `docs/`, and accept any letter case in the file name.
+2. Fill each section by the rules above. Leave out a section that the rules leave
+   out.
+3. Delete every guidance line of the template. In the shipped template, each
+   one starts with `>`. Another template may hold its guidance in HTML comments.
+4. Check the body against the word cap and the never-in-the-body list.
+5. Tick each met acceptance criterion in the linked issue.
+6. Create the pull request, and pass the filled body as a file. For example:
+
+   ```bash
+   gh pr create --title "fix: import every verse that holds two footnotes" \
+     --body-file body.md
+   ```
+
+   `gh pr create` applies no template when it runs without a terminal. It also
+   refuses `--template` together with `--body-file`. So fill the template
+   yourself, and always pass it with `--body-file`. Pass `--base` when the base
+   is not the default branch.
+7. Never request a reviewer. Never pass `--reviewer`, never add a reviewer later,
+   and never post a comment that asks a person or a bot to review. The owner of
+   the repository requests every review.
+
+[references/examples.md](references/examples.md) shows a finished pull request.
+
+### Workflow: review a pull request description
+
+A review reports. It changes nothing.
+
+1. Read the title, the body, the base branch and each linked issue.
+2. Check each rule in this section against it:
+   - the title
+   - one bullet for each related issue, with a closing keyword only for an issue
+     that it closes
+   - the sections, in order, and no others
+   - the length
+   - no copy of the acceptance criteria
+   - nothing from the never-in-the-body list
+   - the writing rules
+3. Report each break: the rule it breaks, and the words that break it, quoted.
+4. If nothing breaks, say so in one line.

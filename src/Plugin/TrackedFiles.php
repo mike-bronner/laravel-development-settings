@@ -23,6 +23,7 @@ final class TrackedFiles
     private array $protectedOrphans = [];
     private array $failedWrites = [];
     private array $files = [];
+    private PullRequestTemplateChoice $template;
 
     public function __construct(
         private FileSync $fileSync,
@@ -39,6 +40,9 @@ final class TrackedFiles
         $this->scan = $fileSync->classify($this->projectDir, $files);
         $this->safeOrphans = $fileSync->safeOrphans($this->projectDir, $files);
         $this->protectedOrphans = $fileSync->protectedOrphans($this->projectDir, $files);
+        $this->template = new PullRequestTemplateChoice($this->projectDir, $this->inputOutput);
+        $this->scan[FileSync::NEW] = $this->template
+            ->hold($this->scan[FileSync::NEW]);
     }
 
     public function writeUnattended(): void
@@ -57,6 +61,7 @@ final class TrackedFiles
             ...$this->lines('created', array_keys($this->scan[FileSync::NEW])),
             ...$this->lines('updated', array_keys($this->scan[FileSync::UPDATABLE])),
             ...$this->lines('modified', array_keys($this->scan[FileSync::MODIFIED])),
+            ...$this->template->summaryLines(),
             ...$this->lines('unmarked', array_keys($this->scan[FileSync::UNMARKED])),
             ...$this->lines('refused', array_keys($this->scan[FileSync::REFUSED])),
             ...$this->lines('removed', $this->safeOrphans),
@@ -88,6 +93,8 @@ final class TrackedFiles
             ...array_intersect_key($modified, array_flip($overwrite)),
             ...array_intersect_key($convertible, array_flip($convert)),
         ]);
+        $this->template
+            ->settle($consent, $tally, $this->written(...));
         $this->reportFailures();
         $this->removeOrphans($tally, $orphansToDelete);
     }

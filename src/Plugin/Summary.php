@@ -113,6 +113,8 @@ final class Summary
     {
         return match ($type) {
             'modified' => "{$path} (locally modified)",
+            'held' => "{$path} (held back for a project template)",
+            'unsearched' => "{$path} (held back, a folder could not be searched)",
             'unmarked' => "{$path} (locally modified, no sync marker)",
             'refused' => "{$path} (sync marker appears twice, not touched)",
             'orphan_protected' => "{$path} (removed upstream, kept — locally modified)",

@@ -2,12 +2,22 @@
 
 declare(strict_types=1);
 
-const SKILL_TRIGGERS = ['review', 'rewrite', 'issue', 'epic', 'Product Goal', 'labels'];
+const SKILL_TRIGGERS = [
+    'review',
+    'rewrite',
+    'issue',
+    'epic',
+    'Product Goal',
+    'labels',
+    'pull request description',
+];
+
+const ISSUE_FORBIDDEN_PUNCTUATION = [';', '—', '–'];
+
+const README_ISSUES_SECTION = '/^## \S+ GitHub issues and pull requests\n(.*?)^## /msu';
 
 const ISSUE_FORBIDDEN_TEXT = [
-    ';',
-    '—',
-    '–',
+    ...ISSUE_FORBIDDEN_PUNCTUATION,
     'Lestrade',
     'Watson',
     'Holmes',
@@ -59,7 +69,11 @@ it('leaves scope to the acceptance criteria and outcomes, with no section of its
 ): void {
     expect(shippedSource($path))->not
         ->toMatch('/^#+ Out of scope/mi');
-})->with(fn (): array => [...issueSkillFiles(), ...array_values(ISSUE_TEMPLATES)]);
+})->with(fn (): array => [
+    ...issueSkillFiles(),
+    ...array_values(ISSUE_TEMPLATES),
+    PULL_REQUEST_TEMPLATE,
+]);
 
 it('gives each PBI template its one kind label, and a goal or epic none', function (
     string $path,
@@ -113,4 +127,17 @@ it('keeps its own writing rules and needs no outside tool', function (string $pa
         ->filter(fn (string $text): bool => str_contains(shippedSource($path), $text));
 
     expect($found->all())->toBe([]);
-})->with(fn (): array => [...issueSkillFiles(), ...array_values(ISSUE_TEMPLATES)]);
+})->with(fn (): array => [
+    ...issueSkillFiles(),
+    ...array_values(ISSUE_TEMPLATES),
+    PULL_REQUEST_TEMPLATE,
+]);
+
+it('keeps the README section on issues to the same punctuation rules', function (): void {
+    preg_match(README_ISSUES_SECTION, shippedSource('README.md'), $section);
+    $found = collect(ISSUE_FORBIDDEN_PUNCTUATION)
+        ->filter(fn (string $text): bool => str_contains((string) data_get($section, '1'), $text));
+
+    expect(data_get($section, '1'))->toContain('pull request template');
+    expect($found->all())->toBe([]);
+});

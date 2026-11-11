@@ -40,6 +40,7 @@ return [
             '.github/ISSUE_TEMPLATE/enhancement.md',
             '.github/ISSUE_TEMPLATE/maintenance.md',
             '.github/ISSUE_TEMPLATE/research.md',
+            '.github/pull_request_template.md',
         ],
 
         'managed' => [

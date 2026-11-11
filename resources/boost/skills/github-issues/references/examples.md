@@ -59,3 +59,52 @@ footnotes are missing.
 The body never lists the epic's PBIs. GitHub shows them as sub-issues. The epic
 opened with a research PBI and one bug. More PBIs follow as the research answers
 arrive.
+
+## A pull request
+
+Title: fix: import every verse that holds two footnotes
+
+Base: the default branch. It implements the bug above, issue 57, which belongs
+to the footnote import epic, issue 52.
+
+```markdown
+## Related issues
+
+- Fixes #57
+- Part of #52
+
+## What changed
+
+- The import stores each footnote of a verse in its printed position.
+- A second run of the import skips the footnotes it already stored.
+
+## Why
+
+- The import writes footnotes with one upsert for each verse, not through the
+  `Footnote` model. The model's events ran one query for each footnote.
+
+## QA steps
+
+1. Run `php artisan migrate:fresh`. The command drops and recreates every table.
+2. Run `php artisan bible:import kjv`. The import reports 31,102 verses.
+3. Open `/kjv/psalms/119#105` in the browser. The verse shows two footnotes, in
+   their printed order.
+4. Run `php artisan bible:import kjv` again. The import reports 0 new verses and
+   no error.
+
+## Verified
+
+- `php artisan test --filter=BibleImport` passes 14 tests.
+- CI passes.
+
+## Before you approve
+
+- The migration replaces the unique index on footnotes. A rollback restores the old index.
+```
+
+`Fixes` closes issue 57 on merge, because it is a bug. `Part of` links the epic
+and leaves it open. The Why section gives only the reason for a choice that
+departs from the project's usual use of models. The issue already says why the
+fix is needed. The body never copies the acceptance criteria. Each criterion is
+ticked in issue 57 as it is met. No guidance line from the template is left
+behind.

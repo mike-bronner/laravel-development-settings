@@ -231,6 +231,9 @@
     ".github/ISSUE_TEMPLATE/research.md": [
         "1277916a18a6a9d83d708e3966734750"
     ],
+    ".github/pull_request_template.md": [
+        "7f9afcc028263f3092e74eae0d11c924"
+    ],
     ".github/workflows/sync-developer-settings.yml": [
         "3ed155007d03bc3370ac7471f527e794",
         "3baa60b472b6a57f744bf306b4319b6c",

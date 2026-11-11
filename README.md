@@ -293,9 +293,9 @@ Run `vendor/bin/dev-settings-contribute.php` (or `composer dev-settings:contribu
 - **Edit in your repo** — quick fixes, typo corrections, rule tweaks discovered while coding
 - **Direct PR to this repo** — major additions, new guidelines, structural changes
 
-## 📝 GitHub issues
+## 📝 GitHub issues and pull requests
 
-The shipped `github-issues` skill tells your agents how to write, review and rewrite GitHub issues, so that a human understands each one in one pass and an agent can act on it. It covers:
+The shipped `github-issues` skill tells your agents how to write, review and rewrite GitHub issues and pull request descriptions, so that a human understands each one in one pass and an agent can act on it. It covers:
 
 - the three issue types: Product Goal, Epic and PBI, with no Task type
 - one PBI to one pull request, and no sub-issues under a PBI
@@ -303,10 +303,31 @@ The shipped `github-issues` skill tells your agents how to write, review and rew
 - four flat kind labels, exactly one per PBI: `bug`, `enhancement`, `research` and `maintenance`, with native GitHub features (issue types, blocked-by relationships, project fields, close reasons) for everything else
 - the sections of each kind, observable acceptance criteria, a soft cap of about 250 words for a PBI, and writing rules with a four-question self-check
 - four workflows: write, review (report only), rewrite (the original body moves to a comment first) and a label cleanup guide for adopting the label set
+- pull request descriptions, in these parts:
+  - a Conventional Commit title, the template's sections and a soft cap of about 250 words
+  - one bullet for each related issue, and GitHub's nine closing keywords with when to use each
+  - keywords that close an issue only on a pull request into the default branch, because GitHub ignores them on any other base
+  - `Part of #<number>` or `Related to #<number>` for an issue the pull request links without closing it
+  - a Why section that gives the reason when the issue gives none, and the reason for each choice that departs from the issue, the project's patterns or a stated requirement
+  - numbered QA steps that a human follows in the browser or the console
+  - acceptance criteria ticked in the linked issue, read again just before each edit, and never copied into the body
+  - a filled template passed with `gh pr create --body-file`, and no reviewer ever requested
+  - a review workflow (report only)
 
 The plugin also syncs six Markdown issue templates into `.github/ISSUE_TEMPLATE/` as tracked files: `product-goal.md`, `epic.md`, `bug.md`, `enhancement.md`, `maintenance.md` and `research.md`. Each holds the sections its kind needs, and each PBI template sets its kind label. The templates are Markdown, not YAML issue forms. `gh issue create --template` reads only Markdown templates. An agent and `gh` therefore use the same file. `gh` takes only the template's body, so the skill tells agents to pass `--label` and `--type` themselves.
 
 The templates set no `type:`. Issue types belong to the repository's owner. A personal repository offers only GitHub's defaults: Task, Bug and Feature. A `type: PBI` there names a type that does not exist. Set the type when you create the issue. A label the template names exists only once your repository has it: create the kind labels as the skill's label cleanup guide describes.
+
+The plugin syncs one pull request template too, `.github/pull_request_template.md`, as a tracked file. Its sections are Related issues, What changed, Why, QA steps, Verified and Before you approve. QA steps holds the manual playbook, and Verified holds only automated evidence. It holds no provenance section, no copy of the acceptance criteria and no checklist of what CI enforces. Whoever works the pull request ticks each acceptance criterion in the linked issue as it is met. Each guidance line in the template starts with `>`, and the person or agent who fills it deletes those lines. A quote that they add themselves stays. It is one file, not a folder of templates, because neither the GitHub web page nor a `gh` run without a terminal lets you pick from several. `gh pr create` applies no template when it runs without a terminal, so the skill tells agents to read the template, fill it, and pass the body with `--body-file`.
+
+A project can already have its own pull request template. What the plugin does depends on where that template is.
+
+- **At `.github/pull_request_template.md`**: the plugin finds a file it never shipped at that path. It treats the file as locally modified, as it does any edited tracked file. An interactive run offers to overwrite it, and the default keeps it. On macOS, which ignores letter case in paths, `.github/PULL_REQUEST_TEMPLATE.md` is that same path.
+- **At another place GitHub reads**: that is `pull_request_template.md` in the root or in `docs/`, `.github/PULL_REQUEST_TEMPLATE.md` on a filesystem that keeps letter case apart, or a Markdown file in a `PULL_REQUEST_TEMPLATE/` folder in any of the three. Letter case in these names does not matter. The plugin writes no shipped template while one of them exists.
+  - An interactive run names each template it found and asks whether to keep them or to replace them with the shipped one. Keep is the default. Replace writes the shipped template and then deletes each template it named. The plugin deletes a template of yours only on that answer. When one of them cannot be deleted, the plugin names it with the cause, takes the shipped template back out, and asks again on the next interactive run. If the shipped template cannot be taken back out either, the plugin says that both templates now exist and tells you to delete the shipped one by hand.
+  - A run that cannot ask keeps your templates, writes no shipped template, and says so.
+  - Every run checks again until your template is gone. An interactive run asks each time.
+  - The plugin follows no symbolic link in this search. When it cannot list one of these folders, it writes no shipped template, asks nothing, and names the folder. The summary then says that a folder could not be searched, not that a template was found.
 
 ### The skill without Laravel Boost
 
@@ -334,14 +355,17 @@ Codex, Cursor, Gemini CLI and OpenClaw all read `~/.agents/skills/`, so one copy
 
 Any other harness that reads the Agent Skills format loads the skill the same way. Find the folder its documentation names for skills, and copy the `github-issues` folder into it.
 
-### The issue templates without this package
+### The templates without this package
 
-A repository that does not require this package can use the templates too. From the clone above, copy the six files into the repository's `.github/ISSUE_TEMPLATE/` folder, and commit them.
+A repository that does not require this package can use the templates too. From the clone above, copy the six issue templates into the repository's `.github/ISSUE_TEMPLATE/` folder, and the pull request template into `.github/`. Then commit them.
 
 ```bash
 mkdir -p .github/ISSUE_TEMPLATE
 cp laravel-development-settings/.github/ISSUE_TEMPLATE/*.md .github/ISSUE_TEMPLATE/
+cp laravel-development-settings/.github/pull_request_template.md .github/
 ```
+
+If the repository already has a pull request template, decide which one to keep before you copy. `cp` overwrites it.
 
 `gh issue create --template` takes only the template's body. It applies neither the template's label nor an issue type. Pass both to `gh` yourself. `--template` takes the template's `name`, such as `Bug`:
 
@@ -350,6 +374,12 @@ gh issue create --template Bug --title "Import stops at Psalm 119" --label bug -
 ```
 
 Leave out `--type` when your repository has no PBI type. Create the four kind labels first, as `resources/boost/skills/github-issues/references/label-cleanup.md` describes.
+
+`gh pr create` applies the pull request template only when it runs in a terminal and you pass no body. An agent reads the template, fills it, and passes the result as a file. `gh` refuses `--template` together with `--body-file`.
+
+```bash
+gh pr create --title "fix: import every verse that holds two footnotes" --body-file body.md
+```
 
 ## 🎯 Pest TIA baseline
 
