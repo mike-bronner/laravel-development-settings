@@ -168,7 +168,7 @@ The package tracks known file checksums via a manifest. When syncing:
 - **New files** are created automatically
 - **Updated files** are overwritten only if your local copy matches a known version
 - **Locally modified files** are skipped and flagged — your changes are preserved
-- **Orphaned files** (removed from config) are cleaned up
+- **Orphaned files** (no longer shipped) are cleaned up. A file the installed package still ships, by the config in its vendor directory, is never treated as an orphan, even on the run that updates this package
 
 To accept the package version of a locally modified file, delete your local copy and run `composer update`.
 

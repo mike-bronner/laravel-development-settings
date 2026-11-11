@@ -45,6 +45,7 @@ function projectFirstSync(): FileSync
 {
     return new FileSync(
             new Manifest(['ci.yml' => [md5(WORKFLOW_V1), md5(WORKFLOW_V2)]]),
+            [],
             projectFirst: ['ci.yml'],
         );
 }

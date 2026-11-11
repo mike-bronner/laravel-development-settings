@@ -13,6 +13,7 @@ use Composer\Script\Event;
 use Composer\Script\ScriptEvents;
 use Laravel\Prompts\Prompt;
 use MikeBronner\DevelopmentSettings\ComposerPlugin;
+use MikeBronner\DevelopmentSettings\Plugin\Publisher;
 use MikeBronner\DevelopmentSettings\Support\ContributionDetector;
 use MikeBronner\DevelopmentSettings\Support\InstalledPackage;
 use MikeBronner\DevelopmentSettings\Support\PackageConfig;
@@ -276,6 +277,17 @@ function publishIn(string $project, string $run = NON_INTERACTIVE, string $hook 
     } finally {
         chdir($workingDirectory);
     }
+
+    return $inputOutput->getOutput();
+}
+
+function publishLoaded(string $project, array $loadedConfig): string
+{
+    $inputOutput = new BufferIO;
+    $package = "{$project}/vendor/" . InstalledPackage::NAME;
+
+    (new Publisher($inputOutput, new DetachedTerminal, $project, $package))
+        ->publish(new PackageConfig($loadedConfig));
 
     return $inputOutput->getOutput();
 }

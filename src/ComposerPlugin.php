@@ -66,6 +66,8 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 
     public function publish(Event $event): void
     {
+        $this->compileFromDisk();
+
         try {
             $this->publishIntoProject($event);
         } catch (Throwable $failure) {
@@ -139,5 +141,10 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
                 array_keys([...$project->getRequires(), ...$project->getDevRequires()]),
             );
         $publisher->publish($package->config($packageDir));
+    }
+
+    private function compileFromDisk(): void
+    {
+        ini_set('opcache.enable', '0');
     }
 }

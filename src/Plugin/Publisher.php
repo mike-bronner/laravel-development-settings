@@ -30,6 +30,7 @@ final class Publisher
         $trackedFiles = new TrackedFiles(
                 new FileSync(
                         $plan->manifest(),
+                        $plan->shippedTargets(),
                         managed: $plan->managed(),
                         projectFirst: $plan->managedProjectFirst(),
                     ),

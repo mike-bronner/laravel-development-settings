@@ -25,6 +25,14 @@ final class SyncPlan
             );
     }
 
+    public function shippedTargets(): array
+    {
+        $config = (new ConfigReader)->read($this->packageDir);
+        $onDisk = new self($config, $this->packageDir, $this->projectDir, $this->kind);
+
+        return array_keys($onDisk->files());
+    }
+
     public function managed(): array
     {
         return $this->config

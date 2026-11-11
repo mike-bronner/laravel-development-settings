@@ -63,7 +63,7 @@ it('replaces an unmodified phpcs.xml from an older release', function (): void {
 
         XML);
 
-    $scan = (new FileSync(shippedManifest()))
+    $scan = (new FileSync(shippedManifest(), []))
         ->classify($this->project, ['phpcs.xml' => REPOSITORY_ROOT . '/phpcs.xml']);
 
     expect(array_keys(data_get($scan, 'updatable')))->toBe(['phpcs.xml']);

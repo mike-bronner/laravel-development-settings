@@ -30,7 +30,7 @@ beforeEach(function (): void {
                 'edited.md' => [md5('v1')],
                 'retired.md' => [md5('shipped')],
                 'kept.md' => [md5('shipped')],
-            ])),
+            ]), []),
             $this->project,
             $this->output,
         );

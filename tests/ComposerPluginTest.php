@@ -6,8 +6,10 @@ use Composer\Composer;
 use Composer\IO\BufferIO;
 use Composer\Script\ScriptEvents;
 use MikeBronner\DevelopmentSettings\ComposerPlugin;
+use MikeBronner\DevelopmentSettings\Plugin\Publisher;
 use MikeBronner\DevelopmentSettings\Support\InstalledPackage;
 use MikeBronner\DevelopmentSettings\Support\PackageConfig;
+use MikeBronner\DevelopmentSettings\Support\SystemProcess;
 use Symfony\Component\Console\Output\OutputInterface;
 
 const UNDEFINED_METHOD = 'return (new stdClass)->passthru();';
@@ -15,6 +17,21 @@ const UNDEFINED_METHOD = 'return (new stdClass)->passthru();';
 const RE_RUN = "Run \"composer update\" again to finish setup.";
 
 const RE_RUN_INSTALL = "Run \"composer install\" again to finish setup.";
+
+const UPGRADE_RUN = <<<PHP
+    require %s;
+    Composer\\Util\\ErrorHandler::register();
+    foreach (glob(%s) as \$helper) {
+        require_once \$helper;
+    }
+    \$configFile = %s;
+    \$earlier = require \$configFile;
+    file_put_contents(\$configFile, %s);
+    \$isStale = (require \$configFile) === \$earlier;
+    echo json_encode(['stale' => \$isStale, 'output' => publishIn(%s)]);
+    PHP;
+
+const SHIPPED_TARGETS_ARGUMENT = "                        \$plan->shippedTargets(),\n";
 
 afterEach(function (): void {
     removeTempDir($this->project);
@@ -79,6 +96,79 @@ it('names edited sources before an update, and nothing without the package', fun
 
     expect(publishIn($this->project, hook: 'captureBeforeUpdate'))->toBe('');
 });
+
+it('publishes from the config on disk when the run compiled an older copy', function (
+    string $restriction,
+): void {
+    [$this->project, $package] = makeConsumer(['app' => false, 'sources' => ['new.md' => "New\n"]]);
+    $current = '<?php return '
+        . var_export(consumerConfig(['paths' => ['files' => ['new.md']]]), true) . ';';
+    $script = sprintf(
+            UPGRADE_RUN,
+            var_export(REPOSITORY_ROOT . '/vendor/autoload.php', true),
+            var_export(REPOSITORY_ROOT . '/tests/Helpers/*.php', true),
+            var_export("{$package}/" . PackageConfig::FILE, true),
+            var_export($current, true),
+            var_export($this->project, true),
+        );
+
+    $result = (new SystemProcess)->capture(cachingPhpCommand($script, $restriction));
+    $run = json_decode($result->output(), associative: true);
+
+    expect($run)->toBeArray($result->output())
+        ->and(data_get($run, 'stale'))
+        ->toBeTrue($result->output())
+        ->and(data_get($run, 'output'))
+        ->toContain('new.md')
+        ->and(data_get($run, 'output'))
+        ->not
+        ->toContain('could not finish')
+        ->and(file_get_contents("{$this->project}/new.md"))
+        ->toBe("New\n");
+})->with(OPCACHE_API)
+    ->skip(! function_exists('opcache_invalidate'), NO_OPCACHE);
+
+it('publishes with the new classes when a file cache holds older ones', function (): void {
+    [$this->project, $package] = makeConsumer([
+        'app' => false,
+        'paths' => ['files' => ['new.md']],
+        'sources' => ['new.md' => "New\n"],
+    ]);
+    $publisherFile = "{$package}/src/Plugin/Publisher.php";
+    copyTree(REPOSITORY_ROOT . '/src', "{$package}/src");
+    $current = (string) file_get_contents($publisherFile);
+    $older = str_replace(SHIPPED_TARGETS_ARGUMENT, '', $current);
+    $olderEndLine = substr_count(rtrim($older), "\n") + 1;
+    $compile = sprintf(
+            "['compiled' => opcache_compile_file(%s)]",
+            var_export($publisherFile, true),
+        );
+    $endLine = sprintf(
+            "['endLine' => (new ReflectionClass(%s))->getEndLine()]",
+            var_export(Publisher::class, true),
+        );
+    $publish = sprintf("['output' => publishIn(%s)]", var_export($this->project, true));
+
+    file_put_contents($publisherFile, $older);
+    $compiled = runWithFileCache($package, $compile);
+    file_put_contents($publisherFile, $current);
+    $loaded = runWithFileCache($package, $endLine);
+    $output = (string) data_get(runWithFileCache($package, $publish), 'output');
+
+    expect($older)
+        ->not
+        ->toBe($current)
+        ->and($compiled)
+        ->toBe(['compiled' => true])
+        ->and($loaded)
+        ->toBe(['endLine' => $olderEndLine])
+        ->and($output)
+        ->toContain('new.md')
+        ->not
+        ->toContain('could not finish')
+        ->and(file_get_contents("{$this->project}/new.md"))
+        ->toBe("New\n");
+})->skip(! function_exists('opcache_compile_file'), NO_OPCACHE);
 
 it('contains a publish failure outside CI, and the later scripts run', function (): void {
     [$this->project, $package] = brokenConsumer(UNDEFINED_METHOD);

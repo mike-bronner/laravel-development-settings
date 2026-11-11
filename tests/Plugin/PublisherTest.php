@@ -126,6 +126,104 @@ it("never treats a consuming package's own resources/boost as orphans", function
         ->toBe("Identity\n");
 });
 
+it('keeps a keyed file the package ships out of the orphans the loaded config implies', function (
+    string $local,
+): void {
+    $target = '.github/workflows/tia.yml';
+    $options = [
+        'app' => false,
+        'sources' => ['resources/project/tia.yml' => "Shipped workflow\n"],
+        'manifest' => [$target => [md5("Shipped workflow\n")]],
+    ];
+    [$this->project] = makeConsumer([
+        ...$options,
+        'paths' => ['files' => ['resources/project/tia.yml' => $target]],
+    ]);
+    seedFiles($this->project, [$target => $local]);
+
+    $output = publishLoaded($this->project, consumerConfig($options));
+
+    expect($output)->not
+        ->toContain($target)
+        ->and($output)
+        ->not
+        ->toContain('removed upstream')
+        ->and($output)
+        ->not
+        ->toContain('1 removed')
+        ->and(file_get_contents("{$this->project}/{$target}"))
+        ->toBe($local);
+})->with([
+    'edited copy' => ["Our own workflow\n"],
+    'unmodified copy' => ["Shipped workflow\n"],
+]);
+
+it('keeps a managed file the package ships out of the orphans the loaded config implies', function (
+    string $local,
+): void {
+    $options = [
+        'app' => false,
+        'sources' => ['resources/project/gitignore' => GITIGNORE_V1],
+        'manifest' => ['.gitignore' => [md5(GITIGNORE_V1)]],
+    ];
+    [$this->project] = makeConsumer([
+        ...$options,
+        'paths' => [
+            'files' => ['resources/project/gitignore' => '.gitignore'],
+            'managed' => ['.gitignore'],
+        ],
+    ]);
+    seedFiles($this->project, ['.gitignore' => $local]);
+
+    $output = publishLoaded($this->project, consumerConfig($options));
+
+    expect($output)->not
+        ->toContain('.gitignore')
+        ->and($output)
+        ->not
+        ->toContain('1 removed')
+        ->and(file_get_contents("{$this->project}/.gitignore"))
+        ->toBe($local);
+})->with([
+    'nothing below the marker' => [marked(GITIGNORE_V1)],
+    'project lines below the marker' => [marked(GITIGNORE_V1, "\n/storage\n")],
+]);
+
+it('removes a retired file although the package repository keeps its own copy', function (): void {
+    $retired = '.github/ISSUE_TEMPLATE/retired.md';
+    [$this->project, $package] = makeConsumer([
+        'app' => false,
+        'sources' => [$retired => "Shipped\n"],
+        'manifest' => [$retired => [md5("Shipped\n")]],
+    ]);
+    seedFiles($this->project, [$retired => "Shipped\n"]);
+
+    $output = publishIn($this->project);
+
+    expect($output)->toContain($retired, '1 removed')
+        ->and("{$this->project}/{$retired}")
+        ->not
+        ->toBeFile()
+        ->and("{$package}/{$retired}")
+        ->toBeFile();
+});
+
+it('still removes a file the package no longer ships', function (): void {
+    $retired = '.github/ISSUE_TEMPLATE/retired.md';
+    [$this->project] = makeConsumer([
+        'app' => false,
+        'manifest' => [$retired => [md5("Shipped\n")]],
+    ]);
+    seedFiles($this->project, [$retired => "Shipped\n"]);
+
+    $output = publishIn($this->project);
+
+    expect($output)->toContain($retired, '1 removed')
+        ->and("{$this->project}/{$retired}")
+        ->not
+        ->toBeFile();
+});
+
 it('reports a new file it cannot create as failed, not created, and carries on', function (): void {
     [$this->project] = makeConsumer([
         'app' => false,

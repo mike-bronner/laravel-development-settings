@@ -53,3 +53,17 @@ function seedFiles(string $dir, array $files): void
         file_put_contents($path, $contents);
     }
 }
+
+function copyTree(string $source, string $target): void
+{
+    $entries = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($source, FilesystemIterator::SKIP_DOTS),
+        );
+    $relative = fn (SplFileInfo $file): string => substr($file->getPathname(), strlen($source) + 1);
+
+    seedFiles($target, collect(iterator_to_array($entries, false))
+        ->mapWithKeys(fn (SplFileInfo $file): array => [
+            $relative($file) => file_get_contents($file->getPathname()),
+        ])
+        ->all());
+}

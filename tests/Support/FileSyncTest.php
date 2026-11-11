@@ -16,7 +16,7 @@ beforeEach(function (): void {
     $this->project = makeTempDir();
     seedFiles($this->source, ['gitignore' => SHIPPED_V2, 'sync.yml' => 'workflow']);
     $this->known = new Manifest(['.gitignore' => [md5(SHIPPED_V1), md5(SHIPPED_V2)]]);
-    $this->managed = new FileSync($this->known, managed: ['.gitignore']);
+    $this->managed = new FileSync($this->known, [], managed: ['.gitignore']);
 });
 
 afterEach(function (): void {
@@ -40,7 +40,7 @@ it('classifies new, unchanged, modified, and updatable files', function (): void
         ->mapWithKeys(fn (string $path): array => [$path => "{$this->source}/{$path}"])
         ->all();
 
-    $scan = (new FileSync(new Manifest(['updatable.md' => [md5('shipped v1')]])))
+    $scan = (new FileSync(new Manifest(['updatable.md' => [md5('shipped v1')]]), []))
         ->classify($this->project, $files);
 
     expect(collect($scan)->map(fn (array $group): array => array_keys($group))->all())->toBe([
@@ -61,7 +61,7 @@ it('finds orphans: manifest paths no longer shipped that still exist here', func
         'already-gone.md' => [md5('whatever')],
     ]);
 
-    $orphans = (new FileSync($manifest))
+    $orphans = (new FileSync($manifest, []))
         ->orphans($this->project, ['kept.md' => "{$this->project}/kept.md"]);
 
     expect($orphans)->toBe(['old.md']);
@@ -76,7 +76,8 @@ it('never finds an orphan that resolves outside the project', function (): void 
         'old-config.xml' => [md5('present')],
     ]);
 
-    $orphans = (new FileSync($manifest))->safeOrphans($this->project, discoveredFiles: []);
+    $orphans = (new FileSync($manifest, []))
+        ->safeOrphans($this->project, discoveredFiles: []);
 
     expect($orphans)->toBe(['old-config.xml'])
         ->and(file_get_contents("{$this->source}/guidelines/a.md"))
@@ -87,7 +88,7 @@ it('finds an orphan through a symlink that stays inside the project', function (
     seedFiles($this->project, ['real/a.md' => 'shipped']);
     symlink("{$this->project}/real", "{$this->project}/linked");
 
-    $sync = new FileSync(new Manifest(['linked/a.md' => [md5('shipped')]]));
+    $sync = new FileSync(new Manifest(['linked/a.md' => [md5('shipped')]]), []);
 
     expect($sync->safeOrphans($this->project, discoveredFiles: []))->toBe(['linked/a.md']);
 });
@@ -97,12 +98,56 @@ it('splits orphans into safe (known md5) and protected (customized)', function (
     $sync = new FileSync(new Manifest([
         'pristine.md' => [md5('shipped')],
         'tweaked.md' => [md5('shipped')],
-    ]));
+    ]), []);
 
     expect($sync->safeOrphans($this->project, []))->toBe(['pristine.md'])
         ->and($sync->protectedOrphans($this->project, []))
         ->toBe(['tweaked.md']);
 });
+
+it('never finds an orphan the package still ships, whatever the loaded config lists', function (
+    array $shipped,
+    array $expected,
+): void {
+    seedFiles($this->project, [
+        '.github/workflows/tia.yml' => "Our own workflow\n",
+        '.github/ISSUE_TEMPLATE/bug.md' => "Shipped bug\n",
+    ]);
+    $sync = new FileSync(new Manifest([
+        '.github/workflows/tia.yml' => [md5("Shipped workflow\n")],
+        '.github/ISSUE_TEMPLATE/bug.md' => [md5("Shipped bug\n")],
+    ]), $shipped);
+
+    expect([
+        'safe' => $sync->safeOrphans($this->project, discoveredFiles: []),
+        'protected' => $sync->protectedOrphans($this->project, discoveredFiles: []),
+    ])->toBe($expected);
+})->with([
+    'still shipped, left out of the loaded config' => [
+        ['.github/workflows/tia.yml', '.github/ISSUE_TEMPLATE/bug.md'],
+        ['safe' => [], 'protected' => []],
+    ],
+    'no longer shipped' => [
+        [],
+        [
+            'safe' => ['.github/ISSUE_TEMPLATE/bug.md'],
+            'protected' => ['.github/workflows/tia.yml'],
+        ],
+    ],
+]);
+
+it('never finds a managed orphan the package still ships', function (string $local): void {
+    seedFiles($this->project, ['.gitignore' => $local]);
+    $sync = new FileSync($this->known, ['.gitignore']);
+
+    expect([
+        'safe' => $sync->safeOrphans($this->project, []),
+        'protected' => $sync->protectedOrphans($this->project, []),
+    ])->toBe(['safe' => [], 'protected' => []]);
+})->with([
+    'marked known version, nothing below' => [marked(SHIPPED_V2)],
+    'marked known version, project lines below' => [marked(SHIPPED_V2, LOCAL_LINES)],
+]);
 
 it('classifies a managed file above its marker', function (?string $local, string $group): void {
     seedFiles($this->project, match ($local) {
@@ -128,7 +173,7 @@ it('classifies a managed file above its marker', function (?string $local, strin
 it('classifies a target that is not managed on the whole file', function (): void {
     seedFiles($this->project, ['.gitignore' => marked(SHIPPED_V2, LOCAL_LINES)]);
 
-    $scan = (new FileSync(new Manifest(['.gitignore' => [md5(SHIPPED_V2)]])))
+    $scan = (new FileSync(new Manifest(['.gitignore' => [md5(SHIPPED_V2)]]), []))
         ->classify($this->project, ['.gitignore' => "{$this->source}/gitignore"]);
 
     expect(array_keys(data_get($scan, 'modified')))->toBe(['.gitignore']);
@@ -179,7 +224,7 @@ it('refuses to write a managed target holding the marker twice', function (): vo
 
 it('judges a managed orphan above its marker', function (string $local, string $expected): void {
     seedFiles($this->project, ['.gitignore' => $local]);
-    $sync = new FileSync($this->known);
+    $sync = new FileSync($this->known, []);
 
     expect([
         'safe' => $sync->safeOrphans($this->project, []),
@@ -207,7 +252,8 @@ it('throws when a target cannot be written, and leaves it as it was', function (
     string $failure,
 ): void {
     seedFiles($this->project, ['.gitignore' => SHIPPED_V1]);
-    $sync = new FileSync(new Manifest(['.gitignore' => [md5(SHIPPED_V1)]]), managed: $managed);
+    $manifest = new Manifest(['.gitignore' => [md5(SHIPPED_V1)]]);
+    $sync = new FileSync($manifest, [], managed: $managed);
     chmod("{$this->project}/.gitignore", MODE_READ_ONLY);
 
     expect(fn () => $sync->write($this->project, '.gitignore', "{$this->source}/gitignore"))
@@ -225,7 +271,7 @@ it('throws when a target cannot be written, and leaves it as it was', function (
 it('throws when a target directory cannot be created', function (): void {
     chmod($this->project, MODE_LOCKED_DIRECTORY);
 
-    expect(fn () => (new FileSync(new Manifest))
+    expect(fn () => (new FileSync(new Manifest, []))
         ->write($this->project, '.github/workflows/sync.yml', "{$this->source}/sync.yml"))
         ->toThrow(RuntimeException::class, "Could not create {$this->project}/.github/workflows");
 
@@ -301,7 +347,12 @@ it('refuses to move an edited project-first file above its marker', function ():
 });
 
 it('says which managed files keep the project part first', function (): void {
-    $sync = new FileSync(new Manifest, managed: ['.gitignore'], projectFirst: ['ci.yml']);
+    $sync = new FileSync(
+            new Manifest,
+            [],
+            managed: ['.gitignore'],
+            projectFirst: ['ci.yml'],
+        );
 
     expect($sync->isProjectFirst('ci.yml'))->toBeTrue()
         ->and($sync->isProjectFirst('.gitignore'))
@@ -313,7 +364,8 @@ it('judges a project-first orphan below its marker', function (
     string $expected,
 ): void {
     seedFiles($this->project, ['ci.yml' => $local]);
-    $sync = new FileSync(new Manifest(['ci.yml' => [md5(WORKFLOW_V1), md5(WORKFLOW_V2)]]));
+    $manifest = new Manifest(['ci.yml' => [md5(WORKFLOW_V1), md5(WORKFLOW_V2)]]);
+    $sync = new FileSync($manifest, []);
 
     expect([
         'safe' => $sync->safeOrphans($this->project, []),

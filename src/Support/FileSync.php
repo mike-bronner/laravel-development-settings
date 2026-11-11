@@ -32,6 +32,7 @@ final class FileSync
 
     public function __construct(
         private Manifest $manifest,
+        private array $shipped,
         private array $managed = [],
         private CheckedFile $file = new CheckedFile,
         private array $projectFirst = [],
@@ -68,12 +69,12 @@ final class FileSync
 
     public function orphans(string $projectDir, array $discoveredFiles): array
     {
-        $discoveredPaths = array_keys($discoveredFiles);
+        $stillShipped = [...array_keys($discoveredFiles), ...$this->shipped];
         $paths = $this->manifest
             ->paths();
 
         return collect($paths)
-            ->reject(fn (string $path): bool => in_array($path, $discoveredPaths, strict: true))
+            ->reject(fn (string $path): bool => in_array($path, $stillShipped, strict: true))
             ->filter(fn (string $path): bool => file_exists("{$projectDir}/{$path}"))
             ->filter(fn (string $path): bool => $this->isInsideProject($projectDir, $path))
             ->values()

@@ -68,3 +68,17 @@ it('names the managed files whose project part comes first', function (): void {
     expect((new SyncPlan($config, $this->package, $this->project))->managedProjectFirst())
         ->toBe(['ci.yml']);
 });
+
+it('names the targets the config on disk ships, whatever config it was given', function (): void {
+    seedFiles($this->package, [
+        'resources/project/gitignore' => "/vendor\n",
+        'stray.md' => "Not shipped\n",
+        PackageConfig::FILE => '<?php return ' . var_export([
+            'paths' => ['files' => ['resources/project/gitignore' => '.gitignore', 'pint.json']],
+        ], true) . ';',
+    ]);
+
+    $plan = new SyncPlan(new PackageConfig(['paths' => []]), $this->package, $this->project);
+
+    expect($plan->shippedTargets())->toBe(['.gitignore', 'pint.json']);
+});
