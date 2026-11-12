@@ -16,8 +16,6 @@ const UNDEFINED_METHOD = 'return (new stdClass)->passthru();';
 
 const RE_RUN = "Run \"composer update\" again to finish setup.";
 
-const RE_RUN_INSTALL = "Run \"composer install\" again to finish setup.";
-
 const UPGRADE_RUN = <<<PHP
     require %s;
     Composer\\Util\\ErrorHandler::register();
@@ -37,15 +35,38 @@ afterEach(function (): void {
     isset($this->project) && removeTempDir($this->project);
 });
 
-it('captures before an update and publishes after install and update', function (): void {
+it('captures before an update and publishes after it, never after an install', function (): void {
     $this->project = makeTempDir();
 
     expect(ComposerPlugin::getSubscribedEvents())->toBe([
         'pre-update-cmd' => 'captureBeforeUpdate',
-        'post-install-cmd' => 'publish',
         'post-update-cmd' => 'publish',
     ]);
 });
+
+it('publishes nothing and runs no Boost on an install', function (string $packages): void {
+    [$this->project] = makeConsumer();
+
+    expect(dispatchIn($this->project, ScriptEvents::POST_INSTALL_CMD, packages: $packages))
+        ->toBe('')
+        ->and("{$this->project}/boost.ran")
+        ->not
+        ->toBeFile()
+        ->and("{$this->project}/boost.json")
+        ->not
+        ->toBeFile();
+})->with([WITH_DEV, WITHOUT_DEV]);
+
+it('publishes and runs Boost after an update', function (string $packages): void {
+    [$this->project] = makeConsumer();
+
+    expect(dispatchIn($this->project, packages: $packages))
+        ->toContain('Developer Settings', '... done')
+        ->and("{$this->project}/boost.ran")
+        ->toBeFile()
+        ->and("{$this->project}/boost.json")
+        ->toBeFile();
+})->with([WITH_DEV, WITHOUT_DEV]);
 
 it('does nothing when Composer activates, deactivates or uninstalls it', function (): void {
     $this->project = makeTempDir();
@@ -90,11 +111,11 @@ it('names edited sources before an update, and nothing without the package', fun
         'sources' => ['resources/boost/guidelines/01-identity.md' => "Edited\n"],
     ]);
 
-    expect(publishIn($this->project, hook: 'captureBeforeUpdate'))->toContain('01-identity.md');
+    expect(dispatchIn($this->project, ScriptEvents::PRE_UPDATE_CMD))->toContain('01-identity.md');
 
     removeTempDir($package);
 
-    expect(publishIn($this->project, hook: 'captureBeforeUpdate'))->toBe('');
+    expect(dispatchIn($this->project, ScriptEvents::PRE_UPDATE_CMD))->toBe('');
 });
 
 it('publishes from the config on disk when the run compiled an older copy', function (
@@ -185,8 +206,6 @@ it('contains a publish failure outside CI, and the later scripts run', function 
             "Error: Call to undefined method stdClass::passthru() in {$configFile}:1",
             RE_RUN,
         )
-        ->not
-        ->toContain(RE_RUN_INSTALL)
         ->and("{$this->project}/later.ran")
         ->toBeFile();
 });
@@ -202,18 +221,6 @@ it('fails the run under any set CI, and runs no later script', function (string 
         ->not
         ->toBeFile();
 })->with(['true', 'false']);
-
-it('names composer install after an install, and never composer update', function (): void {
-    [$this->project] = brokenConsumer(UNDEFINED_METHOD);
-    $dispatch = fn (): string => dispatchIn($this->project, ScriptEvents::POST_INSTALL_CMD);
-
-    expect(withCi(null, $dispatch))
-        ->toContain(RE_RUN_INSTALL)
-        ->not
-        ->toContain(RE_RUN)
-        ->and("{$this->project}/later.ran")
-        ->toBeFile();
-});
 
 it('reads an empty CI as unset', function (): void {
     [$this->project] = brokenConsumer(UNDEFINED_METHOD);

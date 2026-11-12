@@ -23,7 +23,7 @@ final class BoostRun
         'not composable' => 'This repository has no artisan of its own and no %s, so Laravel Boost'
             . ' was not run. This package does not install orchestra/testbench: a'
             . " package repository requires it itself. Run \"composer require --dev"
-            . " orchestra/testbench\", or \"composer install\" if composer.json already"
+            . " orchestra/testbench\", or \"composer update\" if composer.json already"
             . ' requires it. A custom Composer bin-dir is not supported.',
         'unreadable' => '%s is not valid JSON, so Laravel Boost was not run. Its guidelines'
             . ' and skills will not compose until you fix or delete the file.',

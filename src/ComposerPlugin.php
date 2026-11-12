@@ -28,12 +28,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         <error>Developer Settings could not finish setting up this project.</error>
         TEXT;
 
-    private const RE_RUN = "  Run \"%s\" again to finish setup.\n";
-
-    private const COMMANDS = [
-        'post-install-cmd' => 'composer install',
-        'post-update-cmd' => 'composer update',
-    ];
+    private const RE_RUN = "  Run \"composer update\" again to finish setup.\n";
 
     public function __construct(private Terminal $terminal = new SystemTerminal)
     {
@@ -59,7 +54,6 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
     {
         return [
             'pre-update-cmd' => 'captureBeforeUpdate',
-            'post-install-cmd' => 'publish',
             'post-update-cmd' => 'publish',
         ];
     }
@@ -71,7 +65,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         try {
             $this->publishIntoProject($event);
         } catch (Throwable $failure) {
-            $this->contain($failure, $event);
+            $this->contain($failure, $event->getIO());
         }
     }
 
@@ -99,22 +93,18 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
         };
     }
 
-    private function contain(Throwable $failure, Event $event): void
+    private function contain(Throwable $failure, IOInterface $inputOutput): void
     {
         $isCi = ! in_array(getenv('CI'), [false, ''], strict: true);
-        $command = self::COMMANDS[$event->getName()];
 
         match ($isCi) {
             true => throw $failure,
-            false => $this->reportContained($failure, $event->getIO(), $command),
+            false => $this->reportContained($failure, $inputOutput),
         };
     }
 
-    private function reportContained(
-        Throwable $failure,
-        IOInterface $inputOutput,
-        string $command,
-    ): void {
+    private function reportContained(Throwable $failure, IOInterface $inputOutput): void
+    {
         $cause = sprintf(
                 '  %s: %s in %s:%d',
                 $failure::class,
@@ -125,7 +115,7 @@ final class ComposerPlugin implements EventSubscriberInterface, PluginInterface
 
         $inputOutput->writeError(self::CONTAINED);
         $inputOutput->writeErrorRaw($cause);
-        $inputOutput->writeError(sprintf(self::RE_RUN, $command));
+        $inputOutput->writeError(self::RE_RUN);
         $inputOutput->writeErrorRaw($failure->getTraceAsString(), verbosity: IOInterface::VERBOSE);
     }
 
