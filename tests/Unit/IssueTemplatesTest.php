@@ -37,7 +37,7 @@ it('ships each issue template to every consuming project as a tracked file', fun
     expect(shippedManifest()->isKnown($path, md5(shippedSource($path))))->toBeTrue();
 })->with(ISSUE_TEMPLATES);
 
-it('writes the templates into a consuming project on install', function (): void {
+it('writes the templates into a consuming project on an update', function (): void {
     $templates = collect(ISSUE_TEMPLATES)->values();
     [$this->project] = makeConsumer([
         'manifest' => $templates

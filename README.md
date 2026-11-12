@@ -5,10 +5,12 @@ Shared developer settings, tooling configuration, and AI guidelines for Insight 
 ## 📦 Installation
 
 ```bash
-composer require mike-bronner/laravel-development-settings
+composer require --dev mike-bronner/laravel-development-settings
 ```
 
-That's it. The package automatically syncs files on every `composer install` and `composer update`.
+Require it as a dev dependency. Production deploys run `composer install --no-dev`, and that keeps this package and the tooling it brings out of the production release.
+
+That's it. The package syncs files on every `composer update`, which `composer require` and `composer remove` run too. A `composer install`, with or without `--no-dev`, runs nothing from it, so a deploy never syncs files or runs Boost. A fresh clone therefore gets its guidelines and agent files from the first `composer update`. A `composer install` with no `composer.lock` is an update to Composer, so the plugin runs on it.
 
 It also brings the shared tooling with it, as its own Composer requirements: Laravel Boost, Laravel Pint, Larastan and `mike-bronner/clean-code`. Composer installs them with the package, so you do not require them yourself. The plugin never edits your `composer.json` and never runs Composer. A project that an earlier release gave these packages as dev dependencies keeps them: nothing is removed.
 
@@ -18,7 +20,7 @@ The one exception is `mike-bronner/clean-code`, if you want its guidelines in yo
 composer require --dev mike-bronner/clean-code
 ```
 
-Until your `composer.json` requires it (in `require` or `require-dev`), every `composer install` and `composer update` prints that command. Once it does, the plugin adds `mike-bronner/clean-code` to the `packages` list in `boost.json`, next to this package (see "How the AI guidelines and skills reach your project" below).
+Until your `composer.json` requires it (in `require` or `require-dev`), every `composer update` prints that command. Once it does, the plugin adds `mike-bronner/clean-code` to the `packages` list in `boost.json`, next to this package (see "How the AI guidelines and skills reach your project" below).
 
 Orchestra Testbench is not among them. Releases 0.3.4 and 0.4.0 required it, so it reached every application, and there it broke `pest --parallel`: Pest skips its Laravel handler whenever Testbench's `TestCase` class exists, so every worker shares one database. Composer removes it from an application on the next update. A package requires Testbench itself (see "Packages" below).
 
@@ -26,7 +28,7 @@ If your application's own `composer.json` lists `orchestra/testbench`, `pest --p
 
 ## 🔧 How It Works
 
-This package is a Composer plugin that hooks into Composer's pre-update, post-install and post-update events. Before an update, it offers to contribute any edits you made to its installed guidelines and skills (see "Contributing edits made in vendor" below). After an install or update, it:
+This package is a Composer plugin that hooks into Composer's pre-update and post-update events. Before an update, it offers to contribute any edits you made to its installed guidelines and skills (see "Contributing edits made in vendor" below). After an update, it:
 
 1. **Syncs tracked config files** (`pint.json`, `phpcs.xml`, …) from the package into your project
 2. **Registers itself with Laravel Boost** by adding its name to the `packages` list in your `boost.json` (wherever Boost can run: an application, or a package with Orchestra Testbench installed). It adds `mike-bronner/clean-code` too, when your `composer.json` requires it, and otherwise tells you to require it
@@ -57,7 +59,7 @@ Nothing is written to your `.ai` directory or to `config/boost.php`. If you turn
 
 ### Packages
 
-A package has no `artisan` of its own, and the plugin writes none. This package does not install Orchestra Testbench, so require it yourself: `composer require --dev orchestra/testbench`. When Testbench is installed (`vendor/bin/testbench`), `composer install` and `composer update` run Boost through `bin/rooted-testbench.php`, a script in this package that boots Testbench rooted at your repository. Boost then writes `boost.json`, the skills and the agent files into your repository, as in an app. Choose your agents by running Boost yourself, from the repository root:
+A package has no `artisan` of its own, and the plugin writes none. This package does not install Orchestra Testbench, so require it yourself: `composer require --dev orchestra/testbench`. When Testbench is installed (`vendor/bin/testbench`), `composer update` runs Boost through `bin/rooted-testbench.php`, a script in this package that boots Testbench rooted at your repository. Boost then writes `boost.json`, the skills and the agent files into your repository, as in an app. Choose your agents by running Boost yourself, from the repository root:
 
 ```bash
 php vendor/mike-bronner/laravel-development-settings/bin/rooted-testbench.php boost:install
@@ -82,7 +84,7 @@ A package without `vendor/bin/testbench` (it does not require Testbench, its ins
 
 `boost.json` is gitignored, so a fresh clone has none. The plugin runs `boost:install` rather than `boost:update` for that reason: `install` writes the config it needs, where `update` finds guidelines and skills disabled and composes nothing.
 
-Run non-interactively, `boost:install` composes for the agents `boost.json` names. When it names none, Boost picks the agents it detects on the machine (an agent's CLI on the `PATH`, its app installed) and in the project (its config directory or guideline file). It does not record that pick, so a non-interactive run warns every time until you choose. An interactive `composer install` or `composer update` on a terminal asks you and saves the answer. So does running Boost yourself:
+Run non-interactively, `boost:install` composes for the agents `boost.json` names. When it names none, Boost picks the agents it detects on the machine (an agent's CLI on the `PATH`, its app installed) and in the project (its config directory or guideline file). It does not record that pick, so a non-interactive run warns every time until you choose. An interactive `composer update` on a terminal asks you and saves the answer. So does running Boost yourself:
 
 ```bash
 php artisan boost:install
@@ -90,15 +92,15 @@ php artisan boost:install
 
 In a package, run it through the rooted Testbench instead (see "Packages" above).
 
-An interactive run also shows Boost's list of third-party packages. If you untick this package there, Boost composes none of its guidelines or skills for that run, and the next `composer` run adds it back to `boost.json`.
+An interactive run also shows Boost's list of third-party packages. If you untick this package there, Boost composes none of its guidelines or skills for that run, and the next `composer update` adds it back to `boost.json`.
 
 When Boost detects no agent at all, it exits successfully having written nothing. The plugin checks for a freshly composed agent file after the run, and reports the run as failed when there is none, rather than printing "done".
 
-In an application, Boost also registers its commands only when `APP_ENV` is `local` or `APP_DEBUG` is true. On a clone with no `.env` yet, the run fails, and the next `composer install` after you create one composes.
+In an application, Boost also registers its commands only when `APP_ENV` is `local` or `APP_DEBUG` is true. On a clone with no `.env` yet, the run fails, and the next `composer update` after you create one composes.
 
 ### Flare MCP server
 
-When your project has `spatie/laravel-flare` or `spatie/flare-client-php` installed, every `composer install` and `composer update` that runs Boost also adds [Flare's MCP server](https://flareapp.io/docs/flare/general/our-mcp-server.md?nav=false) as `flare`, pointing at `https://flareapp.io/mcp`, to each agent Boost configured MCP for. Each entry has the shape Boost itself writes for that agent's remote servers, as it does for Nightwatch. In a package, the step runs through the rooted Testbench.
+When your project has `spatie/laravel-flare` or `spatie/flare-client-php` installed, every `composer update` that runs Boost also adds [Flare's MCP server](https://flareapp.io/docs/flare/general/our-mcp-server.md?nav=false) as `flare`, pointing at `https://flareapp.io/mcp`, to each agent Boost configured MCP for. Each entry has the shape Boost itself writes for that agent's remote servers, as it does for Nightwatch. In a package, the step runs through the rooted Testbench.
 
 - Flare signs in with OAuth, so nothing secret is written. Authorize the server once in each agent, for example with `/mcp` in Claude Code.
 - An agent config that already holds a `flare` server is left as it is.
@@ -109,16 +111,16 @@ When your project has `spatie/laravel-flare` or `spatie/flare-client-php` instal
 
 Boost writes its composed guidelines by replacing the region between an opening and a closing marker tag. The pattern is non-greedy and it anchors on the **first** opening tag anywhere in the file. So a hand-written section that names the opening tag in prose becomes the start of the match, the real block's closing tag becomes its end, and everything in between is replaced by generated content. This is a defect in Boost, not in your file. It has already cut one project's agent file from 299 lines to 125.
 
-This package composes unattended, on every install and update, at a moment you did not choose. So it reads your markdown files first and stops before composing when one of them would be damaged:
+This package composes unattended, on every update, at a moment you did not choose. So it reads your markdown files first and stops before composing when one of them would be damaged:
 
 - **Two or more opening tags.** The next composition replaces everything from the first tag to the nearest closing tag after it.
 - **One opening tag with no closing tag after it.** This run would compose cleanly and append a real block, which leaves two opening tags behind. The run looks successful and arms the next one, so it is refused now.
 
-The run names the file and the reason, and changes nothing. Fix the file yourself — remove or rephrase the prose mention, or close the tag — then run Composer again. The package will not repair it for you: where your own writing ends cannot be read from the file, and guessing wrong destroys the content the check exists to save.
+The run names the file and the reason, and changes nothing. Fix the file yourself — remove or rephrase the prose mention, or close the tag — then run `composer update` again. The package will not repair it for you: where your own writing ends cannot be read from the file, and guessing wrong destroys the content the check exists to save.
 
 ### AGENTS.md and CLAUDE.md
 
-`AGENTS.md` is the agents' `CONTRIBUTING.md`: commit it, and keep your own hand-written prose in it, outside Boost's block. Claude Code reads `AGENTS.md` itself, but only when no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` exists. So this package deletes the project's root `CLAUDE.md` on every install and update, whatever it holds, and the run says so. If git tracks it, commit the deletion. The package never touches `.claude/CLAUDE.md` or `CLAUDE.local.md`, and either one makes Claude Code skip `AGENTS.md` again. A `CLAUDE.md` link is removed as a link, and a `CLAUDE.md` directory is left alone.
+`AGENTS.md` is the agents' `CONTRIBUTING.md`: commit it, and keep your own hand-written prose in it, outside Boost's block. Claude Code reads `AGENTS.md` itself, but only when no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` exists. So this package deletes the project's root `CLAUDE.md` on every `composer update`, whatever it holds, and the run says so. If git tracks it, commit the deletion. The package never touches `.claude/CLAUDE.md` or `CLAUDE.local.md`, and either one makes Claude Code skip `AGENTS.md` again. A `CLAUDE.md` link is removed as a link, and a `CLAUDE.md` directory is left alone.
 
 If your app points Claude Code's guidelines at `CLAUDE.md` in `config/boost.php`, Boost composes into it, and a `CLAUDE.md` composed during the run is kept.
 
@@ -128,7 +130,7 @@ If your app points Claude Code's guidelines at `CLAUDE.md` in `config/boost.php`
 
 ### Upgrading from the symlink releases
 
-Releases before this one delivered `.ai` as a symlink into `vendor/mikebronner/development-settings`. The first `composer install` or `composer update` on the new version removes that link, and reports it as `- .ai (stale symlink into vendor)`. Left in place the link would dangle, because the directory it points at is gone — and while it stands, `.ai` is a window into vendor that your project cannot write to.
+Releases before this one delivered `.ai` as a symlink into `vendor/mikebronner/development-settings`. The first `composer update` on the new version removes that link, and reports it as `- .ai (stale symlink into vendor)`. Left in place the link would dangle, because the directory it points at is gone — and while it stands, `.ai` is a window into vendor that your project cannot write to.
 
 A real `.ai` directory is never touched. Only a symlink resolving inside this package, or inside the vendor path it used under its old name, is removed.
 
@@ -140,7 +142,7 @@ The package was renamed from `mikebronner/development-settings` to `mike-bronner
 
 ```bash
 composer remove mikebronner/development-settings
-composer require mike-bronner/laravel-development-settings
+composer require --dev mike-bronner/laravel-development-settings
 ```
 
 If your `composer.json` names the old repository under `repositories`, point it at `https://github.com/mike-bronner/laravel-development-settings` first.
@@ -151,15 +153,15 @@ The first run under the new name cleans up after the old one. It replaces `mikeb
 
 ### When a run fails
 
-A failure the plugin reports itself, such as a file it could not write or a failed Boost run, is listed in the summary, and the run carries on. An exception or error thrown while the plugin publishes stops only the plugin, not Composer. The plugin prints the cause (the error's class, message, file and line) and tells you to run the same command again to finish setup: `composer install` after an install, `composer update` after an update. Composer then runs your project's own `post-install-cmd` or `post-update-cmd` scripts, which an uncaught error would skip. Add `-v` to see the trace.
+A failure the plugin reports itself, such as a file it could not write or a failed Boost run, is listed in the summary, and the run carries on. An exception or error thrown while the plugin publishes stops only the plugin, not Composer. The plugin prints the cause (the error's class, message, file and line) and tells you to run `composer update` again to finish setup. Composer then runs your project's own `post-update-cmd` scripts, which an uncaught error would skip. Add `-v` to see the trace.
 
 One known cause is an update that also updates this plugin. It was observed on an update straight from `mikebronner/development-settings` 0.2.0 to 0.5.1. Composer loads the new plugin during the run, but classes the old version had already loaded stay in memory, and the new code can call a method they lack. The next run starts fresh. If the same failure comes back on that run, it is a bug. Please report it with the printed cause.
 
-When the `CI` environment variable holds any non-empty value, as it does on most CI systems, such a failure still fails the run. `false` and `0` count as set too. An empty `CI` counts as unset. A CI install comes from the lock file and updates nothing mid-run, so a failure there is a real bug and must not pass unnoticed.
+When the `CI` environment variable holds any non-empty value, as it does on most CI systems, such a failure still fails the run. `false` and `0` count as set too. An empty `CI` counts as unset. A failure in CI is a real bug and must not pass unnoticed.
 
 ### Output
 
-After each `composer install` or `composer update`, you'll see a summary box showing what was created, updated, skipped (locally modified), or removed.
+After each `composer update`, you'll see a summary box showing what was created, updated, skipped (locally modified), or removed.
 
 ## 🛡️  Local Modification Protection
 
@@ -626,7 +628,7 @@ To test changes before publishing:
 }
 
 # Require the local version
-composer require mike-bronner/laravel-development-settings:@dev
+composer require --dev mike-bronner/laravel-development-settings:@dev
 ```
 
 The package is symlinked, so changes are reflected immediately.

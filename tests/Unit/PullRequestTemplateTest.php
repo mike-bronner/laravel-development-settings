@@ -52,7 +52,7 @@ it('ships the pull request template to every project as a tracked file', functio
     expect(shippedManifest()->isKnown(PULL_REQUEST_TEMPLATE, $checksum))->toBeTrue();
 });
 
-it('writes the pull request template into a consuming project on install', function (): void {
+it('writes the pull request template into a consuming project on an update', function (): void {
     [$this->project] = pullRequestConsumer();
 
     $output = publishIn($this->project);

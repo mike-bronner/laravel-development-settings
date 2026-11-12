@@ -41,6 +41,10 @@ const INTERACTIVE = 'interactive, no terminal';
 
 const INTERACTIVE_ON_A_TERMINAL = 'interactive, on a terminal';
 
+const WITH_DEV = 'with dev packages';
+
+const WITHOUT_DEV = 'without dev packages';
+
 const ROOTED_TESTBENCH = 'bin/rooted-testbench.php';
 
 const MCP_CHECK = 'dev-settings:mcp-executor';
@@ -296,6 +300,7 @@ function dispatchIn(
     string $project,
     string $eventName = ScriptEvents::POST_UPDATE_CMD,
     int $verbosity = OutputInterface::VERBOSITY_NORMAL,
+    string $packages = WITH_DEV,
 ): string {
     $inputOutput = new BufferIO(verbosity: $verbosity);
     $composer = composerIn($project);
@@ -309,7 +314,7 @@ function dispatchIn(
     chdir($project);
 
     try {
-        $event = new Event($eventName, $composer, $inputOutput);
+        $event = new Event($eventName, $composer, $inputOutput, $packages === WITH_DEV);
         $dispatcher->dispatch(null, $event);
     } finally {
         chdir($workingDirectory);
@@ -325,7 +330,6 @@ function brokenConsumer(string $statement): array
     $laterScript = ['touch later.ran'];
     $composerJson = [
         'scripts' => [
-            ScriptEvents::POST_INSTALL_CMD => $laterScript,
             ScriptEvents::POST_UPDATE_CMD => $laterScript,
         ],
     ];
