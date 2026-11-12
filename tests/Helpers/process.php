@@ -9,7 +9,9 @@ const CACHING_PHP = ' -d opcache.enable_cli=1 -d opcache.validate_timestamps=1'
     . ' -d opcache.revalidate_freq=2 -d opcache.file_update_protection=0';
 
 const FILE_CACHING_PHP = ' -d opcache.enable_cli=1 -d opcache.validate_timestamps=0'
-    . ' -d opcache.file_update_protection=0 -d opcache.file_cache=%s';
+    . ' -d opcache.file_update_protection=0 -d opcache.jit=disable -d opcache.file_cache=%s';
+
+const NO_FILE_CACHE = 'The file cache stored no compiled copy, so it cannot serve a stale one.';
 
 const FILE_CACHED_RUN = <<<PHP
     \$loader = require %s;
@@ -44,6 +46,11 @@ function cachingPhpCommand(string $script, string $restriction): string
     $code = escapeshellarg($script);
 
     return "{$binary}" . CACHING_PHP . "{$restriction} -r {$code}";
+}
+
+function fileCacheHolds(string $packageDir, string $file): bool
+{
+    return glob("{$packageDir}/opcache/*" . realpath($file) . '.bin') !== [];
 }
 
 function runWithFileCache(string $packageDir, string $expression): array

@@ -34,7 +34,7 @@ const UPGRADE_RUN = <<<PHP
 const SHIPPED_TARGETS_ARGUMENT = "                        \$plan->shippedTargets(),\n";
 
 afterEach(function (): void {
-    removeTempDir($this->project);
+    isset($this->project) && removeTempDir($this->project);
 });
 
 it('captures before an update and publishes after install and update', function (): void {
@@ -151,6 +151,7 @@ it('publishes with the new classes when a file cache holds older ones', function
 
     file_put_contents($publisherFile, $older);
     $compiled = runWithFileCache($package, $compile);
+    $isStored = fileCacheHolds($package, $publisherFile);
     file_put_contents($publisherFile, $current);
     $loaded = runWithFileCache($package, $endLine);
     $output = (string) data_get(runWithFileCache($package, $publish), 'output');
@@ -160,6 +161,8 @@ it('publishes with the new classes when a file cache holds older ones', function
         ->toBe($current)
         ->and($compiled)
         ->toBe(['compiled' => true])
+        ->and($isStored)
+        ->toBeTrue(NO_FILE_CACHE)
         ->and($loaded)
         ->toBe(['endLine' => $olderEndLine])
         ->and($output)
